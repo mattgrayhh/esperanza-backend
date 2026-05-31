@@ -1,0 +1,102 @@
+// =============================================================================
+// packages/admin — server-side option loaders for `select` / `syncedOverride(select)`
+// widgets and the promotion scope picker. Reads on the PRIMARY session (read-your-
+// writes) so a freshly-created record shows up immediately in the pickers.
+//
+// Returns plain {id,label} arrays safe to pass from RSC → client component.
+// =============================================================================
+
+// NOTE: server-only module — imported solely by RSC pages / server actions.
+import { getReadDb } from './db';
+import { floorPlans, communities, cities, qmi } from '@esperanza/db';
+import type { SelectSource } from './field-config';
+
+export interface SelectOption {
+  id: string;
+  label: string;
+}
+
+const LIMIT = 1000;
+
+/** Options for one select source (floor_plans | communities | cities). */
+export async function loadOptions(source: SelectSource): Promise<SelectOption[]> {
+  const db = getReadDb();
+  switch (source) {
+    case 'floor_plans': {
+      const rows = (await db
+        .select({ id: floorPlans.id, name: floorPlans.name })
+        .from(floorPlans)
+        .limit(LIMIT)) as Array<{ id: string; name: string | null }>;
+      return rows
+        .map((r) => ({ id: r.id, label: r.name?.trim() || r.id }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    }
+    case 'communities': {
+      const rows = (await db
+        .select({ id: communities.id, name: communities.name })
+        .from(communities)
+        .limit(LIMIT)) as Array<{ id: string; name: string | null }>;
+      return rows
+        .map((r) => ({ id: r.id, label: r.name?.trim() || r.id }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    }
+    case 'cities': {
+      const rows = (await db
+        .select({ id: cities.id, name: cities.cityName })
+        .from(cities)
+        .limit(LIMIT)) as Array<{ id: string; name: string | null }>;
+      return rows
+        .map((r) => ({ id: r.id, label: r.name?.trim() || r.id }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    }
+  }
+}
+
+/** Load every distinct select source referenced by a set of field configs, once each. */
+export async function loadOptionSets(
+  sources: ReadonlySet<SelectSource>
+): Promise<Partial<Record<SelectSource, SelectOption[]>>> {
+  const out: Partial<Record<SelectSource, SelectOption[]>> = {};
+  await Promise.all(
+    [...sources].map(async (s) => {
+      out[s] = await loadOptions(s);
+    })
+  );
+  return out;
+}
+
+/** Cities + Communities + QMIs option lists for the promotion scope picker. */
+export async function loadPromoScopeOptions(): Promise<{
+  cities: SelectOption[];
+  communities: SelectOption[];
+  qmis: SelectOption[];
+}> {
+  const db = getReadDb();
+  const [cityRows, communityRows, qmiRows] = await Promise.all([
+    db.select({ id: cities.id, name: cities.cityName }).from(cities).limit(LIMIT) as Promise<
+      Array<{ id: string; name: string | null }>
+    >,
+    db.select({ id: communities.id, name: communities.name }).from(communities).limit(LIMIT) as Promise<
+      Array<{ id: string; name: string | null }>
+    >,
+    db
+      .select({
+        id: qmi.id,
+        addr: qmi.overrideAddress,
+        synced: qmi.syncedAddress,
+      })
+      .from(qmi)
+      .limit(LIMIT) as Promise<Array<{ id: string; addr: string | null; synced: string | null }>>,
+  ]);
+
+  const sortByLabel = (a: SelectOption, b: SelectOption) => a.label.localeCompare(b.label);
+  return {
+    cities: cityRows.map((r) => ({ id: r.id, label: r.name?.trim() || r.id })).sort(sortByLabel),
+    communities: communityRows
+      .map((r) => ({ id: r.id, label: r.name?.trim() || r.id }))
+      .sort(sortByLabel),
+    qmis: qmiRows
+      .map((r) => ({ id: r.id, label: (r.addr || r.synced || '').trim() || r.id }))
+      .sort(sortByLabel),
+  };
+}

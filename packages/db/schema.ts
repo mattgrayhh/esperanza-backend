@@ -1,0 +1,587 @@
+// =============================================================================
+// esperanza-cf — Drizzle ORM schema (D1 / SQLite). Migration Plan v2, Phase 1.
+//
+// Mirrors packages/db/migrations/0000_init.sql 1:1 so the admin app and every
+// Worker share one set of types. The SQL migration is the source of truth for
+// the live DB; this file is the typed mirror (kept in lockstep).
+//
+// Buckets:
+//   synced_/override_ pairs  → QMI Snowflake write-set only (price is the one
+//                              also anchored by last_synced_price).
+//   square_footage_range     → the only synced Communities field (no pair).
+//   cities counts            → synced pricing/availability (no pair).
+//   floor_plans.syncedImageUrl → external-synced (OneDrive→R2, no pair).
+//   everything else          → plain admin-owned columns.
+//
+// Conventions: TEXT id = Airtable recXXXX. integer({mode:'boolean'}) for
+// checkboxes. real() for decimals. JSON-array columns are TEXT (the api Worker
+// JSON.parses them to reproduce the FP:* single-element-array shape).
+// =============================================================================
+
+import { sql } from 'drizzle-orm';
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  index,
+  primaryKey,
+  check,
+} from 'drizzle-orm/sqlite-core';
+
+const nowIso = sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`;
+
+// =============================================================================
+// QMI (Quick Move-Ins)
+// =============================================================================
+export const qmi = sqliteTable(
+  'qmi',
+  {
+    id: text('id').primaryKey(), // Airtable recXXXX
+
+    // ── Snowflake write-set: synced_ + override_ VALUE columns only ─────────
+    // Override attribution (who/when) lives in audit_log, NOT per-column stamps
+    // (the override_*_at/_by columns were dropped for the D1 100-col limit).
+    syncedAddress: text('synced_address'),
+    overrideAddress: text('override_address'),
+
+    syncedPostalCode: integer('synced_postal_code'), // NUMERIC zip
+    overridePostalCode: integer('override_postal_code'),
+
+    syncedBedroomCount: integer('synced_bedroom_count'),
+    overrideBedroomCount: integer('override_bedroom_count'),
+
+    syncedBathroomCount: real('synced_bathroom_count'), // 2.5
+    overrideBathroomCount: real('override_bathroom_count'),
+
+    syncedHalfBathroomCount: integer('synced_half_bathroom_count'),
+    overrideHalfBathroomCount: integer('override_half_bathroom_count'),
+
+    syncedLivingSquareFootage: integer('synced_living_square_footage'),
+    overrideLivingSquareFootage: integer('override_living_square_footage'),
+
+    syncedTotalSquareFootage: integer('synced_total_square_footage'),
+    overrideTotalSquareFootage: integer('override_total_square_footage'),
+
+    syncedElevation: text('synced_elevation'),
+    overrideElevation: text('override_elevation'),
+
+    syncedConstructionStage: text('synced_construction_stage'),
+    overrideConstructionStage: text('override_construction_stage'),
+
+    // link-by-id (Plan v2 #11) + legacy singleSelect name mirror
+    syncedCityId: text('synced_city_id'),
+    overrideCityId: text('override_city_id'),
+    syncedCityName: text('synced_city_name'),
+
+    syncedCommunityId: text('synced_community_id'),
+    overrideCommunityId: text('override_community_id'),
+    syncedCommunityName: text('synced_community_name'),
+
+    syncedFloorPlanId: text('synced_floor_plan_id'),
+    overrideFloorPlanId: text('override_floor_plan_id'),
+    syncedFloorPlanName: text('synced_floor_plan_name'),
+
+    // price — also anchored by last_synced_price
+    syncedPrice: real('synced_price'),
+    overridePrice: real('override_price'),
+    lastSyncedPrice: real('last_synced_price'),
+
+    // ingest identity / join keys (synced, no override)
+    eciKey: text('eci_key'),
+    markJobNumber: text('mark_job_number'),
+    housenumber: text('housenumber'),
+
+    // publish gate — single column (admin owns =1; ingest may only force =0)
+    published: integer('published', { mode: 'boolean' }).notNull().default(false),
+
+    // slugs / SEO
+    slug: text('slug'),
+    seoSlug: text('seo_slug'),
+    richSlug: text('rich_slug'),
+    viewerSlug: text('viewer_slug'),
+
+    // geo
+    latitude: real('latitude'),
+    longitude: real('longitude'),
+    geoLatitude: real('geo_latitude'),
+    geoLongitude: real('geo_longitude'),
+
+    // marketing collection / pricing display
+    collection: text('collection'),
+    estimatedMonthlyPrice: real('estimated_monthly_price'),
+    estimatedMonthlyPayment: real('estimated_monthly_payment'),
+    monthlyEnergyCost: real('monthly_energy_cost'),
+
+    // attribute fallbacks
+    carGarageCount: integer('car_garage_count'),
+    storiesCount: integer('stories_count'),
+    stories: integer('stories'),
+
+    // checkbox booleans
+    availableNow: integer('available_now', { mode: 'boolean' }).notNull().default(false),
+    selfTourAvailable: integer('self_tour_available', { mode: 'boolean' }).notNull().default(false),
+    includeInXmlFeed: integer('include_in_xml_feed', { mode: 'boolean' }).notNull().default(false),
+
+    // STABLE image / doc urls
+    imageUrl: text('image_url'),
+    ogImageUrl: text('og_image_url'),
+    pageUrl: text('page_url'),
+    dynamicPdf: text('dynamic_pdf'),
+
+    // attachment galleries (JSON arrays of stable {url,...})
+    featuredImage: text('featured_image'),
+    image2: text('image_2'),
+    image3: text('image_3'),
+    image4: text('image_4'),
+    image5: text('image_5'),
+
+    // copy / misc
+    description: text('description'),
+    upgrades: text('upgrades'),
+    incentive: text('incentive'),
+    virtualTourUrl: text('virtual_tour_url'),
+    elevationType: text('elevation_type'),
+    mlsId: text('mls_id'),
+    mlsNumber: text('mls_number'),
+    lotNumber: text('lot_number'),
+    yearBuilt: integer('year_built'),
+    lotSizeSqft: integer('lot_size_sqft'),
+    moveInDate: text('move_in_date'),
+    hersScore: integer('hers_score'),
+    armRate: text('arm_rate'),
+    promoText: text('promo_text'),
+    availabilityText: text('availability_text'),
+    nterNow: text('nter_now'),
+    cities: text('cities'),
+
+    // formula mirrors
+    posted: text('posted'),
+    publishDate: text('publish_date'),
+    lastModifiedTime: text('last_modified_time'),
+
+    // FP:* lookups REMOVED from qmi (D1 100-col limit). Resolved in v_public_qmi
+    // via a LEFT JOIN to floor_plans on COALESCE(override_floor_plan_id,
+    // synced_floor_plan_id); the view exposes the same fp_* output names. The
+    // attachment-carrying fp_image / fp_additional_images live on floor_plans.
+
+    createdAt: text('created_at').notNull().default(nowIso),
+    updatedAt: text('updated_at').notNull().default(nowIso),
+  },
+  (t) => [
+    index('idx_qmi_published').on(t.published),
+    index('idx_qmi_eci_key').on(t.eciKey),
+    index('idx_qmi_synced_community').on(t.syncedCommunityId),
+    index('idx_qmi_override_community').on(t.overrideCommunityId),
+    index('idx_qmi_synced_city').on(t.syncedCityId),
+    index('idx_qmi_override_city').on(t.overrideCityId),
+    index('idx_qmi_synced_floor_plan').on(t.syncedFloorPlanId),
+    index('idx_qmi_last_modified').on(t.lastModifiedTime),
+  ]
+);
+
+// =============================================================================
+// COMMUNITIES
+// =============================================================================
+export const communities = sqliteTable(
+  'communities',
+  {
+    id: text('id').primaryKey(),
+
+    // the ONLY synced community field (no override pair)
+    squareFootageRange: text('square_footage_range'),
+
+    name: text('name'),
+    slug: text('slug'),
+    town: text('town'),
+    published: integer('published', { mode: 'boolean' }).notNull().default(false),
+    draft: integer('draft', { mode: 'boolean' }).notNull().default(false),
+    address: text('address'),
+    mapCoordinates: text('map_coordinates'),
+    latitude: real('latitude'),
+    longitude: real('longitude'),
+    latLong: text('lat_long'),
+    masterPlanned: integer('master_planned', { mode: 'boolean' }).notNull().default(false),
+    comingSoon: integer('coming_soon', { mode: 'boolean' }).notNull().default(false),
+
+    priceFrom: real('price_from'),
+    bedCount: text('bed_count'),
+    bathCount: text('bath_count'),
+
+    description: text('description'),
+    amenities: text('amenities'),
+    educationRich: text('education_rich'),
+    designCopyRich: text('design_copy_rich'),
+    exteriorConstructionCopyRich: text('exterior_construction_copy_rich'),
+    interiorConstructionCopyRich: text('interior_construction_copy_rich'),
+    conservationLandscapeCopyRich: text('conservation_landscape_copy_rich'),
+    energyPackageCopyRich: text('energy_package_copy_rich'),
+    kitchenFeaturesCopyRich: text('kitchen_features_copy_rich'),
+    bathFeaturesCopyRich: text('bath_features_copy_rich'),
+    esperanzaDifferenceCopyRich: text('esperanza_difference_copy_rich'),
+    gasDetailsRich: text('gas_details_rich'),
+    internetDetails: text('internet_details'),
+    waterDetails: text('water_details'),
+    electricDetailsRich: text('electric_details_rich'),
+    securityDetails: text('security_details'),
+    directions: text('directions'),
+
+    featuredImageUrl: text('featured_image_url'),
+    featuredImageAlt: text('featured_image_alt'),
+    secondaryImageUrl: text('secondary_image_url'),
+    secondaryImageAlt: text('secondary_image_alt'),
+    photoGalleryImageUrl: text('photo_gallery_image_url'),
+    photoGalleryImageAlt: text('photo_gallery_image_alt'),
+    descriptionImageUrl: text('description_image_url'),
+    communityLogoUrl: text('community_logo_url'),
+    communityLogoAlt: text('community_logo_alt'),
+    featuresDownloadUrl: text('features_download_url'),
+    resourcesDownloadUrl: text('resources_download_url'),
+    featuredVideo: text('featured_video'),
+
+    officePhone: text('office_phone'),
+    officeHours: text('office_hours'),
+    scheduleVisit: text('schedule_visit'),
+    lending: text('lending'),
+    mineLink: text('mine_link'),
+    communityMapEmbed: text('community_map_embed'),
+    incentive: text('incentive'),
+    floorPlanPlaintext: text('floor_plan_plaintext'),
+
+    hoaLinksJson: text('hoa_links_json'),
+    cityId: text('city_id'),
+
+    createdAt: text('created_at').notNull().default(nowIso),
+    updatedAt: text('updated_at').notNull().default(nowIso),
+  },
+  (t) => [
+    index('idx_communities_published').on(t.published),
+    index('idx_communities_name').on(t.name),
+    index('idx_communities_city').on(t.cityId),
+  ]
+);
+
+// =============================================================================
+// CITIES
+// =============================================================================
+export const cities = sqliteTable(
+  'cities',
+  {
+    id: text('id').primaryKey(),
+
+    // synced pricing/availability counts (no override pair)
+    communityCount: integer('community_count'),
+    moveInHomesCount: integer('move_in_homes_count'),
+    floorPlansCount: integer('floor_plans_count'),
+
+    cityName: text('city_name'),
+    slug: text('slug'),
+    state: text('state'),
+    status: text('status'),
+    mapLatitude: real('map_latitude'),
+    mapLongitude: real('map_longitude'),
+
+    heroImageUrl: text('hero_image_url'),
+    heroDescription: text('hero_description'),
+    nationalRecognition: text('national_recognition'),
+    incentive: text('incentive'),
+
+    cityCopyBlocksJson: text('city_copy_blocks_json'),
+    cityVenueBlocksJson: text('city_venue_blocks_json'),
+
+    createdAt: text('created_at').notNull().default(nowIso),
+    updatedAt: text('updated_at').notNull().default(nowIso),
+  },
+  (t) => [index('idx_cities_name').on(t.cityName)]
+);
+
+// =============================================================================
+// FLOOR PLANS
+// =============================================================================
+export const floorPlans = sqliteTable(
+  'floor_plans',
+  {
+    id: text('id').primaryKey(),
+
+    // external-synced (OneDrive→R2, no override pair)
+    syncedImageUrl: text('synced_image_url'),
+    forceReplaceRenderings: integer('force_replace_renderings', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+
+    name: text('name'),
+    slug: text('slug'),
+    published: integer('published', { mode: 'boolean' }).notNull().default(false),
+    collection: text('collection'),
+    startingPrice: real('starting_price'),
+    bedroomMin: integer('bedroom_min'),
+    bedroomMax: integer('bedroom_max'),
+    bathroomMin: real('bathroom_min'),
+    bathroomMax: real('bathroom_max'),
+    carGarageCount: integer('car_garage_count'),
+    storiesCount: integer('stories_count'),
+    livingSquareFootage: integer('living_square_footage'),
+    totalSquareFootage: integer('total_square_footage'),
+    masterBedLocation: text('master_bed_location'),
+    hersScore: integer('hers_score'),
+
+    imageUrl: text('image_url'),
+    heroImage2: text('hero_image_2'),
+    heroImage3: text('hero_image_3'),
+    // FP:* lookup sources carrying attachment-object JSON (feed v_public_qmi's
+    // fp_image / fp_additional_images via the floor-plan JOIN). STABLE urls only.
+    fpImage: text('fp_image'),
+    fpAdditionalImages: text('fp_additional_images'),
+    elevationRenderings: text('elevation_renderings'),
+    elevationGallery: text('elevation_gallery'),
+    photoGalleryUrls: text('photo_gallery_urls'),
+    photoGallery: text('photo_gallery'),
+    additionalImages: text('additional_images'),
+    additionalImagesGallery: text('additional_images_gallery'),
+
+    description: text('description'),
+    planViewerUrl: text('plan_viewer_url'),
+    virtualTourUrl: text('virtual_tour_url'),
+    incentive: text('incentive'),
+    brochurePdfUrl: text('brochure_pdf_url'),
+    brochurePdf: text('brochure_pdf'),
+
+    energyCostLow: real('energy_cost_low'),
+    energyCostHigh: real('energy_cost_high'),
+    energyCostAvg: real('energy_cost_avg'),
+
+    communities: text('communities'),
+    communityCount: integer('community_count'),
+    quickMoveInIds: text('quick_move_in_ids'),
+    promotionIds: text('promotion_ids'),
+
+    createdAt: text('created_at').notNull().default(nowIso),
+    updatedAt: text('updated_at').notNull().default(nowIso),
+  },
+  (t) => [
+    index('idx_floor_plans_published').on(t.published),
+    index('idx_floor_plans_name').on(t.name),
+  ]
+);
+
+// =============================================================================
+// PROMOTIONS + PROMOTION_TARGETS (new targeting model)
+// =============================================================================
+export const promotions = sqliteTable(
+  'promotions',
+  {
+    id: text('id').primaryKey(),
+    title: text('title'),
+    bannerText: text('banner_text'),
+    badgeText: text('badge_text'),
+    copy: text('copy'),
+    ctaLabel: text('cta_label'),
+    ctaUrl: text('cta_url'),
+    imageUrl: text('image_url'), // STABLE R2 url
+    sortOrder: integer('sort_order').notNull().default(0),
+    startDate: text('start_date'),
+    endDate: text('end_date'),
+    active: integer('active', { mode: 'boolean' }).notNull().default(true),
+    appliesTo: text('applies_to'), // legacy descriptive label, informational only
+
+    createdAt: text('created_at').notNull().default(nowIso),
+    updatedAt: text('updated_at').notNull().default(nowIso),
+  },
+  (t) => [index('idx_promotions_active').on(t.active, t.sortOrder)]
+);
+
+export const promotionTargets = sqliteTable(
+  'promotion_targets',
+  {
+    promotionId: text('promotion_id').notNull(),
+    targetType: text('target_type', {
+      enum: ['global', 'city', 'community', 'qmi'],
+    }).notNull(),
+    targetId: text('target_id'), // NULL iff target_type='global'
+  },
+  (t) => [
+    primaryKey({ columns: [t.promotionId, t.targetType, t.targetId] }),
+    index('idx_promotion_targets_lookup').on(t.targetType, t.targetId),
+    check(
+      'promotion_targets_global_chk',
+      sql`(${t.targetType} = 'global' AND ${t.targetId} IS NULL)
+        OR (${t.targetType} <> 'global' AND ${t.targetId} IS NOT NULL)`
+    ),
+  ]
+);
+
+// =============================================================================
+// COLLECTIONS / IMAGES / BLOGS / TESTIMONIALS (admin-owned)
+// =============================================================================
+export const collections = sqliteTable('collections', {
+  id: text('id').primaryKey(),
+  title: text('title'),
+  slug: text('slug'),
+  content: text('content'),
+  headerImage: text('header_image'),
+  headerImageAlt: text('header_image_alt'),
+  startingAt: real('starting_at'),
+  endingAt: real('ending_at'),
+  incentive: text('incentive'),
+  createdAt: text('created_at').notNull().default(nowIso),
+  updatedAt: text('updated_at').notNull().default(nowIso),
+});
+
+export const images = sqliteTable('images', {
+  id: text('id').primaryKey(),
+  slug: text('slug'),
+  planName: text('plan_name'),
+  caption: text('caption'),
+  captionClean: text('caption_clean'),
+  elevationStyle: text('elevation_style'),
+  elevationMaterial: text('elevation_material'),
+  elevationParsed: text('elevation_parsed'),
+  fileUrl: text('file_url'),
+  createdAt: text('created_at').notNull().default(nowIso),
+  updatedAt: text('updated_at').notNull().default(nowIso),
+});
+
+export const blogs = sqliteTable('blogs', {
+  id: text('id').primaryKey(),
+  title: text('title'),
+  slug: text('slug'),
+  category: text('category'),
+  excerpt: text('excerpt'),
+  content: text('content'),
+  publishDate: text('publish_date'),
+  featuredImage: text('featured_image'),
+  seoDescription: text('seo_description'),
+  communityName: text('community_name'),
+  published: integer('published', { mode: 'boolean' }).notNull().default(true),
+  createdAt: text('created_at').notNull().default(nowIso),
+  updatedAt: text('updated_at').notNull().default(nowIso),
+});
+
+export const testimonials = sqliteTable('testimonials', {
+  id: text('id').primaryKey(),
+  personName: text('person_name'),
+  slug: text('slug'),
+  datePosted: text('date_posted'),
+  testimonialText: text('testimonial_text'),
+  moveInYear: text('move_in_year'),
+  status: text('status'),
+  imageUrl: text('image_url'),
+  floorPlanId: text('floor_plan_id'),
+  floorPlanName: text('floor_plan_name'),
+  floorPlanImage: text('floor_plan_image'),
+  communityId: text('community_id'),
+  communityName: text('community_name'),
+  town: text('town'),
+  createdAt: text('created_at').notNull().default(nowIso),
+  updatedAt: text('updated_at').notNull().default(nowIso),
+});
+
+// =============================================================================
+// AUDIT LOG / SYNC LOG
+// =============================================================================
+export const auditLog = sqliteTable(
+  'audit_log',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    entity: text('entity').notNull(),
+    entityId: text('entity_id').notNull(),
+    field: text('field'),
+    action: text('action').notNull(),
+    oldValue: text('old_value'),
+    newValue: text('new_value'),
+    actor: text('actor'),
+    at: text('at').notNull().default(nowIso),
+  },
+  (t) => [index('idx_audit_log_entity').on(t.entity, t.entityId), index('idx_audit_log_at').on(t.at)]
+);
+
+// =============================================================================
+// ADMIN USERS — local credential store for the Next.js admin's Auth.js v5 login.
+// Added in migration 0001_admin_users.sql (0000 is already applied to remote D1).
+// Replaces the Cloudflare Access gate: the admin now runs on workers.dev with no
+// zone and authenticates < 20 marketing users itself (email + password, JWT
+// session). password_hash is a Web-Crypto PBKDF2 hash (pbkdf2$iter$salt$hash) —
+// NO bcrypt/argon2 (they don't run on Workers). See packages/admin/lib/password.ts.
+// =============================================================================
+export const adminUsers = sqliteTable('admin_users', {
+  email: text('email').primaryKey(), // lower-cased login identity
+  name: text('name'),
+  passwordHash: text('password_hash').notNull(), // pbkdf2$<iter>$<saltB64>$<hashB64>
+  role: text('role').notNull().default('editor'), // 'admin' | 'editor'
+  createdAt: text('created_at').default(nowIso),
+  lastLoginAt: text('last_login_at'),
+});
+
+export const syncLog = sqliteTable(
+  'sync_log',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    runId: text('run_id'),
+    source: text('source'),
+    status: text('status'),
+    startedAt: text('started_at'),
+    finishedAt: text('finished_at'),
+    durationS: real('duration_s'),
+    citiesUpdated: integer('cities_updated'),
+    communitiesUpdated: integer('communities_updated'),
+    communitiesFound: integer('communities_found'),
+    qmisUpdated: integer('qmis_updated'),
+    qmisCreated: integer('qmis_created'),
+    qmisUnpublished: integer('qmis_unpublished'),
+    qmisInSnowflake: integer('qmis_in_snowflake'),
+    floorPlansUpdated: integer('floor_plans_updated'),
+    pricesUpdated: integer('prices_updated'),
+    pricesSkippedOverride: integer('prices_skipped_override'),
+    unresolvedLinks: integer('unresolved_links'),
+    notes: text('notes'),
+    errorMessage: text('error_message'),
+    at: text('at').notNull().default(nowIso),
+  },
+  (t) => [index('idx_sync_log_at').on(t.at)]
+);
+
+// =============================================================================
+// Inferred types (shared across admin + workers)
+// =============================================================================
+export type Qmi = typeof qmi.$inferSelect;
+export type NewQmi = typeof qmi.$inferInsert;
+export type Community = typeof communities.$inferSelect;
+export type NewCommunity = typeof communities.$inferInsert;
+export type City = typeof cities.$inferSelect;
+export type NewCity = typeof cities.$inferInsert;
+export type FloorPlan = typeof floorPlans.$inferSelect;
+export type NewFloorPlan = typeof floorPlans.$inferInsert;
+export type Promotion = typeof promotions.$inferSelect;
+export type NewPromotion = typeof promotions.$inferInsert;
+export type PromotionTarget = typeof promotionTargets.$inferSelect;
+export type NewPromotionTarget = typeof promotionTargets.$inferInsert;
+export type Collection = typeof collections.$inferSelect;
+export type NewCollection = typeof collections.$inferInsert;
+export type ImageRow = typeof images.$inferSelect;
+export type NewImageRow = typeof images.$inferInsert;
+export type Blog = typeof blogs.$inferSelect;
+export type NewBlog = typeof blogs.$inferInsert;
+export type Testimonial = typeof testimonials.$inferSelect;
+export type NewTestimonial = typeof testimonials.$inferInsert;
+export type AuditLogRow = typeof auditLog.$inferSelect;
+export type NewAuditLogRow = typeof auditLog.$inferInsert;
+export type SyncLogRow = typeof syncLog.$inferSelect;
+export type NewSyncLogRow = typeof syncLog.$inferInsert;
+export type AdminUser = typeof adminUsers.$inferSelect;
+export type NewAdminUser = typeof adminUsers.$inferInsert;
+
+export const schema = {
+  qmi,
+  communities,
+  cities,
+  floorPlans,
+  promotions,
+  promotionTargets,
+  collections,
+  images,
+  blogs,
+  testimonials,
+  auditLog,
+  syncLog,
+  adminUsers,
+};

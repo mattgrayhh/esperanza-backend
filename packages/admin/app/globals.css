@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+/* Tailwind v4: theme tokens live here via @theme. Minimal admin palette. */
+@theme {
+  --color-brand: #2f5d4a;
+  --color-brand-foreground: #ffffff;
+  --color-surface: #f3f1ed;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+html,
+body {
+  background: var(--color-surface);
+  color: #1f2937;
+  font-family: var(--font-sans);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

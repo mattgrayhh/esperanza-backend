@@ -1,0 +1,77 @@
+# packages/framer-push — D1 -> Framer Managed CMS push Worker. Migration Plan v2, Phase 6.
+#
+# THREE roles in one Worker:
+#   scheduled() (cron */5)  PRODUCER  — 30-min lookback on updated_at across the 9
+#                                       tables; enqueues {collection,action,id} onto
+#                                       esperanza-framer-queue.
+#   queue()                 CONSUMER  — drains the queue, re-reads the FULL field set
+#                                       per id from D1, upserts into the matching Framer
+#                                       Managed collection (record-id upsert key,
+#                                       draft:true soft-delete, 429 backoff), logs sync_log.
+#   fetch()                 WEBHOOK   — POST /<collection> (Bearer WEBHOOK_TOKEN) enqueue
+#                                       or ?sync=true push; POST /cron manual lookback;
+#                                       POST /backfill?keys=... server-side full backfill.
+name = "esperanza-framer-push"
+main = "src/index.ts"
+compatibility_date = "2025-05-20"
+compatibility_flags = ["nodejs_compat"]
+
+# Lookback cron — every 5 minutes. 5-min cron + 30-min window ⇒ each edit covered by
+# ~6 ticks; addItems is upsert-by-id so re-pushing is idempotent/harmless.
+[triggers]
+crons = ["*/5 * * * *"]
+
+# Shared D1 binding. database_id placeholder — fill after `wrangler d1 create esperanza`.
+[[d1_databases]]
+binding = "DB"
+database_name = "esperanza"
+database_id = "023ea995-0abc-4165-a1e1-6e2373fc43e9"
+
+# Producer: cron lookback (and the webhook routes) enqueue changed records here.
+[[queues.producers]]
+binding = "FRAMER_QUEUE"
+queue = "esperanza-framer-queue"
+
+# Consumer: this same Worker drains esperanza-framer-queue and upserts into Framer.
+# The Framer API is rate-limited (RPC-over-WebSocket) — keep batches SMALL; the
+# consumer wraps every call in exponential backoff (retryWithBackoff) and, on a
+# still-failing retryable error, re-queues the message with delaySeconds so the
+# Queues retry/backoff machinery + DLQ take over. publish()+deploy() happen once
+# per batch (not per message) to minimise WS round-trips.
+[[queues.consumers]]
+queue = "esperanza-framer-queue"
+max_batch_size = 5
+max_batch_timeout = 30
+max_retries = 5
+dead_letter_queue = "esperanza-framer-queue-dlq"
+
+# DEAD-LETTER QUEUE NOTE
+# ----------------------
+# `esperanza-framer-queue-dlq` must be created before deploy:
+#     wrangler queues create esperanza-framer-queue
+#     wrangler queues create esperanza-framer-queue-dlq
+# A message lands in the DLQ only after 5 failed delivery attempts (a poison
+# message — e.g. a Framer collection-name mismatch, a "link" type rejection, or a
+# persistent 429). The DLQ has NO consumer by design: it's an inspection bucket.
+# Surface DLQ arrivals on the Phase 7 dashboard alongside sync_log.
+
+# Non-secret config. The Framer collection NAMES default to the human names
+# ("Floor Plans", "Quick Move-Ins", ...) and are matched by NAME; override any of
+# them here if the live project renamed a collection.
+[vars]
+# FRAMER_COLLECTION_FLOOR_PLANS = "Floor Plans"
+# FRAMER_COLLECTION_QMI         = "Quick Move-Ins"
+# FRAMER_COLLECTION_COMMUNITIES = "Communities"
+# FRAMER_COLLECTION_COLLECTIONS = "Collections"
+# FRAMER_COLLECTION_IMAGES      = "Images"
+# FRAMER_COLLECTION_BLOGS       = "Blogs"
+# FRAMER_COLLECTION_PROMOTIONS  = "Promotions"
+# FRAMER_COLLECTION_CITIES      = "Cities"
+# FRAMER_COLLECTION_TESTIMONIALS = "Testimonials"
+
+# Secrets (set via `wrangler secret put`):
+#   FRAMER_API_KEY       — Framer "Token" credential (Site Settings > General). Sent as
+#                          `Authorization: Token <key>` on the headless-plugin WS path.
+#   FRAMER_PROJECT_URL   — full project URL, e.g.
+#                          https://framer.com/projects/Esperanza-Homes--t47CBg6stJkC8hsPgamo-egL7H
+#   WEBHOOK_TOKEN        — Bearer token for the POST webhook / /cron / /backfill routes.

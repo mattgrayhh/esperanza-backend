@@ -1,0 +1,60 @@
+# packages/admin — Next.js 15 admin (OpenNext-on-Workers).
+# Covers all 9 entities. Every write edits D1, uploads images to R2, logs audit_log,
+# and enqueues esperanza-framer-queue.
+#
+# AUTH: This admin runs on its workers.dev URL (the esperanzahomes.com zone is NOT on
+# this Cloudflare account, so the old Cloudflare Access gate is gone). It authenticates
+# its < 20 marketing users itself via Auth.js v5 (Credentials provider + JWT session).
+# See lib/auth.ts. Users live in the D1 `admin_users` table (migration 0001).
+#
+# Build pipeline: `opennextjs-cloudflare build` runs `next build` then emits
+# .open-next/worker.js (the Worker entry, referenced by `main`) and .open-next/assets
+# (static output, served via the ASSETS binding). Deploy with `opennextjs-cloudflare
+# deploy` (NOT `wrangler deploy` directly — OpenNext wraps it).
+name = "esperanza-admin"
+main = ".open-next/worker.js"
+# OpenNext 1.x requires a recent compatibility_date + nodejs_compat. nodejs_compat also
+# backs the Web Crypto / Node APIs Auth.js and the Next.js standalone server use in workerd.
+compatibility_date = "2025-05-20"
+compatibility_flags = ["nodejs_compat"]
+
+# OpenNext static assets binding.
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+# Shared D1 binding. database_id placeholder — fill after `wrangler d1 create esperanza`.
+# Admin reads use withSession("first-primary") for read-your-writes (NOT a replica).
+[[d1_databases]]
+binding = "DB"
+database_name = "esperanza"
+database_id = "023ea995-0abc-4165-a1e1-6e2373fc43e9"
+
+# Shared R2 bucket — image uploads land here; only stable URLs are persisted to D1.
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "esperanza-cms"
+
+# Producer: every admin write enqueues a Framer push ({collection,action,id}).
+# Binding name FRAMER_QUEUE matches the framer-push contract (see packages/framer-push).
+[[queues.producers]]
+binding = "FRAMER_QUEUE"
+queue = "esperanza-framer-queue"
+
+# Non-secret vars.
+#   IMAGES_PUBLIC_BASE_URL — public base for the R2 bucket. uploadImage() builds the
+#                            STABLE url as `${IMAGES_PUBLIC_BASE_URL}/<entity>/<id>/<file>`.
+#                            Set to the bucket's resolving r2.dev URL so admin-uploaded
+#                            images load without a custom zone. NEVER a
+#                            v5.airtableusercontent.com url.
+# DO NOT set ADMIN_DEV_EMAIL here — it lives in .dev.vars (local only) so the login gate
+# can never be bypassed in a deployed environment.
+[vars]
+IMAGES_PUBLIC_BASE_URL = "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev"
+
+# === REQUIRED SECRET (set via `wrangler secret put`, NOT here) ===
+#   AUTH_SECRET — Auth.js v5 JWT signing secret. The deployed Worker WILL NOT
+#                 authenticate without it. Generate + set with:
+#                   openssl rand -base64 32
+#                   wrangler secret put AUTH_SECRET --config packages/admin/wrangler.toml
+#                 (locally, put AUTH_SECRET=... in packages/admin/.dev.vars instead).

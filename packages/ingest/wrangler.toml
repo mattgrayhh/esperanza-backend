@@ -1,0 +1,62 @@
+# packages/ingest — Snowflake -> Queue -> D1 ingest Worker.
+# Cron diffs Snowflake vs D1 and PRODUCES per-record messages onto
+# esperanza-sync-queue; the same Worker CONSUMES that queue and writes ONLY the
+# allow-listed synced_* columns (applySynced) — never admin-owned / override_*.
+name = "esperanza-ingest"
+main = "src/index.ts"
+compatibility_date = "2025-05-20"
+compatibility_flags = ["nodejs_compat"]
+
+# Snowflake diff cron — every 4 hours (Migration Plan v2, Phase 3).
+[triggers]
+crons = ["0 */4 * * *"]
+
+# Shared D1 binding. database_id placeholder — fill after `wrangler d1 create esperanza`.
+[[d1_databases]]
+binding = "DB"
+database_name = "esperanza"
+database_id = "023ea995-0abc-4165-a1e1-6e2373fc43e9"
+
+# Shared R2 bucket (used by the one-time Airtable import to migrate attachment-only images).
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "esperanza-cms"
+
+# Producer: the cron enqueues per-record sync messages here.
+[[queues.producers]]
+binding = "SYNC_QUEUE"
+queue = "esperanza-sync-queue"
+
+# Consumer: this same Worker also drains esperanza-sync-queue and applies the
+# synced columns. Per-message ack/retry; a message that still fails after
+# max_retries is delivered to the dead-letter queue for inspection.
+[[queues.consumers]]
+queue = "esperanza-sync-queue"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "esperanza-sync-queue-dlq"
+
+# DEAD-LETTER QUEUE NOTE
+# ----------------------
+# `esperanza-sync-queue-dlq` must be created before deploy:
+#     wrangler queues create esperanza-sync-queue
+#     wrangler queues create esperanza-sync-queue-dlq
+# Messages land in the DLQ only after 3 failed delivery attempts (a poison
+# message — e.g. an unresolved community/city link, or a write-set violation
+# thrown by assertQmiPatchAllowed). The DLQ has NO consumer by design: it's an
+# inspection bucket. Drain it manually (or attach a temporary consumer) to
+# triage, then re-enqueue once the underlying data is fixed. Each DLQ arrival
+# should be surfaced on the Phase 7 dashboard alongside sync_log.unresolved_links.
+
+# Snowflake config (non-secret) — ported from esperanza-data-sync wrangler.toml.
+[vars]
+SNOWFLAKE_ACCOUNT = "lu51183.us-east-2.aws"
+SNOWFLAKE_USER = "matt_hazard_house"
+SNOWFLAKE_DATABASE = "RHODES_ENTERPRISES"
+SNOWFLAKE_WAREHOUSE = "HAZARD_HOUSE_WH"
+SNOWFLAKE_SCHEMA = "ANALYTICS_ZONE"
+
+# Secrets (set via `wrangler secret put`):
+#   SNOWFLAKE_PASSWORD   — Snowflake REST login password
+#   AIRTABLE_PAT         — one-time Airtable->D1 import only (not used by the cron/consumer)

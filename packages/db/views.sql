@@ -1,0 +1,236 @@
+-- =============================================================================
+-- esperanza-cf — v_public_<entity> read views. Migration Plan v2, Phase 1.
+--
+-- Rule (Decision-log #6): COALESCE(override_x, synced_x) ONLY where a
+-- synced_/override_ PAIR exists. Every other column is a plain mirror.
+--   * QMI: the Snowflake write-set columns are the only pairs.
+--   * Communities/Cities/Floor Plans: no override pairs (their synced fields have
+--     no admin-override counterpart) — plain columns throughout.
+--   * Promotions/Collections/Images/Blogs/Testimonials: fully admin-owned — these
+--     don't get a v_public_ view here beyond a straight passthrough where useful;
+--     promo RESOLUTION is done by the api Worker (see comment at bottom), NOT baked
+--     into a view.
+--
+-- v_public_qmi additionally filters published = 1 (the live publish gate).
+-- These views are loaded by the test harness alongside 0000_init.sql.
+-- =============================================================================
+
+DROP VIEW IF EXISTS v_public_qmi;
+CREATE VIEW v_public_qmi AS
+SELECT
+  q.id                                                           AS id,
+
+  -- ── COALESCE(override, synced) for the Snowflake write-set pairs ──────────
+  COALESCE(q.override_address,             q.synced_address)             AS address,
+  COALESCE(q.override_postal_code,         q.synced_postal_code)         AS postal_code,
+  COALESCE(q.override_bedroom_count,       q.synced_bedroom_count)       AS bedroom_count,
+  COALESCE(q.override_bathroom_count,      q.synced_bathroom_count)      AS bathroom_count,
+  COALESCE(q.override_half_bathroom_count, q.synced_half_bathroom_count) AS half_bathroom_count,
+  COALESCE(q.override_living_square_footage, q.synced_living_square_footage) AS living_square_footage,
+  COALESCE(q.override_total_square_footage,  q.synced_total_square_footage)  AS total_square_footage,
+  COALESCE(q.override_elevation,           q.synced_elevation)           AS elevation,
+  COALESCE(q.override_construction_stage,  q.synced_construction_stage)  AS construction_stage,
+  COALESCE(q.override_city_id,             q.synced_city_id)             AS city_id,
+  COALESCE(q.override_community_id,        q.synced_community_id)        AS community_id,
+  COALESCE(q.override_floor_plan_id,       q.synced_floor_plan_id)       AS floor_plan_id,
+  COALESCE(q.override_price,               q.synced_price)               AS price,
+
+  -- legacy singleSelect name mirrors (raw-record contract — plain, no pair)
+  q.synced_city_name        AS city,
+  q.synced_community_name   AS community,
+  q.synced_floor_plan_name  AS floor_plan,
+
+  -- ── ingest identity / join keys (plain) ──────────────────────────────────
+  q.eci_key, q.mark_job_number, q.housenumber,
+
+  -- ── plain admin-owned columns ─────────────────────────────────────────────
+  q.slug, q.seo_slug, q.rich_slug, q.viewer_slug,
+  q.latitude, q.longitude, q.geo_latitude, q.geo_longitude,
+  q.collection, q.estimated_monthly_price, q.estimated_monthly_payment, q.monthly_energy_cost,
+  q.car_garage_count, q.stories_count, q.stories,
+  q.available_now, q.self_tour_available, q.include_in_xml_feed,
+  q.image_url, q.og_image_url, q.page_url, q.dynamic_pdf,
+  q.featured_image, q.image_2, q.image_3, q.image_4, q.image_5,
+  q.description, q.upgrades, q.incentive, q.virtual_tour_url, q.elevation_type,
+  q.mls_id, q.mls_number, q.lot_number, q.year_built, q.lot_size_sqft, q.move_in_date,
+  q.hers_score, q.arm_rate, q.promo_text, q.availability_text, q.nter_now, q.cities,
+  q.posted, q.publish_date, q.last_modified_time,
+
+  -- ── FP:* lookups — RESOLVED from the linked floor plan via LEFT JOIN ──────
+  -- The qmi.fp_* columns were removed (D1 100-col limit). Each output column
+  -- keeps its original name and is computed from the matching floor_plans source
+  -- column; the api serializer wraps each scalar/object into the single-element
+  -- FP:* array the contract requires. NULL (no linked FP) → the serializer omits
+  -- the field (sparse), exactly as before. fp_image / fp_additional_images carry
+  -- attachment-object JSON and live on floor_plans.
+  fp.bedroom_min            AS fp_bedrooms_min,
+  fp.bedroom_max            AS fp_bedrooms_max,
+  fp.bathroom_max           AS fp_bathrooms_max,
+  fp.car_garage_count       AS fp_garage,
+  fp.living_square_footage  AS fp_living_sqft,
+  fp.total_square_footage   AS fp_total_sqft,
+  fp.description            AS fp_description,
+  fp.fp_image               AS fp_image,
+  fp.fp_additional_images   AS fp_additional_images,
+  fp.starting_price         AS fp_starting_price,
+  fp.virtual_tour_url       AS fp_virtual_tour,
+  fp.plan_viewer_url        AS fp_plan_viewer,
+  fp.collection             AS fp_collection,
+  fp.master_bed_location    AS fp_master_bed_location,
+
+  q.published
+FROM qmi q
+LEFT JOIN floor_plans fp
+  ON fp.id = COALESCE(q.override_floor_plan_id, q.synced_floor_plan_id)
+WHERE q.published = 1;   -- live publish gate
+
+-- =============================================================================
+-- v_public_communities — square_footage_range is the only synced field and has
+-- NO override counterpart, so it is a plain column (no COALESCE). publish gate is
+-- left to the api Worker (active = published && !draft) so admin reads can see drafts.
+-- =============================================================================
+DROP VIEW IF EXISTS v_public_communities;
+CREATE VIEW v_public_communities AS
+SELECT
+  c.id,
+  c.square_footage_range,           -- synced, no pair → plain
+  c.name, c.slug, c.town, c.published, c.draft, c.address,
+  c.map_coordinates, c.latitude, c.longitude, c.lat_long,
+  c.master_planned, c.coming_soon,
+  c.price_from, c.bed_count, c.bath_count,
+  c.description, c.amenities,
+  c.education_rich, c.design_copy_rich,
+  c.exterior_construction_copy_rich, c.interior_construction_copy_rich,
+  c.conservation_landscape_copy_rich, c.energy_package_copy_rich,
+  c.kitchen_features_copy_rich, c.bath_features_copy_rich,
+  c.esperanza_difference_copy_rich,
+  c.gas_details_rich, c.internet_details, c.water_details,
+  c.electric_details_rich, c.security_details, c.directions,
+  c.featured_image_url, c.featured_image_alt,
+  c.secondary_image_url, c.secondary_image_alt,
+  c.photo_gallery_image_url, c.photo_gallery_image_alt,
+  c.description_image_url,
+  c.community_logo_url, c.community_logo_alt,
+  c.features_download_url, c.resources_download_url, c.featured_video,
+  c.office_phone, c.office_hours, c.schedule_visit, c.lending,
+  c.mine_link, c.community_map_embed, c.incentive, c.floor_plan_plaintext,
+  c.hoa_links_json, c.city_id
+FROM communities c;
+
+-- =============================================================================
+-- v_public_cities — synced counts have no override pair → plain columns.
+-- =============================================================================
+DROP VIEW IF EXISTS v_public_cities;
+CREATE VIEW v_public_cities AS
+SELECT
+  ci.id,
+  ci.community_count, ci.move_in_homes_count, ci.floor_plans_count,  -- synced, no pair → plain
+  ci.city_name, ci.slug, ci.state, ci.status,
+  ci.map_latitude, ci.map_longitude,
+  ci.hero_image_url, ci.hero_description, ci.national_recognition, ci.incentive,
+  ci.city_copy_blocks_json, ci.city_venue_blocks_json
+FROM cities ci;
+
+-- =============================================================================
+-- v_public_floor_plans — synced_image_url (external) has no override pair → plain.
+-- Filters published (formula NOT({Inactive?})) — treat truthy as published.
+-- =============================================================================
+DROP VIEW IF EXISTS v_public_floor_plans;
+CREATE VIEW v_public_floor_plans AS
+SELECT
+  fp.id,
+  fp.synced_image_url,              -- external-synced, no pair → plain
+  fp.name, fp.slug, fp.published, fp.collection, fp.starting_price,
+  fp.bedroom_min, fp.bedroom_max, fp.bathroom_min, fp.bathroom_max,
+  fp.car_garage_count, fp.stories_count,
+  fp.living_square_footage, fp.total_square_footage,
+  fp.master_bed_location, fp.hers_score,
+  fp.image_url, fp.hero_image_2, fp.hero_image_3,
+  fp.elevation_renderings, fp.elevation_gallery,
+  fp.photo_gallery_urls, fp.photo_gallery,
+  fp.additional_images, fp.additional_images_gallery,
+  fp.description, fp.plan_viewer_url, fp.virtual_tour_url, fp.incentive,
+  fp.brochure_pdf_url, fp.brochure_pdf,
+  fp.energy_cost_low, fp.energy_cost_high, fp.energy_cost_avg,
+  fp.communities, fp.community_count, fp.quick_move_in_ids, fp.promotion_ids
+FROM floor_plans fp
+WHERE fp.published = 1;
+
+-- =============================================================================
+-- v_public_promotions — straight passthrough of active promos. RESOLUTION (which
+-- promo applies to a given QMI/community/city) is NOT baked here — see below.
+-- =============================================================================
+DROP VIEW IF EXISTS v_public_promotions;
+CREATE VIEW v_public_promotions AS
+SELECT
+  p.id, p.title, p.banner_text, p.badge_text, p.copy,
+  p.cta_label, p.cta_url, p.image_url,
+  p.sort_order, p.start_date, p.end_date, p.active, p.applies_to
+FROM promotions p
+WHERE p.active = 1;
+
+-- =============================================================================
+-- v_public_collections / v_public_images / v_public_blogs / v_public_testimonials
+-- — fully admin-owned passthroughs (no synced/override pairs anywhere).
+-- =============================================================================
+DROP VIEW IF EXISTS v_public_collections;
+CREATE VIEW v_public_collections AS
+SELECT id, title, slug, content, header_image, header_image_alt,
+       starting_at, ending_at, incentive
+FROM collections;
+
+DROP VIEW IF EXISTS v_public_images;
+CREATE VIEW v_public_images AS
+SELECT id, slug, plan_name, caption, caption_clean,
+       elevation_style, elevation_material, elevation_parsed, file_url
+FROM images;
+
+DROP VIEW IF EXISTS v_public_blogs;
+CREATE VIEW v_public_blogs AS
+SELECT id, title, slug, category, excerpt, content, publish_date,
+       featured_image, seo_description, community_name, published
+FROM blogs
+WHERE published = 1;
+
+DROP VIEW IF EXISTS v_public_testimonials;
+CREATE VIEW v_public_testimonials AS
+SELECT id, person_name, slug, date_posted, testimonial_text, move_in_year,
+       status, image_url, floor_plan_id, floor_plan_name, floor_plan_image,
+       community_id, community_name, town
+FROM testimonials
+WHERE status IS NULL OR status <> 'Draft';   -- draft = Status==='Draft'; unset defaults LIVE
+
+-- =============================================================================
+-- PROMO RESOLUTION — DOCUMENTED, NOT a view. The api Worker resolves the
+-- "effective promo" for an entity at read time (see packages/db/lib/promo.ts).
+-- Equivalent SQL for "effective promo for a QMI" (given :qmi_id, :community_id,
+-- :city_id and a current timestamp :now in YYYY-MM-DD), kept here as the
+-- canonical reference the Worker mirrors:
+--
+--   SELECT p.*
+--   FROM promotions p
+--   JOIN promotion_targets t ON t.promotion_id = p.id
+--   WHERE p.active = 1
+--     AND (p.start_date IS NULL OR p.start_date = '' OR p.start_date <= :now)
+--     AND (p.end_date   IS NULL OR p.end_date   = '' OR p.end_date   >= :now)
+--     AND (
+--          (t.target_type = 'qmi'       AND t.target_id = :qmi_id)
+--       OR (t.target_type = 'community' AND t.target_id = :community_id)
+--       OR (t.target_type = 'city'      AND t.target_id = :city_id)
+--       OR (t.target_type = 'global')
+--     )
+--   ORDER BY
+--     CASE t.target_type                       -- specificity: qmi > community > city > global
+--       WHEN 'qmi' THEN 0 WHEN 'community' THEN 1 WHEN 'city' THEN 2 WHEN 'global' THEN 3
+--     END ASC,
+--     p.sort_order ASC,                        -- tie-break: lowest sort_order wins
+--     p.id ASC                                 -- final deterministic tie-break
+--   LIMIT 1;
+--
+-- For a Community endpoint, drop the qmi clause (community/city/global); for a
+-- City endpoint, only city/global. The Worker returns the resolved promotion
+-- object (banner/badge/cta/image) flattened onto each row, matching the shape the
+-- Framer components already expect. It is deliberately NOT a view because (a) the
+-- :now / per-entity parameters vary per request, and (b) D1 read replicas + the
+-- Cache API are layered at the Worker, not the storage, level.
+-- =============================================================================

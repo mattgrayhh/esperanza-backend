@@ -1,0 +1,23 @@
+# packages/renderings — OneDrive (MS Graph) -> R2 floor-plan renderings Worker.
+# Pulls renderings, stores them in R2, and stamps floor_plans.synced_image_url (sp_ no-clobber).
+name = "esperanza-renderings"
+main = "src/index.ts"
+compatibility_date = "2025-05-20"
+compatibility_flags = ["nodejs_compat"]
+
+# Rendering refresh cron (placeholder cadence — tune in Phase 7).
+[triggers]
+crons = ["0 */6 * * *"]
+
+# Shared D1 binding. database_id placeholder — fill after `wrangler d1 create esperanza`.
+[[d1_databases]]
+binding = "DB"
+database_name = "esperanza"
+database_id = "023ea995-0abc-4165-a1e1-6e2373fc43e9"
+
+# Shared R2 bucket — renderings land here and are served via media.esperanzahomes.com.
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "esperanza-cms"
+
+# Secrets (set via `wrangler secret put`): MS_GRAPH_TENANT_ID, MS_GRAPH_CLIENT_ID, MS_GRAPH_CLIENT_SECRET.

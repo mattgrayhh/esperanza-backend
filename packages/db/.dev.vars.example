@@ -1,0 +1,6 @@
+# packages/db .dev.vars.example — copy to .dev.vars (NEVER commit real values).
+# The db package runs the one-time Airtable import and local schema tooling.
+# Only the Airtable PAT is needed here; D1/R2 come from wrangler bindings.
+
+# Airtable Personal Access Token — one-time import (Phase 2), then can be revoked.
+AIRTABLE_PAT=

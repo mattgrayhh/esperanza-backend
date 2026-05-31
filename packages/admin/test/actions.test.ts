@@ -1,0 +1,345 @@
+// =============================================================================
+// packages/admin — unit tests for the server-action WRITE PATH (lib/actions.ts).
+//
+// These exercise the REAL action code against the REAL schema:
+//   - DB:   a better-sqlite3 instance loaded from packages/db/migrations/0000_init.sql,
+//           wrapped in a Drizzle client (drizzle-orm/better-sqlite3). D1 IS SQLite, and
+//           drizzle-orm/sqlite-core generates the same SQL for both drivers, so this
+//           validates the actual UPDATE/INSERT/DELETE the actions emit.
+//   - Boundary modules are mocked: ./db (returns our sqlite-backed Drizzle client),
+//     ./auth (fixed actor), next/cache (revalidatePath no-op), and
+//     @opennextjs/cloudflare (env.FRAMER_QUEUE.send captured for the enqueue assertion).
+//
+// Coverage (per task):
+//   (a) a QMI synced-field save routes through override.ts (override_* + stamps) and
+//       blanking the input reverts to synced (override_* → NULL); the public-view
+//       COALESCE then returns the synced value. Audit rows are override_set/revert.
+//   (b) togglePublished(true) sets published=1 and audits a `publish` row.
+//   (c) savePromotionTargets writes the correct promotion_targets rows for a global
+//       vs a community scope, and the DB CHECK (global⇒NULL, others⇒NOT NULL) passes;
+//       a hand-built invalid row is rejected by that CHECK.
+// =============================================================================
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import Database from 'better-sqlite3';
+import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import { eq } from 'drizzle-orm';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { schema, qmi, promotions } from '@esperanza/db';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+// packages/admin/test → packages/db/migrations/0000_init.sql
+const INIT_SQL = readFileSync(
+  join(__dirname, '..', '..', 'db', 'migrations', '0000_init.sql'),
+  'utf8'
+);
+const VIEWS_SQL = readFileSync(join(__dirname, '..', '..', 'db', 'views.sql'), 'utf8');
+
+// --- per-test mutable harness state (read by the module mocks) ---------------
+interface Harness {
+  sqlite: Database.Database;
+  db: BetterSQLite3Database<typeof schema>;
+  queue: Array<{ collection: string; action: string; id: string }>;
+}
+let H: Harness;
+
+const ACTOR = 'matt@hazard.house';
+
+function freshHarness(): Harness {
+  const sqlite = new Database(':memory:');
+  sqlite.pragma('foreign_keys = ON');
+  sqlite.exec(INIT_SQL);
+  sqlite.exec(VIEWS_SQL);
+  const db = drizzle(sqlite, { schema });
+  return { sqlite, db, queue: [] };
+}
+
+// --- boundary mocks ----------------------------------------------------------
+// ./db: hand back the sqlite-backed Drizzle client for BOTH read and write paths.
+vi.mock('../lib/db', () => ({
+  getDb: () => ({ db: H.db, session: {} }),
+  getReadDb: () => H.db,
+  // idColumn must match the real implementation (reads the table's `id` column).
+  idColumn: (table: unknown) => (table as { id: unknown }).id,
+}));
+
+// ./auth: a fixed, trusted actor (never client-supplied in real life).
+vi.mock('../lib/auth', () => ({
+  getCurrentUser: async () => ACTOR,
+}));
+
+// next/cache: revalidatePath is a no-op in tests.
+vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
+
+// @opennextjs/cloudflare: env.FRAMER_QUEUE.send captures the enqueue payloads.
+vi.mock('@opennextjs/cloudflare', () => ({
+  getCloudflareContext: () => ({
+    env: {
+      FRAMER_QUEUE: {
+        send: async (msg: { collection: string; action: string; id: string }) => {
+          H.queue.push(msg);
+        },
+      },
+    },
+  }),
+}));
+
+// Import AFTER the mocks are registered (vi.mock is hoisted, so this is safe).
+import {
+  saveEntity,
+  togglePublished,
+  savePromotionTargets,
+} from '../lib/actions';
+
+beforeEach(() => {
+  H = freshHarness();
+});
+afterEach(() => {
+  H.sqlite.close();
+});
+
+// helpers ---------------------------------------------------------------------
+function form(entries: Record<string, string>): FormData {
+  const fd = new FormData();
+  for (const [k, v] of Object.entries(entries)) fd.append(k, v);
+  return fd;
+}
+const auditRows = (entity: string, id: string) =>
+  H.sqlite
+    .prepare('SELECT * FROM audit_log WHERE entity = ? AND entity_id = ? ORDER BY id')
+    .all(entity, id) as Array<Record<string, unknown>>;
+
+// =============================================================================
+// (a) QMI synced-field save routes through override.ts; blank reverts to synced.
+// =============================================================================
+describe('saveEntity — QMI override routing (via @esperanza/db/override)', () => {
+  beforeEach(() => {
+    // Seed a QMI with synced price + a referenced city (override_city_id is a FK target
+    // only conceptually; we won't override it here). Published so v_public_qmi shows it.
+    H.sqlite
+      .prepare(
+        `INSERT INTO qmi (id, synced_price, last_synced_price, synced_address, published)
+         VALUES ('q1', 350000, 350000, '101 Main St', 1)`
+      )
+      .run();
+  });
+
+  const effectivePrice = (id: string) =>
+    (H.sqlite.prepare('SELECT price FROM v_public_qmi WHERE id = ?').get(id) as { price: number })
+      .price;
+
+  it('pins an override on a synced field (writes override_* + stamps, audits override_set)', async () => {
+    const res = await saveEntity('qmi', 'q1', form({ price: '299000' }));
+    expect(res).toEqual({ ok: true });
+
+    const row = H.sqlite
+      .prepare('SELECT synced_price, override_price FROM qmi WHERE id = ?')
+      .get('q1') as Record<string, unknown>;
+    expect(row.override_price).toBe(299000); // override written
+    expect(row.synced_price).toBe(350000); // synced untouched (ingest owns it)
+
+    // effective (COALESCE override,synced) now = override
+    expect(effectivePrice('q1')).toBe(299000);
+
+    // audit: exactly one override_set row for the price field. Attribution
+    // (actor/at) lives ONLY here now — the override_price_at/_by stamp columns
+    // were dropped for the D1 100-col limit.
+    const audits = auditRows('qmi', 'q1');
+    expect(audits).toHaveLength(1);
+    expect(audits[0]!.action).toBe('override_set');
+    expect(audits[0]!.field).toBe('price');
+    expect(audits[0]!.new_value).toBe('299000');
+    expect(audits[0]!.actor).toBe(ACTOR); // who set it (audit_log, not a column stamp)
+    expect(audits[0]!.at).toBeTruthy(); // when it was set
+
+    // enqueued a single framer push for the changed record
+    expect(H.queue).toEqual([{ collection: 'qmi', action: 'upsert', id: 'q1' }]);
+  });
+
+  it('blanking the input REVERTS to synced (override_* → NULL), audits override_revert', async () => {
+    // first pin an override
+    await saveEntity('qmi', 'q1', form({ price: '299000' }));
+    expect(effectivePrice('q1')).toBe(299000);
+    H.queue.length = 0; // reset enqueue capture
+
+    // now submit a BLANK price → revert
+    const res = await saveEntity('qmi', 'q1', form({ price: '' }));
+    expect(res).toEqual({ ok: true });
+
+    const row = H.sqlite
+      .prepare('SELECT synced_price, override_price FROM qmi WHERE id = ?')
+      .get('q1') as Record<string, unknown>;
+    expect(row.override_price).toBeNull(); // reverted to NULL
+    expect(row.synced_price).toBe(350000); // synced still intact
+
+    // effective falls back to synced
+    expect(effectivePrice('q1')).toBe(350000);
+
+    const audits = auditRows('qmi', 'q1');
+    const last = audits[audits.length - 1]!;
+    expect(last.action).toBe('override_revert');
+    expect(last.field).toBe('price');
+    expect(last.new_value).toBeNull();
+    expect(last.actor).toBe(ACTOR); // who reverted is recorded (audit_log)
+    expect(H.queue).toEqual([{ collection: 'qmi', action: 'upsert', id: 'q1' }]);
+  });
+
+  it('a plain admin column on QMI writes the column directly (no override pair)', async () => {
+    const res = await saveEntity('qmi', 'q1', form({ mls_number: 'MLS-12345' }));
+    expect(res).toEqual({ ok: true });
+    const row = H.sqlite.prepare('SELECT mls_number FROM qmi WHERE id = ?').get('q1') as {
+      mls_number: string;
+    };
+    expect(row.mls_number).toBe('MLS-12345');
+    const audits = auditRows('qmi', 'q1');
+    expect(audits.some((a) => a.field === 'mls_number' && a.action === 'update')).toBe(true);
+  });
+
+  it('refuses to persist an expiring Airtable attachment URL', async () => {
+    const res = await saveEntity(
+      'qmi',
+      'q1',
+      form({ image_url: 'https://v5.airtableusercontent.com/abc/main.jpg' })
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/Airtable attachment URL/);
+  });
+});
+
+// =============================================================================
+// (b) togglePublished(true) sets published=1 and audits a publish row.
+// =============================================================================
+describe('togglePublished — the only path that sets published=1', () => {
+  beforeEach(() => {
+    H.sqlite.prepare(`INSERT INTO qmi (id, synced_price, published) VALUES ('q1', 100, 0)`).run();
+  });
+
+  it('togglePublished(true) sets published=1 and audits action=publish', async () => {
+    const res = await togglePublished('qmi', 'q1', true);
+    expect(res).toEqual({ ok: true });
+
+    const row = H.sqlite.prepare('SELECT published FROM qmi WHERE id = ?').get('q1') as {
+      published: number;
+    };
+    expect(row.published).toBe(1);
+
+    const audits = auditRows('qmi', 'q1');
+    expect(audits).toHaveLength(1);
+    expect(audits[0]!.action).toBe('publish');
+    expect(audits[0]!.field).toBe('published');
+    expect(audits[0]!.old_value).toBe('0');
+    expect(audits[0]!.new_value).toBe('1');
+    expect(H.queue).toEqual([{ collection: 'qmi', action: 'upsert', id: 'q1' }]);
+  });
+
+  it('togglePublished(false) sets published=0 and audits action=unpublish', async () => {
+    await togglePublished('qmi', 'q1', true);
+    H.queue.length = 0;
+    const res = await togglePublished('qmi', 'q1', false);
+    expect(res).toEqual({ ok: true });
+    const row = H.sqlite.prepare('SELECT published FROM qmi WHERE id = ?').get('q1') as {
+      published: number;
+    };
+    expect(row.published).toBe(0);
+    const audits = auditRows('qmi', 'q1');
+    expect(audits[audits.length - 1]!.action).toBe('unpublish');
+  });
+});
+
+// =============================================================================
+// (c) savePromotionTargets — global vs community scope; DB CHECK enforced.
+// =============================================================================
+describe('savePromotionTargets — replace-all promotion_targets honoring the CHECK', () => {
+  beforeEach(() => {
+    H.sqlite
+      .prepare(`INSERT INTO promotions (id, title, active) VALUES ('p1', 'Spring', 1)`)
+      .run();
+    // a couple of communities to target
+    H.sqlite.prepare(`INSERT INTO communities (id, name) VALUES ('recCommA', 'A')`).run();
+    H.sqlite.prepare(`INSERT INTO communities (id, name) VALUES ('recCommB', 'B')`).run();
+  });
+
+  const targetsFor = (promoId: string) =>
+    H.sqlite
+      .prepare('SELECT target_type, target_id FROM promotion_targets WHERE promotion_id = ? ORDER BY target_type, target_id')
+      .all(promoId) as Array<{ target_type: string; target_id: string | null }>;
+
+  it('global scope writes a single {global, NULL} row', async () => {
+    const res = await savePromotionTargets('p1', { type: 'global' });
+    expect(res).toEqual({ ok: true });
+    expect(targetsFor('p1')).toEqual([{ target_type: 'global', target_id: null }]);
+    expect(H.queue).toEqual([{ collection: 'promotions', action: 'upsert', id: 'p1' }]);
+  });
+
+  it('community scope writes one {community, recId} row per selection (target_id NOT NULL)', async () => {
+    const res = await savePromotionTargets('p1', {
+      type: 'scoped',
+      communities: ['recCommA', 'recCommB'],
+    });
+    expect(res).toEqual({ ok: true });
+    expect(targetsFor('p1')).toEqual([
+      { target_type: 'community', target_id: 'recCommA' },
+      { target_type: 'community', target_id: 'recCommB' },
+    ]);
+  });
+
+  it('replace-all: switching from community scope to global removes the old rows', async () => {
+    await savePromotionTargets('p1', { type: 'scoped', communities: ['recCommA'] });
+    expect(targetsFor('p1')).toHaveLength(1);
+    await savePromotionTargets('p1', { type: 'global' });
+    expect(targetsFor('p1')).toEqual([{ target_type: 'global', target_id: null }]);
+  });
+
+  it('the DB CHECK passes for valid rows and REJECTS a non-global row with NULL target_id', () => {
+    // valid: non-global with id, and global with NULL — both accepted by the CHECK
+    expect(() =>
+      H.sqlite
+        .prepare(`INSERT INTO promotion_targets (promotion_id, target_type, target_id) VALUES ('p1','city','recCity1')`)
+        .run()
+    ).not.toThrow();
+    expect(() =>
+      H.sqlite
+        .prepare(`INSERT INTO promotion_targets (promotion_id, target_type, target_id) VALUES ('p1','global',NULL)`)
+        .run()
+    ).not.toThrow();
+
+    // invalid: a non-global target_type with a NULL target_id violates the CHECK
+    expect(() =>
+      H.sqlite
+        .prepare(`INSERT INTO promotion_targets (promotion_id, target_type, target_id) VALUES ('p1','community',NULL)`)
+        .run()
+    ).toThrow(/CHECK|constraint/i);
+
+    // invalid: a global target_type WITH a target_id also violates the CHECK
+    expect(() =>
+      H.sqlite
+        .prepare(`INSERT INTO promotion_targets (promotion_id, target_type, target_id) VALUES ('p1','global','recX')`)
+        .run()
+    ).toThrow(/CHECK|constraint/i);
+  });
+
+  it('scoped scope with no ids is rejected by the action (before touching the DB)', async () => {
+    const res = await savePromotionTargets('p1', { type: 'scoped' });
+    expect(res.ok).toBe(false);
+    expect(targetsFor('p1')).toHaveLength(0);
+  });
+});
+
+// sanity: the imported Drizzle tables resolve to the expected physical tables.
+describe('schema wiring sanity', () => {
+  it('qmi + promotions tables are the real ones', () => {
+    expect(qmi).toBeDefined();
+    expect(promotions).toBeDefined();
+    // a trivial round-trip through the mocked db to prove the client is live
+    const ins = H.sqlite.prepare(`INSERT INTO qmi (id, published) VALUES ('zz', 0)`);
+    ins.run();
+    const got = H.db
+      .select()
+      .from(qmi)
+      .where(eq(qmi.id, 'zz'))
+      .all() as Array<{ id: string }>;
+    expect(got[0]!.id).toBe('zz');
+  });
+});

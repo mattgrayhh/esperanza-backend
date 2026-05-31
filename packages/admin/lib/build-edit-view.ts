@@ -1,0 +1,236 @@
+// =============================================================================
+// packages/admin — server-side builder that turns one DB row + the entity field
+// config into the plain-JSON view model EntityEditForm consumes. This is where the
+// config-driven engine resolves widgets/buckets into render instructions.
+//
+// Responsibilities:
+//   - For each config field, produce a FieldView (generic | image | syncedOverride).
+//   - Resolve `select` / `syncedOverride(select)` option lists from the DB.
+//   - Extract the publish-gate state (published | active | status).
+//   - Assemble side widgets (hoaLinks | jsonBlocks | promoScopeTag) from their columns.
+// =============================================================================
+
+import { eq } from 'drizzle-orm';
+import { getReadDb } from './db';
+import { ENTITIES, type EntityKey, type EntityDef } from './entities';
+import {
+  fieldConfigFor,
+  publishGateColumn,
+  CITY_COPY_BLOCK_KEYS,
+  CITY_VENUE_BLOCK_KEYS,
+  type FieldConfig,
+  type SelectSource,
+} from './field-config';
+import { loadOptionSets, loadPromoScopeOptions, type SelectOption } from './select-options';
+import { promotionTargets } from '@esperanza/db';
+import type {
+  FieldView,
+  PublishGateView,
+  SideWidget,
+} from '../components/EntityEditForm';
+
+type Row = Record<string, unknown>;
+
+function s(v: unknown): string {
+  return v == null ? '' : String(v);
+}
+
+function parseObj(v: unknown): Record<string, string> {
+  if (typeof v !== 'string' || v.trim() === '') return {};
+  try {
+    const o = JSON.parse(v);
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return {};
+    const out: Record<string, string> = {};
+    for (const [k, val] of Object.entries(o as Record<string, unknown>)) out[k] = s(val);
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function parseLinks(v: unknown): Array<{ title: string; link: string }> {
+  if (typeof v !== 'string' || v.trim() === '') return [];
+  try {
+    const a = JSON.parse(v);
+    if (!Array.isArray(a)) return [];
+    return a.map((x) => {
+      const o = (x ?? {}) as Record<string, unknown>;
+      return { title: s(o['title']), link: s(o['link']) };
+    });
+  } catch {
+    return [];
+  }
+}
+
+export interface EditView {
+  def: EntityDef;
+  id: string;
+  fields: FieldView[];
+  publishGate: PublishGateView | null;
+  sideWidgets: SideWidget[];
+}
+
+/** Load the row + build the full edit view model for an entity record. Returns null if not found. */
+export async function buildEditView(key: EntityKey, id: string): Promise<EditView | null> {
+  const def = ENTITIES[key];
+  const cfg = fieldConfigFor(key);
+  const db = getReadDb();
+
+  const rows = (await db
+    .select()
+    .from(def.table)
+    .where(eq((def.table as unknown as { id: never }).id, id as never))
+    .limit(1)) as Row[];
+  if (rows.length === 0) return null;
+  const row = rows[0]!;
+
+  // Resolve every dynamic select source referenced (admin selects + override selects).
+  const sources = new Set<SelectSource>();
+  for (const f of cfg.fields) if (f.selectSource) sources.add(f.selectSource);
+  const optionSets = await loadOptionSets(sources);
+
+  const gateCol = publishGateColumn(key);
+  const fields: FieldView[] = [];
+  const sideWidgets: SideWidget[] = [];
+
+  for (const f of cfg.fields) {
+    // The publish-gate field is the header toggle, not a form input.
+    if (f.bucket === 'publish') continue;
+
+    // Custom side widgets (own actions, rendered below the form).
+    if (f.widget === 'hoaLinks') {
+      sideWidgets.push({ kind: 'hoaLinks', initial: parseLinks(row['hoa_links_json']) });
+      continue;
+    }
+    if (f.widget === 'promoScopeTag') {
+      // handled after the loop (needs a separate query); placeholder push below.
+      continue;
+    }
+    if (f.widget === 'jsonBlocks') {
+      // Two jsonBlocks config entries (copy + venue) collapse to ONE editor instance.
+      // Only add it once (when we hit the copy-blocks column).
+      if (f.field === 'city_copy_blocks_json') {
+        const copy = mergeKeys(CITY_COPY_BLOCK_KEYS, parseObj(row['city_copy_blocks_json']));
+        const venue = mergeKeys(CITY_VENUE_BLOCK_KEYS, parseObj(row['city_venue_blocks_json']));
+        sideWidgets.push({ kind: 'jsonBlocks', copy, venue });
+      }
+      continue;
+    }
+
+    fields.push(buildFieldView(key, f, row, optionSets));
+  }
+
+  // Promotion targeting scope (needs the promotion_targets rows + full option lists).
+  if (cfg.fields.some((f) => f.widget === 'promoScopeTag')) {
+    const targets = (await db
+      .select()
+      .from(promotionTargets)
+      .where(eq(promotionTargets.promotionId, id))) as Row[];
+    const global = targets.some((t) => t['target_type'] === 'global');
+    const pick = (type: string) =>
+      targets.filter((t) => t['target_type'] === type).map((t) => s(t['target_id']));
+    const options = await loadPromoScopeOptions();
+    sideWidgets.push({
+      kind: 'promoScope',
+      global,
+      selected: { cities: pick('city'), communities: pick('community'), qmis: pick('qmi') },
+      options,
+    });
+  }
+
+  // Publish gate view model.
+  let publishGate: PublishGateView | null = null;
+  if (gateCol === 'published' || gateCol === 'active') {
+    publishGate = { gate: gateCol, published: Boolean(row[gateCol]) };
+  } else if (gateCol === 'status') {
+    const statusCfg = cfg.fields.find((f) => f.field === 'status');
+    publishGate = {
+      gate: 'status',
+      status: s(row['status']),
+      statusOptions: statusCfg?.options ?? ['', 'Live', 'Draft'],
+    };
+  }
+
+  return { def, id, fields, publishGate, sideWidgets };
+}
+
+/** Resolve a single config field into a FieldView, reading the row + option sets. */
+function buildFieldView(
+  key: EntityKey,
+  f: FieldConfig,
+  row: Row,
+  optionSets: Partial<Record<SelectSource, SelectOption[]>>
+): FieldView {
+  // synced (read-only display) — never submitted. Rendered via the read-only 'synced'
+  // GenericField variant regardless of the configured widget (text/number/image).
+  if (f.bucket === 'synced') {
+    return {
+      kind: 'generic',
+      field: f.field,
+      label: f.label,
+      widget: 'synced',
+      value: s(row[f.field]),
+      help: f.help,
+    };
+  }
+
+  // override (QMI synced_/override_ pairs).
+  if (f.bucket === 'override') {
+    const syncedCol = f.syncedColumn ?? `synced_${f.field}`;
+    const overrideCol = `override_${f.field}`;
+    const variant: 'text' | 'number' | 'select' =
+      f.widget === 'syncedOverride' && f.selectSource
+        ? 'select'
+        : f.step
+          ? 'number'
+          : 'text';
+    // For selects, show the synced human NAME (displayColumn) as the helper, not the id.
+    const syncedDisplay =
+      variant === 'select' && f.displayColumn ? s(row[f.displayColumn]) : s(row[syncedCol]);
+    return {
+      kind: 'syncedOverride',
+      field: f.field,
+      label: f.label,
+      variant,
+      syncedDisplay,
+      overrideValue: s(row[overrideCol]),
+      step: f.step,
+      options: f.selectSource ? optionSets[f.selectSource] : undefined,
+      help: f.help,
+    };
+  }
+
+  // admin: image widget → ImageUploader; else GenericField.
+  if (f.widget === 'image') {
+    return { kind: 'image', field: f.field, label: f.label, value: s(row[f.field]), help: f.help };
+  }
+
+  const genericWidget =
+    f.widget === 'textarea' ||
+    f.widget === 'number' ||
+    f.widget === 'boolean' ||
+    f.widget === 'richtext' ||
+    f.widget === 'select'
+      ? f.widget
+      : 'text';
+
+  return {
+    kind: 'generic',
+    field: f.field,
+    label: f.label,
+    widget: genericWidget,
+    value: s(row[f.field]),
+    step: f.step,
+    options: f.selectSource ? optionSets[f.selectSource] : undefined,
+    staticOptions: f.options,
+    help: f.help,
+  };
+}
+
+/** Known keys first (in order), then any extra keys already present in the stored object. */
+function mergeKeys(known: readonly string[], existing: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const k of known) out[k] = existing[k] ?? '';
+  for (const [k, v] of Object.entries(existing)) if (!(k in out)) out[k] = v;
+  return out;
+}
