@@ -3,6 +3,10 @@ import type { ReactNode } from 'react';
 import './globals.css';
 import { Nav } from './nav';
 import { getCurrentUserOrNull } from '../lib/auth';
+import { Geist } from "next/font/google";
+import { cn } from "@/lib/utils";
+
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
   title: 'Esperanza Admin',
@@ -19,7 +23,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   // open) render a bare full-width shell — no entity sidebar for a signed-out user.
   if (!currentUser) {
     return (
-      <html lang="en">
+      <html lang="en" className={cn("font-sans", geist.variable)}>
         <body style={{ margin: 0 }}>{children}</body>
       </html>
     );
