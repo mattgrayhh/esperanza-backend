@@ -33,6 +33,7 @@ import { HoaLinksEditor } from './fields/HoaLinksEditor';
 import { JsonBlocksEditor } from './fields/JsonBlocksEditor';
 import { PromoScopeTagPicker } from './fields/PromoScopeTagPicker';
 import type { SelectOption } from '../lib/select-options';
+import type { SelectOptionItem } from '../lib/field-config';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -52,11 +53,22 @@ export type FieldView =
       kind: 'generic';
       field: string;
       label: string;
-      widget: 'text' | 'textarea' | 'number' | 'boolean' | 'richtext' | 'date' | 'select' | 'synced';
+      widget:
+        | 'text'
+        | 'textarea'
+        | 'number'
+        | 'currency'
+        | 'boolean'
+        | 'richtext'
+        | 'date'
+        | 'select'
+        | 'synced';
       value: string;
       step?: 'any' | '1';
       options?: SelectOption[];
       staticOptions?: string[];
+      /** builder {value,label} options (custom select fields) → SelectField. */
+      optionItems?: SelectOptionItem[];
       readOnly?: boolean;
       help?: string;
       halfWidth?: boolean;
@@ -124,6 +136,7 @@ export function EntityEditForm({
   fields,
   publishGate,
   sideWidgets,
+  preview = false,
 }: {
   entityKey: string;
   segment: string;
@@ -133,11 +146,14 @@ export function EntityEditForm({
   fields: FieldView[];
   publishGate: PublishGateView | null;
   sideWidgets: SideWidget[];
+  /** LIVE PREVIEW (Field Builder): render the form read-only with no save/submit. */
+  preview?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
 
   function onSubmit(formData: FormData) {
+    if (preview) return; // preview never writes
     startTransition(async () => {
       const res = await saveEntity(entityKey, id, formData);
       setMsg(res.ok ? 'Saved' : `Error: ${res.error}`);
@@ -172,7 +188,7 @@ export function EntityEditForm({
           </p>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          {publishGate ? (
+          {publishGate && !preview ? (
             <PublishedToggle
               entityKey={entityKey}
               id={id}
@@ -182,6 +198,11 @@ export function EntityEditForm({
               statusOptions={publishGate.statusOptions}
               onResult={setMsg}
             />
+          ) : null}
+          {preview ? (
+            <Badge variant="outline" className="h-5">
+              Preview
+            </Badge>
           ) : null}
           {msg ? (
             <Badge variant={isError ? 'destructive' : 'secondary'} className="h-5">
@@ -230,20 +251,25 @@ export function EntityEditForm({
                       step={f.step}
                       options={f.options}
                       staticOptions={f.staticOptions}
+                      optionItems={f.optionItems}
                       readOnly={f.readOnly}
                       help={f.help}
                     />
                   </div>
                 );
               })}
-              <Separator className="col-span-1 sm:col-span-2" />
-              <Button
-                type="submit"
-                disabled={pending}
-                className="col-span-1 justify-self-start sm:col-span-2"
-              >
-                {pending ? 'Saving…' : 'Save'}
-              </Button>
+              {preview ? null : (
+                <>
+                  <Separator className="col-span-1 sm:col-span-2" />
+                  <Button
+                    type="submit"
+                    disabled={pending}
+                    className="col-span-1 justify-self-start sm:col-span-2"
+                  >
+                    {pending ? 'Saving…' : 'Save'}
+                  </Button>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -273,9 +299,11 @@ export function EntityEditForm({
         </div>
       </form>
 
-      {sideWidgets.map((w, i) => (
-        <SideWidgetBlock key={i} entityKey={entityKey} id={id} widget={w} onResult={setMsg} />
-      ))}
+      {preview
+        ? null
+        : sideWidgets.map((w, i) => (
+            <SideWidgetBlock key={i} entityKey={entityKey} id={id} widget={w} onResult={setMsg} />
+          ))}
     </div>
   );
 }

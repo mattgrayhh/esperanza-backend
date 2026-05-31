@@ -38,7 +38,9 @@
 import { asc, eq } from 'drizzle-orm';
 import { fieldDefinitions, type FieldDefinition } from '@esperanza/db';
 import { getReadDb } from './db';
-import type { EntityKey } from './entities';
+import { columnMapForEntity } from './fields';
+import { isQmiOverrideField, type EntityKey } from './entities';
+import { publishGateColumn } from './field-config';
 import {
   fieldConfigFor,
   type EntityFieldConfig,
@@ -47,13 +49,15 @@ import {
   type Widget,
   type Bucket,
   type SelectSource,
+  type SelectOptionItem,
 } from './field-config';
 
 // ── field-builder type (stored in field_definitions.type) → admin Widget ─────
 // Inverts scripts/seed-field-definitions.ts:widgetToType. The bespoke widgets are
-// stored verbatim, so they round-trip by name. `currency`/`url` are Phase-B v1 types
-// with no distinct Phase-A widget — currency renders as a number input, url as text
-// (their seed framer_type carries the semantic). No Phase-A seed row uses them.
+// stored verbatim, so they round-trip by name. Phase B gives `rich`/`currency`/`select`
+// dedicated widgets (RichTextField / CurrencyField / SelectField); `url` still renders as
+// text (its seed framer_type carries the link semantic). No Phase-A seed row uses
+// currency/url, so this is parity-safe.
 function typeToWidget(type: string): Widget {
   switch (type) {
     case 'text':
@@ -65,7 +69,7 @@ function typeToWidget(type: string): Widget {
     case 'number':
       return 'number';
     case 'currency':
-      return 'number';
+      return 'currency';
     case 'bool':
       return 'boolean';
     case 'date':
@@ -102,6 +106,35 @@ function parseOptions(optionsJson: string | null): string[] | undefined {
 }
 
 /**
+ * Parse field_definitions.options_json into {value,label} items for a builder `select`.
+ * Tolerant of BOTH shapes the registry can hold:
+ *   • [{value,label}]      — Field-Builder selects (the canonical Phase-B shape).
+ *   • ["a","b"] (strings)  — legacy/static enums (testimonials.status) → value=label=str.
+ * Returns undefined when absent/empty/malformed (the field then renders as a plain text
+ * input, never an empty dropdown).
+ */
+function parseOptionItems(optionsJson: string | null): SelectOptionItem[] | undefined {
+  if (!optionsJson) return undefined;
+  try {
+    const a = JSON.parse(optionsJson);
+    if (!Array.isArray(a)) return undefined;
+    const items: SelectOptionItem[] = a.map((x) => {
+      if (x && typeof x === 'object' && !Array.isArray(x)) {
+        const o = x as Record<string, unknown>;
+        const value = String(o.value ?? o.label ?? '');
+        const label = String(o.label ?? o.value ?? '');
+        return { value, label };
+      }
+      const s = String(x);
+      return { value: s, label: s };
+    });
+    return items.length > 0 ? items : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Reconstruct ONE FieldConfig from a field_definitions row, given the matching STATIC
  * FieldConfig (by `(entity, key)`) when one exists. The DB row drives label/help/widget/
  * half_width/options; the static config supplies the render-only routing (bucket,
@@ -119,15 +152,28 @@ function rowToFieldConfig(row: FieldDefinition, staticField: FieldConfig | undef
   const displayColumn = staticField?.displayColumn;
   const syncedColumn = staticField?.syncedColumn;
 
+  // A row with NO matching static FieldConfig is a Phase-B user-added field: its value
+  // is NOT a real column — it lives in the entity row's `custom_fields` JSON blob. Flag
+  // it so build-edit-view reads/writes it there and saveEntity routes the write correctly.
+  const custom = staticField === undefined;
+
+  // Static select fields (e.g. testimonials.status) keep their legacy string[] `options`
+  // for Phase-A parity. A builder-added `select` (custom, no static match) carries its
+  // {value,label} list as `optionItems`, which GenericField routes to SelectField.
+  const legacyOptions = custom ? undefined : parseOptions(row.optionsJson);
+  const optionItems = custom && widget === 'select' ? parseOptionItems(row.optionsJson) : undefined;
+
   return {
     field: row.key,
     // Operator-editable presentation: prefer the DB value, fall back to the static one.
     label: row.label ?? staticField?.label ?? row.key,
     widget,
     bucket,
+    ...(custom ? { custom: true } : {}),
     ...(step ? { step } : {}),
     ...(selectSource ? { selectSource } : {}),
-    ...(parseOptions(row.optionsJson) ? { options: parseOptions(row.optionsJson) } : {}),
+    ...(legacyOptions ? { options: legacyOptions } : {}),
+    ...(optionItems ? { optionItems } : {}),
     ...(row.help != null ? { help: row.help } : staticField?.help ? { help: staticField.help } : {}),
     ...(row.halfWidth ? { halfWidth: true } : {}),
     ...(syncedColumn ? { syncedColumn } : {}),
@@ -203,4 +249,59 @@ export async function resolveFieldConfig(key: EntityKey): Promise<EntityFieldCon
   const listColumns = buildListColumns(rows, staticCfg);
 
   return { listColumns, fields };
+}
+
+// =============================================================================
+// Phase B — CUSTOM-FIELD VALUE PLUMBING (save path).
+//
+// A field_definitions row whose key is NOT a real column on the entity is a user-added
+// (Phase B) field; its VALUE lives in the row's `custom_fields` JSON blob, not a column.
+// The save action (lib/actions.saveEntity) needs to know — for one entity — exactly which
+// submitted FormData keys are custom (so it merges them into custom_fields) and the
+// field-builder TYPE of each (so it coerces the value: number/currency → number, bool →
+// boolean, everything else → string). This resolver reads field_definitions (the source
+// of truth) and returns that map.
+// =============================================================================
+
+export interface CustomFieldDef {
+  /** the custom_fields JSON key (== field_definitions.key). */
+  key: string;
+  /** field-builder type (text/long/rich/number/currency/bool/date/url/select/image). */
+  type: string;
+}
+
+/**
+ * The CUSTOM field definitions for an entity: rows in field_definitions whose key is NOT
+ * a real, editable column of the entity table, AND is not a QMI override field, the
+ * publish gate, or a bespoke composed widget (syncedOverride/hoaLinks/jsonBlocks/
+ * promoScopeTag). Those exclusions can never be custom; everything else with no column
+ * is a user-added field backed by custom_fields. Returns [] if the registry is unreadable
+ * or has no rows for the entity (the entity then has no custom fields, which is correct).
+ */
+export async function resolveCustomFieldDefs(key: EntityKey): Promise<CustomFieldDef[]> {
+  const db = getReadDb();
+  let rows: FieldDefinition[];
+  try {
+    rows = (await db
+      .select()
+      .from(fieldDefinitions)
+      .where(eq(fieldDefinitions.entity, key))) as FieldDefinition[];
+  } catch {
+    return [];
+  }
+  if (rows.length === 0) return [];
+
+  const colMap = columnMapForEntity(key);
+  const gate = publishGateColumn(key);
+  const bespoke = new Set(['syncedOverride', 'hoaLinks', 'jsonBlocks', 'promoScopeTag']);
+
+  const out: CustomFieldDef[] = [];
+  for (const r of rows) {
+    if (bespoke.has(r.type)) continue; // composed widgets are never custom_fields-backed
+    if (colMap[r.key]) continue; // real editable column → not custom
+    if (gate && r.key === gate) continue; // publish gate has its own action
+    if (key === 'qmi' && isQmiOverrideField(r.key)) continue; // override-routed, not custom
+    out.push({ key: r.key, type: r.type });
+  }
+  return out;
 }

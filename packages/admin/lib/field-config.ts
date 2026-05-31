@@ -33,6 +33,7 @@ export type Widget =
   | 'text'
   | 'textarea'
   | 'number'
+  | 'currency'
   | 'boolean'
   | 'richtext'
   | 'image'
@@ -48,6 +49,12 @@ export type Bucket = 'synced' | 'override' | 'admin' | 'publish' | 'target' | 's
 /** Which dynamic option set a `select` / `syncedOverride(select)` field draws from. */
 export type SelectSource = 'floor_plans' | 'communities' | 'cities';
 
+/** A {value,label} option for a builder-defined `select` field (field_definitions.options_json). */
+export interface SelectOptionItem {
+  value: string;
+  label: string;
+}
+
 export interface FieldConfig {
   /** form field name === physical D1 column name (snake_case) for admin/synced/publish.
    *  For `override` it's the QmiOverridableField logical name (also the column root).
@@ -62,6 +69,14 @@ export interface FieldConfig {
   selectSource?: SelectSource;
   /** select(static): fixed option list (testimonials.status). */
   options?: string[];
+  /** select(builder): {value,label} option list from field_definitions.options_json
+   *  for a user-added select field. Distinct from `options` (legacy string[]) so the
+   *  Phase-A parity contract for testimonials.status is unchanged. */
+  optionItems?: SelectOptionItem[];
+  /** Phase B: true when this field is NOT a physical column on the entity — its value
+   *  lives in the row's `custom_fields` JSON blob (user-added via the Field Builder).
+   *  Drives both the read (build-edit-view) and the write (saveEntity) custom-field path. */
+  custom?: boolean;
   /** muted helper text under the input. */
   help?: string;
   /** [32] render at half width (one column of a two-up grid) — for short/number fields

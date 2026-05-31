@@ -22,6 +22,7 @@
 import { revalidatePath } from 'next/cache';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { eq } from 'drizzle-orm';
+import { and, asc } from 'drizzle-orm';
 import {
   promotions,
   promotionTargets,
@@ -30,7 +31,10 @@ import {
   testimonials,
   images,
   auditLog,
+  fieldDefinitions,
+  type FieldDefinition,
   type NewAuditLogRow,
+  type NewFieldDefinition,
   type NewPromotionTarget,
 } from '@esperanza/db';
 import {
@@ -40,10 +44,20 @@ import {
 } from '@esperanza/db/override';
 import type { PromoTargetType } from '@esperanza/db/promo';
 import { getDb, idColumn, type Db } from './db';
-import { getCurrentUser } from './auth';
+import { getCurrentUser, isAdmin } from './auth';
 import { getEntity, isQmiOverrideField, type EntityKey } from './entities';
 import { columnMapForEntity, coerceForColumn, toDrizzlePatch } from './fields';
 import { publishGateColumn } from './field-config';
+import { resolveCustomFieldDefs, type CustomFieldDef } from './field-config-source';
+import {
+  isFieldType,
+  isValidKeyShape,
+  generateFieldKey,
+  normalizeOptions,
+  reservedKeysForEntity,
+  FIELD_TYPE_META,
+  type FieldType,
+} from './field-builder';
 
 // =============================================================================
 // Shared post-write step: audit_log rows + enqueue framer push.
@@ -173,6 +187,13 @@ export async function saveEntity(
   const gate = publishGateColumn(def.key);
   const at = new Date().toISOString();
 
+  // Phase B: CUSTOM fields (field_definitions rows with no real column) store their VALUES
+  // in the row's `custom_fields` JSON blob. Resolve the entity's custom-field defs so we
+  // can route those FormData entries into custom_fields (NEVER a real column). This is
+  // purely ADDITIVE — real-column write logic below is unchanged.
+  const customDefs = await resolveCustomFieldDefs(def.key);
+  const customByKey = new Map<string, CustomFieldDef>(customDefs.map((d) => [d.key, d]));
+
   // Read the current row once (on the primary session) to compute audit old-values
   // and previous override values.
   const current = (await db
@@ -186,11 +207,48 @@ export async function saveEntity(
   const patch: Record<string, unknown> = {};
   const audits: AuditInput[] = [];
 
+  // Accumulate custom-field writes, then merge into custom_fields once after the loop.
+  // Drizzle's bare select() keys the row by the JS property (camelCase `customFields`);
+  // read that first, falling back to the physical snake_case key.
+  const existingCustom = parseCustomFieldsBlob(row['customFields'] ?? row['custom_fields']);
+  const nextCustom: Record<string, unknown> = { ...existingCustom };
+  const customAudits: AuditInput[] = [];
+  let customChanged = false;
+
   for (const [field, rawValue] of formData.entries()) {
     // FormData values can be File (handled by uploadImage, not here) — skip.
     if (typeof rawValue !== 'string') continue;
     // The publish gate (published/active/status) has its own action; never set it here.
     if (field === 'published' || (gate && field === gate)) continue;
+
+    // --- CUSTOM field (custom_fields-backed): merge into the JSON blob, not a column ---
+    const customDef = customByKey.get(field);
+    if (customDef) {
+      // Reject expiring Airtable attachment URLs in custom values too (Decision-log #9).
+      if (rawValue.includes('airtableusercontent.com')) {
+        return { ok: false, error: `Refusing to store an Airtable attachment URL in ${field}` };
+      }
+      const coerced = coerceCustomValue(customDef.type, rawValue);
+      const oldValue = existingCustom[field];
+      if (toStr(oldValue) === toStr(coerced)) continue; // no-op
+      if (coerced === null) {
+        delete nextCustom[field]; // blank clears the key
+      } else {
+        nextCustom[field] = coerced;
+      }
+      customChanged = true;
+      customAudits.push({
+        entity: def.key,
+        entityId: id,
+        field,
+        action: 'update',
+        oldValue: toStr(oldValue),
+        newValue: toStr(coerced),
+        actor,
+      });
+      continue;
+    }
+
     // Only accept fields we know how to map to a column.
     const col = colMap[field];
 
@@ -237,6 +295,14 @@ export async function saveEntity(
     });
   }
 
+  // Fold the merged custom_fields blob into the SAME patch when any custom field changed,
+  // so real-column and custom-field edits commit in one UPDATE. `custom_fields` is a real
+  // (additive) column, so it re-keys through toDrizzlePatch like any other column.
+  if (customChanged) {
+    patch['custom_fields'] = JSON.stringify(nextCustom);
+    audits.push(...customAudits);
+  }
+
   if (Object.keys(patch).length === 0) {
     return { ok: true }; // nothing changed
   }
@@ -244,8 +310,8 @@ export async function saveEntity(
   patch['updated_at'] = at;
 
   // `patch` is keyed by PHYSICAL column names (col.column, override.ts's override_<f>,
-  // updated_at). Drizzle .set() is keyed by JS property names — re-key or every key is
-  // silently dropped (→ empty SET → invalid SQL). See lib/fields.toDrizzlePatch.
+  // custom_fields, updated_at). Drizzle .set() is keyed by JS property names — re-key or
+  // every key is silently dropped (→ empty SET → invalid SQL). See lib/fields.toDrizzlePatch.
   await db
     .update(def.table)
     .set(toDrizzlePatch(def.key, patch) as never)
@@ -256,6 +322,45 @@ export async function saveEntity(
   revalidatePath(`/admin/${def.segment}/${id}`);
   revalidatePath(`/admin/${def.segment}`);
   return { ok: true };
+}
+
+// =============================================================================
+// Custom-field (custom_fields JSON) value helpers for saveEntity.
+//
+//   parseCustomFieldsBlob — read the row's custom_fields TEXT into a flat object (tolerant
+//                           of NULL/blank/malformed → {}). The merge preserves keys for
+//                           fields NOT present in this submit (other custom fields, or
+//                           values written by a future builder UI), so a partial save can
+//                           never wipe sibling custom values.
+//   coerceCustomValue     — coerce a submitted string to the JS type its field-builder type
+//                           implies (number/currency → number, bool → '1'/'0'/'true' →
+//                           boolean, else string). Blank → null (the key is removed).
+// =============================================================================
+
+function parseCustomFieldsBlob(v: unknown): Record<string, unknown> {
+  if (typeof v !== 'string' || v.trim() === '') return {};
+  try {
+    const o = JSON.parse(v);
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return {};
+    return o as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function coerceCustomValue(type: string, raw: string): unknown {
+  if (raw === '') return null;
+  switch (type) {
+    case 'number':
+    case 'currency': {
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : null;
+    }
+    case 'bool':
+      return raw === '1' || raw.toLowerCase() === 'true' || raw.toLowerCase() === 'on';
+    default:
+      return raw;
+  }
 }
 
 // =============================================================================
@@ -869,5 +974,396 @@ export async function deleteImageAsset(
   ]);
 
   revalidatePath('/images');
+  return { ok: true };
+}
+
+// =============================================================================
+// FIELD BUILDER (Phase B) — field_definitions CRUD + reorder.
+//
+// These ADD to the write path; they DO NOT enqueue a Framer push (Framer schema sync
+// is Phase C). Each obeys the in-repo write conventions:
+//   (1) gate on the Auth.js session role === 'admin' (Full-Admin only; isAdmin()),
+//   (2) attribute via getCurrentUser() and write an audit_log row for the change,
+//   (3) write D1 via the PRIMARY session (getDb → read-your-writes).
+//
+// Safety invariants (validated here AND in lib/field-builder.ts):
+//   • SYSTEM fields are immutable in key/type and cannot be deleted (reorder/relabel/
+//     group/visibility/half-width ARE allowed).
+//   • Custom keys are safe snake_case, unique per entity, and never collide with a real
+//     column / reserved name / existing field key.
+//   • Only the v1 field types are creatable (bespoke widgets are system-only).
+// The `entity` audited is `field_definitions:<entity>` so registry edits are
+// distinguishable from record edits in the audit_log; `field` is the field key.
+// =============================================================================
+
+type ActionResult<T = unknown> =
+  | ({ ok: true } & T)
+  | { ok: false; error: string };
+
+const AUDIT_REGISTRY = 'field_definitions';
+
+/** Resolve {actor} after confirming Full-Admin; returns an error result otherwise. */
+async function requireAdmin(): Promise<{ ok: true; actor: string } | { ok: false; error: string }> {
+  let actor: string;
+  try {
+    actor = await getCurrentUser();
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Not authenticated' };
+  }
+  if (!(await isAdmin())) {
+    return { ok: false, error: 'Forbidden: Field Builder requires Full Admin.' };
+  }
+  return { ok: true, actor };
+}
+
+/** Audit a registry change and revalidate the builder page for the entity. */
+async function postFieldWrite(
+  db: Db,
+  entity: EntityKey,
+  fieldKey: string | null,
+  action: string,
+  oldValue: string | null,
+  newValue: string | null,
+  actor: string
+): Promise<void> {
+  const row: NewAuditLogRow = {
+    entity: `${AUDIT_REGISTRY}:${entity}`,
+    entityId: fieldKey ?? entity,
+    field: fieldKey,
+    action,
+    oldValue,
+    newValue,
+    actor,
+  };
+  await db.insert(auditLog).values([row]);
+}
+
+export interface CreateFieldInput {
+  entity: string;
+  label: string;
+  type: string;
+  /** explicit key (optional — generated from the label when omitted). */
+  key?: string;
+  help?: string | null;
+  groupLabel?: string | null;
+  required?: boolean;
+  visibleInForm?: boolean;
+  visibleInList?: boolean;
+  halfWidth?: boolean;
+  /** {value,label}[] for a `select`; ignored for other types. */
+  options?: Array<{ value: string; label: string }> | string[];
+}
+
+/**
+ * Create a custom (non-system) field for an entity. Generates a safe snake_case key
+ * (unique per entity) when none is supplied, validates the type + key, appends it after
+ * the entity's current fields (sort = max+1), and audits a `field_create`.
+ */
+export async function createFieldDefinition(
+  input: CreateFieldInput
+): Promise<ActionResult<{ id: string; key: string }>> {
+  const def = getEntity(input.entity);
+  if (!def) return { ok: false, error: `Unknown entity: ${input.entity}` };
+
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate;
+  const { actor } = gate;
+
+  const label = (input.label ?? '').trim();
+  if (label === '') return { ok: false, error: 'Label is required' };
+
+  const type = String(input.type ?? '');
+  if (!isFieldType(type)) {
+    return { ok: false, error: `Invalid field type: ${type}` };
+  }
+
+  const { db } = getDb();
+
+  // Existing keys for the entity + the entity's reserved/real-column key set.
+  const existing = (await db
+    .select()
+    .from(fieldDefinitions)
+    .where(eq(fieldDefinitions.entity, def.key))
+    .orderBy(asc(fieldDefinitions.sort))) as FieldDefinition[];
+  const taken = reservedKeysForEntity(def.key);
+  for (const r of existing) taken.add(r.key);
+
+  // Resolve the key: explicit (validated) or generated from the label.
+  let key: string;
+  if (input.key && input.key.trim() !== '') {
+    key = input.key.trim();
+    if (!isValidKeyShape(key)) {
+      return { ok: false, error: `Invalid key "${key}" — use lower snake_case (a–z, 0–9, _).` };
+    }
+    if (taken.has(key)) {
+      return { ok: false, error: `Key "${key}" is reserved or already in use for ${def.label}.` };
+    }
+  } else {
+    key = generateFieldKey(label, taken);
+  }
+
+  const optionsJson =
+    type === 'select' ? JSON.stringify(normalizeOptions(input.options)) : null;
+
+  const maxSort = existing.reduce((m, r) => Math.max(m, r.sort), -1);
+  const id = `${def.key}__${key}`;
+  const row: NewFieldDefinition = {
+    id,
+    entity: def.key,
+    key,
+    label,
+    help: input.help?.trim() ? input.help.trim() : null,
+    groupLabel: input.groupLabel?.trim() ? input.groupLabel.trim() : null,
+    sort: maxSort + 1,
+    type,
+    optionsJson,
+    required: Boolean(input.required),
+    system: false, // builder-created fields are never system
+    visibleInForm: input.visibleInForm ?? true,
+    visibleInList: Boolean(input.visibleInList),
+    halfWidth: Boolean(input.halfWidth),
+    framerFieldId: null,
+    framerType: FIELD_TYPE_META[type as FieldType].framerType,
+  };
+
+  await db.insert(fieldDefinitions).values(row);
+  await postFieldWrite(db, def.key, key, 'field_create', null, `${type}:${label}`, actor);
+
+  revalidatePath('/settings/fields');
+  revalidatePath(`/${def.segment}`);
+  return { ok: true, id, key };
+}
+
+export interface UpdateFieldInput {
+  id: string;
+  /** Presentation/visibility edits — all optional (only provided keys change). */
+  label?: string;
+  help?: string | null;
+  groupLabel?: string | null;
+  required?: boolean;
+  visibleInForm?: boolean;
+  visibleInList?: boolean;
+  halfWidth?: boolean;
+  /** retype — ALLOWED for custom fields only; rejected for system fields. */
+  type?: string;
+  /** select options — only honored when the (resulting) type is `select`. */
+  options?: Array<{ value: string; label: string }> | string[];
+}
+
+/**
+ * Update a field definition. SYSTEM fields may only have label/help/group/visibility/
+ * half-width changed (key/type are immutable, and they can't be deleted). CUSTOM fields
+ * may additionally retype + edit options. Audits a `field_update` with a compact diff.
+ */
+export async function updateFieldDefinition(input: UpdateFieldInput): Promise<ActionResult> {
+  if (!input.id) return { ok: false, error: 'Missing field id' };
+
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate;
+  const { actor } = gate;
+
+  const { db } = getDb();
+  const rows = (await db
+    .select()
+    .from(fieldDefinitions)
+    .where(eq(fieldDefinitions.id, input.id))
+    .limit(1)) as FieldDefinition[];
+  if (rows.length === 0) return { ok: false, error: `Field ${input.id} not found` };
+  const cur = rows[0]!;
+  const entity = cur.entity as EntityKey;
+
+  const patch: Partial<NewFieldDefinition> = {};
+  const changed: string[] = [];
+
+  if (input.label !== undefined) {
+    const label = input.label.trim();
+    if (label === '') return { ok: false, error: 'Label cannot be blank' };
+    if (label !== cur.label) {
+      patch.label = label;
+      changed.push('label');
+    }
+  }
+  if (input.help !== undefined) {
+    const help = input.help && input.help.trim() ? input.help.trim() : null;
+    if (help !== cur.help) {
+      patch.help = help;
+      changed.push('help');
+    }
+  }
+  if (input.groupLabel !== undefined) {
+    const g = input.groupLabel && input.groupLabel.trim() ? input.groupLabel.trim() : null;
+    if (g !== cur.groupLabel) {
+      patch.groupLabel = g;
+      changed.push('group');
+    }
+  }
+  if (input.required !== undefined && Boolean(input.required) !== cur.required) {
+    patch.required = Boolean(input.required);
+    changed.push('required');
+  }
+  if (input.visibleInForm !== undefined && Boolean(input.visibleInForm) !== cur.visibleInForm) {
+    patch.visibleInForm = Boolean(input.visibleInForm);
+    changed.push('visibleInForm');
+  }
+  if (input.visibleInList !== undefined && Boolean(input.visibleInList) !== cur.visibleInList) {
+    patch.visibleInList = Boolean(input.visibleInList);
+    changed.push('visibleInList');
+  }
+  if (input.halfWidth !== undefined && Boolean(input.halfWidth) !== cur.halfWidth) {
+    patch.halfWidth = Boolean(input.halfWidth);
+    changed.push('halfWidth');
+  }
+
+  // RETYPE — system fields are immutable in type; custom fields may retype to a v1 type.
+  let effectiveType = cur.type;
+  if (input.type !== undefined && input.type !== cur.type) {
+    if (cur.system) {
+      return { ok: false, error: 'System fields cannot be retyped.' };
+    }
+    if (!isFieldType(input.type)) {
+      return { ok: false, error: `Invalid field type: ${input.type}` };
+    }
+    patch.type = input.type;
+    patch.framerType = FIELD_TYPE_META[input.type as FieldType].framerType;
+    effectiveType = input.type;
+    changed.push('type');
+  }
+
+  // OPTIONS — only meaningful for select. Editing options on a system field is allowed
+  // only if it's already a select with static options (none are today); otherwise it's a
+  // no-op. For custom selects this is the canonical options editor path.
+  if (input.options !== undefined && effectiveType === 'select') {
+    const optionsJson = JSON.stringify(normalizeOptions(input.options));
+    // Compare against the current value normalized to '[]' when NULL/blank, so re-saving
+    // the same options is a no-op.
+    if (optionsJson !== (cur.optionsJson ?? '[]')) {
+      patch.optionsJson = optionsJson;
+      changed.push('options');
+    }
+  }
+  // If a field is retyped AWAY from select, drop stale options.
+  if (effectiveType !== 'select' && cur.optionsJson) {
+    patch.optionsJson = null;
+    if (!changed.includes('options')) changed.push('options');
+  }
+
+  if (changed.length === 0) return { ok: true }; // no-op
+
+  patch.updatedAt = new Date().toISOString();
+  await db.update(fieldDefinitions).set(patch).where(eq(fieldDefinitions.id, input.id));
+  await postFieldWrite(
+    db,
+    entity,
+    cur.key,
+    'field_update',
+    null,
+    changed.join(','),
+    actor
+  );
+
+  revalidatePath('/settings/fields');
+  const ent = getEntity(entity);
+  if (ent) revalidatePath(`/${ent.segment}`);
+  return { ok: true };
+}
+
+/**
+ * Delete a CUSTOM field definition. SYSTEM fields can NEVER be deleted. The stored
+ * custom_fields VALUES on existing rows are intentionally left in place (harmless orphan
+ * JSON keys); removing the registry row is enough to stop rendering/collecting the field.
+ * Audits a `field_delete`.
+ */
+export async function deleteFieldDefinition(id: string): Promise<ActionResult> {
+  if (!id) return { ok: false, error: 'Missing field id' };
+
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate;
+  const { actor } = gate;
+
+  const { db } = getDb();
+  const rows = (await db
+    .select()
+    .from(fieldDefinitions)
+    .where(eq(fieldDefinitions.id, id))
+    .limit(1)) as FieldDefinition[];
+  if (rows.length === 0) return { ok: false, error: `Field ${id} not found` };
+  const cur = rows[0]!;
+  if (cur.system) {
+    return { ok: false, error: 'System fields cannot be deleted.' };
+  }
+  const entity = cur.entity as EntityKey;
+
+  await db.delete(fieldDefinitions).where(eq(fieldDefinitions.id, id));
+  await postFieldWrite(db, entity, cur.key, 'field_delete', `${cur.type}:${cur.label}`, null, actor);
+
+  revalidatePath('/settings/fields');
+  const ent = getEntity(entity);
+  if (ent) revalidatePath(`/${ent.segment}`);
+  return { ok: true };
+}
+
+export interface ReorderItem {
+  id: string;
+  sort: number;
+  /** assign/move to a section (NULL clears the group). */
+  groupLabel?: string | null;
+}
+
+/**
+ * Reorder (and re-group) an entity's fields in one shot: set `sort` + `group_label` for
+ * each item. Reordering/regrouping is allowed for ALL fields (including system ones — the
+ * spec permits reorder/group on synced fields). Items must all belong to `entity`. Audits
+ * a single `field_reorder` summarizing the new order.
+ */
+export async function reorderFieldDefinitions(
+  entity: string,
+  items: ReorderItem[]
+): Promise<ActionResult> {
+  const def = getEntity(entity);
+  if (!def) return { ok: false, error: `Unknown entity: ${entity}` };
+  if (!Array.isArray(items) || items.length === 0) return { ok: true };
+
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate;
+  const { actor } = gate;
+
+  const { db } = getDb();
+  // Validate every id belongs to this entity (no cross-entity writes).
+  const rows = (await db
+    .select()
+    .from(fieldDefinitions)
+    .where(eq(fieldDefinitions.entity, def.key))) as FieldDefinition[];
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  for (const it of items) {
+    if (!byId.has(it.id)) {
+      return { ok: false, error: `Field ${it.id} does not belong to ${def.label}` };
+    }
+  }
+
+  const at = new Date().toISOString();
+  for (const it of items) {
+    const cur = byId.get(it.id)!;
+    const group =
+      it.groupLabel === undefined
+        ? cur.groupLabel
+        : it.groupLabel && it.groupLabel.trim()
+          ? it.groupLabel.trim()
+          : null;
+    // Skip if nothing actually changed for this row.
+    if (cur.sort === it.sort && (cur.groupLabel ?? null) === (group ?? null)) continue;
+    await db
+      .update(fieldDefinitions)
+      .set({ sort: it.sort, groupLabel: group ?? null, updatedAt: at })
+      .where(and(eq(fieldDefinitions.id, it.id), eq(fieldDefinitions.entity, def.key)));
+  }
+
+  const summary = [...items]
+    .sort((a, b) => a.sort - b.sort)
+    .map((it) => byId.get(it.id)?.key ?? it.id)
+    .join(',');
+  await postFieldWrite(db, def.key, null, 'field_reorder', null, summary, actor);
+
+  revalidatePath('/settings/fields');
+  revalidatePath(`/${def.segment}`);
   return { ok: true };
 }

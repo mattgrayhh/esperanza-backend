@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import './globals.css';
 import { AppShell } from '../components/app-shell';
 import { FeedbackOverlay } from '../components/dev-feedback/FeedbackOverlay';
-import { getCurrentUserOrNull, signOut } from '../lib/auth';
+import { getCurrentUserOrNull, isAdmin, signOut } from '../lib/auth';
 import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
 
@@ -38,10 +38,12 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       </html>
     );
   }
+  // Full-Admin gate for the Settings → Fields nav entry (Field Builder, Phase B).
+  const admin = await isAdmin();
   return (
     <html lang="en" className={cn("font-sans", geist.variable)}>
       <body style={{ margin: 0 }}>
-        <AppShell email={currentUser} signOutAction={doSignOut}>
+        <AppShell email={currentUser} isAdmin={admin} signOutAction={doSignOut}>
           {children}
         </AppShell>
         {/* DEV-ONLY visual feedback overlay — authenticated branch only.

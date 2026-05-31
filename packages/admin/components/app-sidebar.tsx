@@ -20,11 +20,15 @@ import {
 	mainNavLinks,
 } from "@/components/app-shared";
 import { CustomSidebarRail } from "@/components/custom-sidebar-rail";
+import { SlidersHorizontalIcon } from "lucide-react";
 
 // Esperanza admin sidebar. Brand header + the two entity groups (Listings /
 // Marketing) built from ENTITY_LIST in app-shared. Active route is highlighted
 // via SidebarMenuButton's data-active state (mint surface + brand-green text).
-export function AppSidebar() {
+//
+// `isAdmin` (Auth.js session role === 'admin') reveals the Full-Admin-only Settings
+// group (the Field Builder). Non-admins never see it; the route itself is also gated.
+export function AppSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
 	const pathname = usePathname();
 	const isActive = (path?: string) => isActivePath(path, pathname);
 
@@ -75,6 +79,25 @@ export function AppSidebar() {
 						</SidebarMenu>
 					</SidebarGroup>
 				))}
+				{/* Full-Admin-only Settings group (the Field Builder). */}
+				{isAdmin ? (
+					<SidebarGroup>
+						<SidebarGroupLabel className="uppercase tracking-wider">
+							Settings
+						</SidebarGroupLabel>
+						<SidebarMenu>
+							<SidebarMenuItem>
+								<CustomMenuButton
+									isActive={isActive("/settings/fields")}
+									render={<Link href="/settings/fields" />}
+								>
+									<SlidersHorizontalIcon />
+									<span>Fields</span>
+								</CustomMenuButton>
+							</SidebarMenuItem>
+						</SidebarMenu>
+					</SidebarGroup>
+				) : null}
 			</SidebarContent>
 			<CustomSidebarRail />
 		</Sidebar>

@@ -83,6 +83,8 @@ function widgetToType(f: FieldConfig): string {
       return 'rich';
     case 'number':
       return 'number';
+    case 'currency':
+      return 'currency';
     case 'boolean':
       return 'bool';
     case 'date':

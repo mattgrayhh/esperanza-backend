@@ -48,6 +48,16 @@ function parseObj(v: unknown): Record<string, string> {
   }
 }
 
+/**
+ * Parse the entity row's `custom_fields` JSON blob into a flat { key → string } map.
+ * This column holds the VALUES of Field-Builder user-added fields (Phase B). Tolerant of
+ * NULL/blank/malformed (→ {}), and stringifies scalar values so the generic FieldView
+ * (which is string-valued) can render them uniformly.
+ */
+function parseCustomFields(v: unknown): Record<string, string> {
+  return parseObj(v);
+}
+
 function parseLinks(v: unknown): Array<{ title: string; link: string }> {
   if (typeof v !== 'string' || v.trim() === '') return [];
   try {
@@ -142,6 +152,11 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
   const optionSets = await loadOptionSets(sources);
 
   const gateCol = publishGateColumn(key);
+  // Field-Builder custom-field VALUES live in the row's `custom_fields` JSON blob (a field
+  // whose key is NOT a real column resolves its value from here). Parse it once. Drizzle's
+  // bare select() keys rows by the JS PROPERTY name (camelCase `customFields`), so read
+  // that first and fall back to the physical snake_case key for safety.
+  const customValues = parseCustomFields(row['customFields'] ?? row['custom_fields']);
   const fields: FieldView[] = [];
   const sideWidgets: SideWidget[] = [];
 
@@ -169,7 +184,7 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
       continue;
     }
 
-    fields.push(buildFieldView(key, f, row, optionSets));
+    fields.push(buildFieldView(key, f, row, optionSets, customValues));
   }
 
   // Promotion targeting scope (needs the promotion_targets rows + full option lists).
@@ -208,13 +223,20 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
   return { def, id, displayName, fields, publishGate, sideWidgets };
 }
 
-/** Resolve a single config field into a FieldView, reading the row + option sets. */
+/** Resolve a single config field into a FieldView, reading the row + option sets.
+ *  For a Field-Builder CUSTOM field (f.custom — no real column), the value is read from
+ *  `customValues` (the row's parsed custom_fields blob) instead of the row column. */
 function buildFieldView(
   key: EntityKey,
   f: FieldConfig,
   row: Row,
-  optionSets: Partial<Record<SelectSource, SelectOption[]>>
+  optionSets: Partial<Record<SelectSource, SelectOption[]>>,
+  customValues: Record<string, string>
 ): FieldView {
+  // Resolve the value: a custom field reads from custom_fields[key]; everything else
+  // reads its real column off the row.
+  const fieldValue = f.custom ? s(customValues[f.field]) : s(row[f.field]);
+
   // synced (read-only display) — never submitted. Rendered via the read-only 'synced'
   // GenericField variant regardless of the configured widget (text/number/image).
   if (f.bucket === 'synced') {
@@ -255,14 +277,16 @@ function buildFieldView(
     };
   }
 
-  // admin: image widget → ImageUploader; else GenericField.
+  // admin: image widget → ImageUploader; else GenericField. (fieldValue resolves the
+  // custom_fields value for a builder-added image field, the column otherwise.)
   if (f.widget === 'image') {
-    return { kind: 'image', field: f.field, label: f.label, value: s(row[f.field]), help: f.help };
+    return { kind: 'image', field: f.field, label: f.label, value: fieldValue, help: f.help };
   }
 
   const genericWidget =
     f.widget === 'textarea' ||
     f.widget === 'number' ||
+    f.widget === 'currency' ||
     f.widget === 'boolean' ||
     f.widget === 'richtext' ||
     f.widget === 'date' ||
@@ -275,10 +299,11 @@ function buildFieldView(
     field: f.field,
     label: f.label,
     widget: genericWidget,
-    value: s(row[f.field]),
+    value: fieldValue,
     step: f.step,
     options: f.selectSource ? optionSets[f.selectSource] : undefined,
     staticOptions: f.options,
+    optionItems: f.optionItems,
     help: f.help,
     halfWidth: f.halfWidth,
   };

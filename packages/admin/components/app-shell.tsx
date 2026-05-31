@@ -8,10 +8,13 @@ import type { SignOutAction } from "@/components/nav-user";
 export function AppShell({
 	children,
 	email,
+	isAdmin = false,
 	signOutAction,
 }: {
 	children: React.ReactNode;
 	email: string | null;
+	/** Full Admin — gates the Settings → Fields nav entry. */
+	isAdmin?: boolean;
 	signOutAction: SignOutAction;
 }) {
 	return (
@@ -24,7 +27,7 @@ export function AppShell({
 				"**:data-[slot=sidebar-gap]:duration-(--sidebar-animation-duration) **:data-[slot=sidebar-gap]:ease-(--sidebar-animation-ease)"
 			)}
 		>
-			<AppSidebar />
+			<AppSidebar isAdmin={isAdmin} />
 			<SidebarInset>
 				<AppHeader email={email} signOutAction={signOutAction} />
 				<div className="mx-auto flex w-full max-w-(--app-wrapper-max-width) flex-1 flex-col gap-4 p-4 md:p-6">

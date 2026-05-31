@@ -73,6 +73,11 @@ function widgetToType(f: FieldConfig): FieldType {
       return 'rich';
     case 'number':
       return 'number';
+    // The `currency` admin widget (Phase B) maps to the `currency` field-builder type
+    // (Framer number). No static config field uses it today; it's here for exhaustiveness
+    // so the widget union and the seed never drift.
+    case 'currency':
+      return 'currency';
     case 'boolean':
       return 'bool';
     case 'date':

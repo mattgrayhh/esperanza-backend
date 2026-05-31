@@ -164,3 +164,44 @@ export async function getCurrentUser(): Promise<string> {
   }
   return email;
 }
+
+// =============================================================================
+// Coarse RBAC read — the Auth.js session `role` ('admin' | 'editor').
+//
+// Until the full RBAC stage exists, the Field Builder is gated on role === 'admin'.
+// The role is stamped onto the JWT in auth.config.ts (jwt/session callbacks). This
+// reads it back for RSC gates + server-action guards.
+//
+// LOCAL dev bypass: when ADMIN_DEV_EMAIL is set under `next dev` there's no session,
+// so we grant the configured ADMIN_DEV_ROLE (default 'admin') to keep the builder
+// usable locally. Like the email bypass, this can NEVER fire in production (the var
+// is never set in wrangler.toml [vars], and we refuse it when NODE_ENV==='production').
+// =============================================================================
+
+function devBypassRole(): string | null {
+  if (process.env.NODE_ENV === 'production') return null;
+  const email = process.env.ADMIN_DEV_EMAIL;
+  if (!email || !email.trim()) return null; // no dev bypass active → no role
+  const role = process.env.ADMIN_DEV_ROLE;
+  return role && role.trim() ? role.trim() : 'admin';
+}
+
+/** The authenticated user's coarse role, or null if there is no session/role. */
+export async function getCurrentRoleOrNull(): Promise<string | null> {
+  try {
+    const session = await auth();
+    const role = session?.user?.role;
+    if (role) return role;
+    // A real session with no role string → treat as no elevated role (null), unless
+    // there is a dev bypass below.
+    if (session?.user?.email) return null;
+  } catch {
+    /* no session available in this context */
+  }
+  return devBypassRole();
+}
+
+/** True iff the current request is a Full Admin (role === 'admin'). */
+export async function isAdmin(): Promise<boolean> {
+  return (await getCurrentRoleOrNull()) === 'admin';
+}
