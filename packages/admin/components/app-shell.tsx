@@ -3,8 +3,17 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppHeader } from "@/components/app-header";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ContentBorder } from "@/components/content-border";
+import type { SignOutAction } from "@/components/nav-user";
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+	children,
+	email,
+	signOutAction,
+}: {
+	children: React.ReactNode;
+	email: string | null;
+	signOutAction: SignOutAction;
+}) {
 	return (
 		<SidebarProvider
 			className={cn(
@@ -17,8 +26,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 		>
 			<AppSidebar />
 			<SidebarInset>
-				<AppHeader />
-				<div className="mx-auto flex w-full max-w-(--app-wrapper-max-width) flex-1 flex-col gap-4">
+				<AppHeader email={email} signOutAction={signOutAction} />
+				<div className="mx-auto flex w-full max-w-(--app-wrapper-max-width) flex-1 flex-col gap-4 p-4 md:p-6">
 					{children}
 				</div>
 				<ContentBorder />

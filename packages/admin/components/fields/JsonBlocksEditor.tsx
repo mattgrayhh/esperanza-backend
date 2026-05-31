@@ -14,15 +14,24 @@
 //   * Free-key fallback: operators can add arbitrary extra keys (schema is open for copy).
 //
 // On save we drop blank values (matches the mapper's "absent keys dropped" rule).
+//
+// Re-skinned with shadcn (Card/Input/Textarea/Button). The flat key→value model,
+// saveCityBlocks/uploadBlockImage calls, and the airtableusercontent preview guard are
+// UNCHANGED.
 // =============================================================================
 
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { saveCityBlocks, uploadBlockImage } from '../../lib/actions';
 import {
   CITY_COPY_BLOCK_KEYS,
   CITY_VENUE_BLOCK_KEYS,
   isImageBlockKey,
 } from '../../lib/field-config';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { PlusIcon } from 'lucide-react';
 
 type Blocks = Record<string, string>;
 
@@ -70,14 +79,9 @@ export function JsonBlocksEditor({
         blocks={venue}
         onChange={setVenue}
       />
-      <button
-        type="button"
-        onClick={onSave}
-        disabled={pending}
-        className="justify-self-start rounded-md bg-[#2f5d4a] px-4 py-2 text-sm text-white disabled:opacity-60"
-      >
+      <Button type="button" onClick={onSave} disabled={pending} className="justify-self-start">
         {pending ? 'Saving…' : 'Save blocks'}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -113,8 +117,8 @@ function BlockGroup({
   };
 
   return (
-    <div className="rounded-lg border border-[#e5e1da] bg-white p-3">
-      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
+    <Card size="sm" className="gap-3 p-3">
+      <h3 className="text-sm font-semibold">{title}</h3>
       <div className="grid gap-2">
         {orderedKeys.map((k) => (
           <BlockRow
@@ -129,23 +133,19 @@ function BlockGroup({
         ))}
       </div>
       {allowFreeKeys ? (
-        <div className="mt-3 flex gap-2">
-          <input
+        <div className="flex gap-2">
+          <Input
             placeholder="add custom key"
             value={newKey}
             onChange={(e) => setNewKey(e.target.value)}
-            className="rounded border border-[#d8d3ca] px-2 py-1 text-xs"
+            className="h-7 max-w-56 text-xs"
           />
-          <button
-            type="button"
-            onClick={addKey}
-            className="rounded border border-[#2f5d4a] px-2 py-1 text-xs text-[#2f5d4a]"
-          >
-            + key
-          </button>
+          <Button type="button" variant="outline" size="xs" onClick={addKey}>
+            <PlusIcon /> key
+          </Button>
         </div>
       ) : null}
-    </div>
+    </Card>
   );
 }
 
@@ -166,6 +166,7 @@ function BlockRow({
 }) {
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   function onPick(file: File | undefined) {
     if (!file) return;
@@ -179,39 +180,44 @@ function BlockRow({
 
   return (
     <div className="grid grid-cols-[200px_1fr] items-start gap-3">
-      <span className="self-center font-mono text-xs text-gray-600">{blockKey}</span>
+      <span className="self-center font-mono text-xs text-muted-foreground">{blockKey}</span>
       {isImage ? (
-        <div className="grid gap-1">
+        <div className="grid gap-1.5">
           {value && !value.includes('airtableusercontent.com') ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={value} alt={blockKey} className="h-16 w-auto rounded border border-[#e5e1da] object-contain" />
+            <img src={value} alt={blockKey} className="h-16 w-auto rounded-lg border border-border object-contain" />
           ) : null}
           <div className="flex items-center gap-2">
-            <input
+            <Input
               value={value}
               onChange={(e) => onChange(e.target.value)}
               placeholder="stable image URL"
-              className="flex-1 rounded border border-[#d8d3ca] px-2 py-1 font-mono text-xs"
+              className="flex-1 font-mono text-xs"
             />
-            <input type="file" accept="image/*" disabled={pending} onChange={(e) => onPick(e.target.files?.[0])} className="text-xs" />
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              disabled={pending}
+              onChange={(e) => onPick(e.target.files?.[0])}
+              className="hidden"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              disabled={pending}
+              onClick={() => fileRef.current?.click()}
+            >
+              {pending ? 'Uploading…' : 'Upload'}
+            </Button>
           </div>
-          {pending ? <span className="text-xs text-gray-500">Uploading…</span> : null}
-          {err ? <span className="text-xs text-red-600">{err}</span> : null}
+          {err ? <span className="text-xs text-destructive">{err}</span> : null}
         </div>
       ) : isMarkdown ? (
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          rows={3}
-          placeholder="markdown"
-          className="rounded border border-[#d8d3ca] px-2 py-1 text-sm"
-        />
+        <Textarea value={value} onChange={(e) => onChange(e.target.value)} rows={3} placeholder="markdown" />
       ) : (
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="rounded border border-[#d8d3ca] px-2 py-1 text-sm"
-        />
+        <Input value={value} onChange={(e) => onChange(e.target.value)} />
       )}
     </div>
   );

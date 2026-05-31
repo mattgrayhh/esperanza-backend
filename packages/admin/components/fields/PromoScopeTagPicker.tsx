@@ -12,11 +12,21 @@
 //   each selected id → row {target_type, target_id:<recId>}
 // (DB CHECK enforces global=NULL / non-global=NOT NULL.) The action audits the replace
 // and enqueues the framer push.
+//
+// Re-skinned with shadcn (Card/Checkbox/Input/Button/Badge/Label). The emitted
+// PromoScope payload + savePromotionTargets call are UNCHANGED.
 // =============================================================================
 
 import { useState, useTransition } from 'react';
 import { savePromotionTargets, type PromoScope } from '../../lib/actions';
 import type { SelectOption } from '../../lib/select-options';
+import { cn } from '@/lib/utils';
+import { Card } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 
 interface Selected {
   cities: string[];
@@ -62,16 +72,26 @@ export function PromoScopeTagPicker({
   }
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-4">
       <div className="flex gap-6 text-sm">
-        <label className="flex items-center gap-2">
-          <input type="radio" checked={mode === 'global'} onChange={() => setMode('global')} />
+        <Label className="font-normal">
+          <input
+            type="radio"
+            className="accent-primary"
+            checked={mode === 'global'}
+            onChange={() => setMode('global')}
+          />
           Everything (global)
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="radio" checked={mode === 'scoped'} onChange={() => setMode('scoped')} />
+        </Label>
+        <Label className="font-normal">
+          <input
+            type="radio"
+            className="accent-primary"
+            checked={mode === 'scoped'}
+            onChange={() => setMode('scoped')}
+          />
           Scoped ({totalScoped})
-        </label>
+        </Label>
       </div>
 
       {mode === 'scoped' ? (
@@ -81,17 +101,12 @@ export function PromoScopeTagPicker({
           <Picker title="QMIs" opts={options.qmis} sel={sel.qmis} onToggle={(o) => toggle('qmis', o)} />
         </div>
       ) : (
-        <p className="text-sm text-gray-500">This promotion applies to every page.</p>
+        <p className="text-sm text-muted-foreground">This promotion applies to every page.</p>
       )}
 
-      <button
-        type="button"
-        onClick={onSave}
-        disabled={pending}
-        className="justify-self-start rounded-md bg-[#2f5d4a] px-4 py-2 text-sm text-white disabled:opacity-60"
-      >
+      <Button type="button" onClick={onSave} disabled={pending} className="justify-self-start">
         {pending ? 'Saving…' : 'Save targeting'}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -112,27 +127,25 @@ function Picker({
     ? opts.filter((o) => o.label.toLowerCase().includes(q.toLowerCase()))
     : opts;
   return (
-    <div className="rounded-lg border border-[#e5e1da] bg-white p-2">
-      <div className="mb-1 text-sm font-semibold">
-        {title} <span className="text-xs font-normal text-gray-400">({sel.length})</span>
+    <Card size="sm" className="gap-2 p-2">
+      <div className="flex items-center gap-1.5 text-sm font-semibold">
+        {title}
+        <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-normal">
+          {sel.length}
+        </Badge>
       </div>
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="filter…"
-        className="mb-2 w-full rounded border border-[#d8d3ca] px-2 py-1 text-xs"
-      />
-      <div className="grid max-h-60 gap-1 overflow-auto text-xs">
+      <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="filter…" className="h-7 text-xs" />
+      <div className="grid max-h-60 gap-1.5 overflow-auto text-xs">
         {filtered.map((o) => (
-          <label key={o.id} className="flex items-center gap-2">
-            <input type="checkbox" checked={sel.includes(o.id)} onChange={() => onToggle(o.id)} />
+          <Label key={o.id} className={cn('gap-2 font-normal')}>
+            <Checkbox checked={sel.includes(o.id)} onCheckedChange={() => onToggle(o.id)} />
             <span className="truncate" title={o.label}>
               {o.label}
             </span>
-          </label>
+          </Label>
         ))}
-        {filtered.length === 0 ? <span className="text-gray-400">no matches</span> : null}
+        {filtered.length === 0 ? <span className="text-muted-foreground">no matches</span> : null}
       </div>
-    </div>
+    </Card>
   );
 }

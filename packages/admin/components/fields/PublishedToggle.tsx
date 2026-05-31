@@ -12,6 +12,10 @@
 //                                                     ('Draft' hides; else live).
 // Each calls its dedicated server action so the publish/unpublish audit row is written
 // in exactly one place.
+//
+// Re-skinned with shadcn (Switch for boolean gates, Select for the status gate). The
+// action wiring is UNCHANGED — togglePublished/toggleActive/setTestimonialStatus still
+// fire on toggle/select, with the same optimistic local state + onResult bubbling.
 // =============================================================================
 
 import { useState, useTransition } from 'react';
@@ -20,6 +24,15 @@ import {
   toggleActive,
   setTestimonialStatus,
 } from '../../lib/actions';
+import { cn } from '@/lib/utils';
+import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -54,9 +67,8 @@ export function PublishedToggle({
     else onResult?.(`Error: ${res.error}`);
   }
 
-  function onToggleBoolean() {
+  function onToggleBoolean(next: boolean) {
     startTransition(async () => {
-      const next = !pub;
       const res = gate === 'active' ? await toggleActive(id, next) : await togglePublished(entityKey, id, next);
       if (res.ok) setPub(next);
       report(res, next ? 'Published' : 'Unpublished');
@@ -77,37 +89,32 @@ export function PublishedToggle({
     return (
       <span className="inline-flex items-center gap-2">
         <span
-          className={`h-2 w-2 rounded-full ${live ? 'bg-[#2f5d4a]' : 'bg-gray-300'}`}
+          className={cn('size-2 rounded-full', live ? 'bg-primary' : 'bg-muted-foreground/40')}
           aria-hidden
         />
-        <select
-          value={status}
-          disabled={pending}
-          onChange={(e) => onChangeStatus(e.target.value)}
-          className="rounded border border-[#2f5d4a] bg-white px-2 py-1 text-sm"
-          aria-label="Status"
-        >
-          {opts.map((o) => (
-            <option key={o} value={o}>
-              {o === '' ? '(unset → live)' : o}
-            </option>
-          ))}
-        </select>
+        <Select value={status} onValueChange={(v) => onChangeStatus((v as string) ?? '')} disabled={pending}>
+          <SelectTrigger size="sm" aria-label="Status">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {opts.map((o) => (
+              <SelectItem key={o} value={o}>
+                {o === '' ? '(unset → live)' : o}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </span>
     );
   }
 
   const label = gate === 'active' ? 'Active' : 'Published';
   return (
-    <button
-      type="button"
-      onClick={onToggleBoolean}
-      disabled={pending}
-      className={`rounded-md border border-[#2f5d4a] px-3 py-1.5 text-sm ${
-        pub ? 'bg-[#2f5d4a] text-white' : 'bg-white text-[#2f5d4a]'
-      }`}
-    >
-      {pub ? label : `Draft — click to ${gate === 'active' ? 'activate' : 'publish'}`}
-    </button>
+    <span className="inline-flex items-center gap-2">
+      <Switch checked={pub} disabled={pending} onCheckedChange={onToggleBoolean} aria-label={label} />
+      <span className="text-sm text-muted-foreground">
+        {pub ? label : `Draft — toggle to ${gate === 'active' ? 'activate' : 'publish'}`}
+      </span>
+    </span>
   );
 }

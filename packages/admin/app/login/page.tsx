@@ -1,16 +1,30 @@
 // =============================================================================
 // packages/admin — /login page (Auth.js v5 Credentials sign-in).
 //
-// The middleware leaves /login open (see auth.config.ts isOpenPath). The form posts to
-// a server action that calls signIn('credentials', …). On success Auth.js throws a
-// redirect (to callbackUrl or /); on bad credentials it throws an AuthError, which we
-// translate into ?error=1 so the form can show a message. We re-throw the redirect
-// (NEXT_REDIRECT) so navigation still happens.
+// Re-skinned with the auth-2 visual (framed card + InputGroup fields) but the
+// DATA/AUTH FLOW IS UNCHANGED:
+//   * The middleware leaves /login open (see auth.config.ts isOpenPath).
+//   * The form posts to the authenticate() SERVER ACTION which calls
+//     signIn('credentials', { email, password, redirectTo }).
+//   * On success Auth.js throws a redirect (to callbackUrl or /); we re-throw it.
+//   * On bad credentials it throws an AuthError, which we translate into
+//     ?error=1 so the form shows "Invalid email or password.".
+// Credentials-only — no github/google social buttons.
 // =============================================================================
 
 import { redirect } from 'next/navigation';
 import { AuthError } from 'next-auth';
 import { signIn } from '../../lib/auth';
+import { cn } from '@/lib/utils';
+import { LogoIcon } from '@/components/logo';
+import { Button } from '@/components/ui/button';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from '@/components/ui/input-group';
+import { DecorIcon } from '@/components/decor-icon';
+import { AtSignIcon, LockIcon } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,105 +56,71 @@ export default async function LoginPage({
   }
 
   return (
-    <main
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'var(--color-surface)',
-        padding: 24,
-      }}
-    >
-      <form
-        action={authenticate}
-        style={{
-          width: '100%',
-          maxWidth: 360,
-          background: '#fff',
-          border: '1px solid #e5e1da',
-          borderRadius: 12,
-          padding: 28,
-          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-        }}
-      >
-        <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 4px' }}>Esperanza Admin</h1>
-        <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 20px' }}>Sign in to continue.</p>
-
-        {hasError && (
-          <div
-            role="alert"
-            style={{
-              background: '#fef2f2',
-              border: '1px solid #fecaca',
-              color: '#b91c1c',
-              fontSize: 13,
-              borderRadius: 8,
-              padding: '8px 10px',
-              marginBottom: 16,
-            }}
-          >
-            Invalid email or password.
-          </div>
+    <main className="relative flex h-screen w-full items-center justify-center overflow-hidden bg-background px-6 md:px-8">
+      <div
+        className={cn(
+          'relative flex w-full max-w-sm flex-col justify-between p-6 md:p-8',
+          'dark:bg-[radial-gradient(50%_80%_at_20%_0%,--theme(--color-foreground/.1),transparent)]'
         )}
+      >
+        <div className="absolute -inset-y-6 -left-px w-px bg-border" />
+        <div className="absolute -inset-y-6 -right-px w-px bg-border" />
+        <div className="absolute -inset-x-6 -top-px h-px bg-border" />
+        <div className="absolute -inset-x-6 -bottom-px h-px bg-border" />
+        <DecorIcon position="top-left" />
+        <DecorIcon position="bottom-right" />
 
-        <input type="hidden" name="callbackUrl" value={callbackUrl} />
+        <div className="w-full max-w-sm animate-in space-y-8">
+          <div className="flex flex-col space-y-2">
+            <LogoIcon className="h-7 w-7 text-primary" />
+            <h1 className="font-heading font-bold text-2xl tracking-wide">Esperanza Admin</h1>
+            <p className="text-base text-muted-foreground">Sign in to continue.</p>
+          </div>
 
-        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-          Email
-        </label>
-        <input
-          name="email"
-          type="email"
-          autoComplete="username"
-          required
-          style={{
-            width: '100%',
-            boxSizing: 'border-box',
-            padding: '9px 11px',
-            border: '1px solid #d1d5db',
-            borderRadius: 8,
-            fontSize: 14,
-            marginBottom: 14,
-          }}
-        />
+          {hasError && (
+            <div
+              role="alert"
+              className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm"
+            >
+              Invalid email or password.
+            </div>
+          )}
 
-        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-          Password
-        </label>
-        <input
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          style={{
-            width: '100%',
-            boxSizing: 'border-box',
-            padding: '9px 11px',
-            border: '1px solid #d1d5db',
-            borderRadius: 8,
-            fontSize: 14,
-            marginBottom: 20,
-          }}
-        />
+          <form action={authenticate} className="space-y-3">
+            <input type="hidden" name="callbackUrl" value={callbackUrl} />
 
-        <button
-          type="submit"
-          style={{
-            width: '100%',
-            padding: '10px 12px',
-            background: 'var(--color-brand)',
-            color: 'var(--color-brand-foreground)',
-            border: 'none',
-            borderRadius: 8,
-            fontSize: 14,
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          Sign in
-        </button>
-      </form>
+            <InputGroup>
+              <InputGroupInput
+                autoComplete="username"
+                name="email"
+                placeholder="your.email@example.com"
+                required
+                type="email"
+              />
+              <InputGroupAddon align="inline-start">
+                <AtSignIcon />
+              </InputGroupAddon>
+            </InputGroup>
+
+            <InputGroup>
+              <InputGroupInput
+                autoComplete="current-password"
+                name="password"
+                placeholder="Password"
+                required
+                type="password"
+              />
+              <InputGroupAddon align="inline-start">
+                <LockIcon />
+              </InputGroupAddon>
+            </InputGroup>
+
+            <Button className="w-full" size="sm" type="submit">
+              Sign in
+            </Button>
+          </form>
+        </div>
+      </div>
     </main>
   );
 }

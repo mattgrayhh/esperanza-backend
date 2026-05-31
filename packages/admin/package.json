@@ -20,6 +20,7 @@
     "@base-ui/react": "^1.5.0",
     "@esperanza/db": "*",
     "@opennextjs/cloudflare": "^1.19.0",
+    "@tanstack/react-table": "^8.21.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

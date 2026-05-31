@@ -2,9 +2,20 @@
 // createEntity server action and redirects to its editor. Kept as an explicit confirm
 // step (rather than auto-creating on navigation) so an accidental click doesn't litter
 // empty rows.
+//
+// Re-skinned with shadcn (Card/Button). The create() server action (createEntity +
+// redirect) is UNCHANGED.
 import { notFound, redirect } from 'next/navigation';
 import { ENTITY_LIST } from '../../../lib/entities';
 import { createEntity } from '../../../lib/actions';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,21 +39,23 @@ export default async function NewEntityPage({
     throw new Error(res.error);
   }
 
+  const singular = def.label.replace(/s$/, '');
+
   return (
-    <div className="max-w-lg">
-      <h1 className="mb-3 text-xl font-bold">New {def.label.replace(/s$/, '')}</h1>
-      <p className="mb-4 text-sm text-gray-600">
-        Creates a blank {def.label.replace(/s$/, '')} record (unpublished). You can fill in fields
-        and publish it from the editor.
-      </p>
-      <form action={create} className="flex gap-3">
-        <button type="submit" className="rounded-md bg-[#2f5d4a] px-4 py-2 text-sm text-white">
-          Create record
-        </button>
-        <a href={`/${def.segment}`} className="rounded-md border border-[#d8d3ca] px-4 py-2 text-sm">
-          Cancel
-        </a>
-      </form>
-    </div>
+    <Card size="default" className="mx-auto max-w-lg">
+      <CardHeader>
+        <CardTitle className="text-xl">New {singular}</CardTitle>
+        <CardDescription>
+          Creates a blank {singular} record (unpublished). You can fill in fields and publish it
+          from the editor.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form action={create} className="flex gap-3">
+          <Button type="submit">Create record</Button>
+          <Button render={<a href={`/${def.segment}`}>Cancel</a>} variant="outline" />
+        </form>
+      </CardContent>
+    </Card>
   );
 }

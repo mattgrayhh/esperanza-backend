@@ -1,18 +1,26 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { AppBreadcrumbs } from "@/components/app-breadcrumbs";
-import { NavUser } from "@/components/nav-user";
+import { NavUser, type SignOutAction } from "@/components/nav-user";
 import { AppSearch } from "@/components/app-search";
-import { isActive, navLinks } from "@/components/app-shared";
+import { isActivePath, navLinks } from "@/components/app-shared";
 
-const activeItem = navLinks
-	.flatMap((group) => group.items)
-	.find((item) => isActive(item.path));
+export function AppHeader({
+	email,
+	signOutAction,
+}: {
+	email: string | null;
+	signOutAction: SignOutAction;
+}) {
+	const pathname = usePathname();
+	const activeItem = navLinks
+		.flatMap((group) => group.items)
+		.find((item) => isActivePath(item.path, pathname));
 
-export function AppHeader() {
 	return (
 		<header className="pointer-events-none sticky top-0 z-40 h-(--app-header-height) border-b">
 			<div
@@ -30,14 +38,13 @@ export function AppHeader() {
 					/>
 					<AppBreadcrumbs page={activeItem} />
 				</div>
-				<div className="flex items-start gap-3">
+				<div className="flex items-center gap-3">
 					<AppSearch />
-					{/* <FeedbackPopover /> */}
 					<Separator
 						className="h-4 data-[orientation=vertical]:self-center"
 						orientation="vertical"
 					/>
-					<NavUser />
+					<NavUser email={email} signOutAction={signOutAction} />
 				</div>
 			</div>
 		</header>

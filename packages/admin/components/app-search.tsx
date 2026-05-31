@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { Command as CommandPrimitive } from "cmdk";
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useKeypress } from "@/hooks/use-keypress";
 import {
 	Command,
@@ -30,6 +31,7 @@ const groups = mainNavLinks;
 const APP_SEARCH_KEYBOARD_SHORTCUT = "f";
 
 export function AppSearch() {
+	const router = useRouter();
 	const [open, setOpen] = useState(false);
 	const [search, setSearch] = useState("");
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -140,7 +142,14 @@ export function AppSearch() {
 							{group.items.map((item) => (
 								<CommandItem
 									key={item.title}
-									onSelect={() => setOpen(false)}
+									onSelect={() => {
+										setOpen(false);
+										setSearch("");
+										inputRef.current?.blur();
+										if (item.path) {
+											router.push(item.path);
+										}
+									}}
 									value={item.title}
 								>
 									{item.icon}

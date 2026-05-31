@@ -3,7 +3,6 @@
 import {
 	Avatar,
 	AvatarFallback,
-	AvatarImage,
 } from "@/components/ui/avatar";
 import {
 	DropdownMenu,
@@ -14,65 +13,65 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UserIcon, SettingsIcon, CreditCardIcon, LogOutIcon } from "lucide-react";
+import { LogOutIcon } from "lucide-react";
 
-const user = {
-	name: "Shaban Haider",
-	email: "shaban@efferd.com",
-	avatar: "https://github.com/shabanhr.png",
-};
+/** Server action wired up by the layout — calls the existing Auth.js signOut. */
+export type SignOutAction = () => void | Promise<void>;
 
-export function NavUser() {
+function initials(email: string): string {
+	const local = email.split("@")[0] ?? email;
+	const parts = local.split(/[._-]+/).filter(Boolean);
+	if (parts.length >= 2 && parts[0] && parts[1]) {
+		return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+	}
+	return (local.slice(0, 2) || "?").toUpperCase();
+}
+
+export function NavUser({
+	email,
+	signOutAction,
+}: {
+	email: string | null;
+	signOutAction: SignOutAction;
+}) {
+	const display = email ?? "Not signed in";
+
 	return (
 		<DropdownMenu>
-			<DropdownMenuTrigger render={<Avatar className="size-8" />}><AvatarImage src={user.avatar} /><AvatarFallback>{user.name.charAt(0)}</AvatarFallback></DropdownMenuTrigger>
+			<DropdownMenuTrigger render={<Avatar className="size-8 cursor-pointer" />}>
+				<AvatarFallback>{email ? initials(email) : "?"}</AvatarFallback>
+			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="w-60">
 				<DropdownMenuItem className="flex items-center justify-start gap-2">
 					<DropdownMenuLabel className="flex items-center gap-3">
 						<Avatar className="size-10">
-							<AvatarImage src={user.avatar} />
-							<AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+							<AvatarFallback>{email ? initials(email) : "?"}</AvatarFallback>
 						</Avatar>
-						<div>
-							<span className="font-medium text-foreground">{user.name}</span>{" "}
+						<div className="min-w-0">
+							<span className="font-medium text-foreground">Signed in</span>
 							<br />
 							<div className="max-w-full overflow-hidden overflow-ellipsis whitespace-nowrap text-muted-foreground text-xs">
-								{user.email}
+								{display}
 							</div>
 						</div>
 					</DropdownMenuLabel>
 				</DropdownMenuItem>
 				<DropdownMenuSeparator />
 				<DropdownMenuGroup>
-					<DropdownMenuItem>
-						<UserIcon
-						/>
-						Account
-					</DropdownMenuItem>
-					<DropdownMenuItem>
-						<SettingsIcon
-						/>
-						Settings
-					</DropdownMenuItem>
-				</DropdownMenuGroup>
-				<DropdownMenuSeparator />
-				<DropdownMenuGroup>
-					<DropdownMenuItem>
-						<CreditCardIcon
-						/>
-						Plan & Billing
-					</DropdownMenuItem>
-				</DropdownMenuGroup>
-				<DropdownMenuSeparator />
-				<DropdownMenuGroup>
-					<DropdownMenuItem
-						className="w-full cursor-pointer"
-						variant="destructive"
-					>
-						<LogOutIcon
-						/>
-						Log out
-					</DropdownMenuItem>
+					{/* Posts to the Auth.js signOut server action (form so it works
+					    without client-side fetch). */}
+					<form action={signOutAction} className="w-full">
+						<DropdownMenuItem
+							className="w-full cursor-pointer"
+							render={
+								<button className="w-full" type="submit" />
+							}
+							variant="destructive"
+						>
+							<LogOutIcon />
+							Sign out
+						</DropdownMenuItem>
+					</form>
 				</DropdownMenuGroup>
 			</DropdownMenuContent>
 		</DropdownMenu>

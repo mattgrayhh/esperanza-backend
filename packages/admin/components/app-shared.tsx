@@ -1,11 +1,31 @@
-import { cn } from "@/lib/utils";
+import type { ReactNode } from "react";
 import { SidebarMenuButton } from "@/components/ui/sidebar";
-import { LayoutGridIcon, RocketIcon, BarChart3Icon, DatabaseIcon, LayersIcon, PlugIcon, KeyRoundIcon, TerminalIcon, HelpCircleIcon, SettingsIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ENTITY_LIST, type EntityKey } from "@/lib/entities";
+import {
+	HomeIcon,
+	BuildingIcon,
+	MapPinIcon,
+	LayoutTemplateIcon,
+	TagIcon,
+	LayersIcon,
+	ImageIcon,
+	FileTextIcon,
+	QuoteIcon,
+	type LucideIcon,
+} from "lucide-react";
+
+// =============================================================================
+// Shared nav model for the dashboard-10 shell, re-pointed at the 9 Esperanza
+// admin entities. The list/labels/segments come from lib/entities.ts
+// (ENTITY_LIST) — the entity registry stays the single source of truth; this
+// file only adds presentation (group assignment + per-entity icon).
+// =============================================================================
 
 export type SidebarNavItem = {
 	title: string;
 	path?: string;
-	icon?: React.ReactNode;
+	icon?: ReactNode;
 	items?: SidebarNavItem[];
 };
 
@@ -30,121 +50,63 @@ export function CustomMenuButton({
 	);
 }
 
-export const mainNavLinks: SidebarNavGroup[] = [
-	{
-		label: "Platform",
-		items: [
-			{
-				title: "Overview",
-				path: "#/overview",
-				icon: (
-					<LayoutGridIcon
-					/>
-				),
-			},
-			{
-				title: "Deployments",
-				path: "#/deployments",
-				icon: (
-					<RocketIcon
-					/>
-				),
-			},
-			{
-				title: "Analytics",
-				path: "#/analytics",
-				icon: (
-					<BarChart3Icon
-					/>
-				),
-			},
-			{
-				title: "Storage",
-				path: "#/storage",
-				icon: (
-					<DatabaseIcon
-					/>
-				),
-			},
-			{
-				title: "Resources",
-				icon: (
-					<LayersIcon
-					/>
-				),
-				items: [
-					{
-						title: "Compute",
-						path: "#/resources/compute",
-					},
-					{ title: "Databases", path: "#/resources/databases" },
-					{ title: "Queues", path: "#/resources/queues" },
-					{ title: "Cron Jobs", path: "#/resources/cron-jobs" },
-					{ title: "Secrets", path: "#/resources/secrets" },
-				],
-			},
-		],
-	},
-	{
-		label: "Developer",
-		items: [
-			{
-				title: "Integrations",
-				path: "#/integrations",
-				icon: (
-					<PlugIcon
-					/>
-				),
-			},
-			{
-				title: "API Keys",
-				path: "#/api-keys",
-				icon: (
-					<KeyRoundIcon
-					/>
-				),
-			},
-			{
-				title: "Logs",
-				path: "#/logs",
-				icon: (
-					<TerminalIcon
-					/>
-				),
-			},
-		],
-	},
-];
-
-export const footerNavGroup: SidebarNavGroup = {
-	label: "General",
-	items: [
-		{
-			title: "Support",
-			path: "#/support",
-			icon: (
-				<HelpCircleIcon
-				/>
-			),
-		},
-		{
-			title: "Settings",
-			path: "#/settings",
-			icon: (
-				<SettingsIcon
-				/>
-			),
-		},
-	],
+// Which sidebar group each entity belongs to, plus its icon. Keyed by EntityKey
+// so the labels/segments themselves are never duplicated here — they're pulled
+// from ENTITY_LIST below.
+const ENTITY_PRESENTATION: Record<
+	EntityKey,
+	{ group: "Listings" | "Marketing"; Icon: LucideIcon }
+> = {
+	qmi: { group: "Listings", Icon: HomeIcon },
+	communities: { group: "Listings", Icon: BuildingIcon },
+	cities: { group: "Listings", Icon: MapPinIcon },
+	floor_plans: { group: "Listings", Icon: LayoutTemplateIcon },
+	promotions: { group: "Marketing", Icon: TagIcon },
+	collections: { group: "Marketing", Icon: LayersIcon },
+	images: { group: "Marketing", Icon: ImageIcon },
+	blogs: { group: "Marketing", Icon: FileTextIcon },
+	testimonials: { group: "Marketing", Icon: QuoteIcon },
 };
 
-export const navLinks = [...mainNavLinks, footerNavGroup];
+function entityItem(key: EntityKey): SidebarNavItem {
+	const def = ENTITY_LIST.find((e) => e.key === key);
+	if (!def) {
+		throw new Error(`Unknown entity key in nav presentation: ${key}`);
+	}
+	const { Icon } = ENTITY_PRESENTATION[key];
+	return {
+		title: def.label,
+		path: `/${def.segment}`,
+		icon: <Icon />,
+	};
+}
 
-const ACTIVE_PATH = "#/overview";
+const listingsKeys = ENTITY_LIST.filter(
+	(e) => ENTITY_PRESENTATION[e.key].group === "Listings"
+).map((e) => e.key);
+const marketingKeys = ENTITY_LIST.filter(
+	(e) => ENTITY_PRESENTATION[e.key].group === "Marketing"
+).map((e) => e.key);
 
-export function isActive(path?: string) {
-	if (!path) {
+export const mainNavLinks: SidebarNavGroup[] = [
+	{ label: "Listings", items: listingsKeys.map(entityItem) },
+	{ label: "Marketing", items: marketingKeys.map(entityItem) },
+];
+
+export const navLinks = mainNavLinks;
+
+/**
+ * Pure active-route matcher (no hooks — callable from server or client).
+ * A nav item is active when the current pathname equals its path or is a
+ * descendant of it (so /qmi/123 keeps "Quick Move-Ins" highlighted). The home
+ * link ("/") only matches exactly.
+ */
+export function isActivePath(itemPath: string | undefined, pathname: string): boolean {
+	if (!itemPath) {
 		return false;
 	}
-	return ACTIVE_PATH === path;
+	if (itemPath === "/") {
+		return pathname === "/";
+	}
+	return pathname === itemPath || pathname.startsWith(`${itemPath}/`);
 }
