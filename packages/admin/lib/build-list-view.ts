@@ -12,7 +12,8 @@ import { sql } from 'drizzle-orm';
 import { cities } from '@esperanza/db';
 import { getReadDb } from './db';
 import { type EntityKey } from './entities';
-import { fieldConfigFor, publishGateColumn, type ListColumn } from './field-config';
+import { publishGateColumn, type ListColumn } from './field-config';
+import { resolveFieldConfig } from './field-config-source';
 
 export interface ListRow {
   id: string;
@@ -110,7 +111,10 @@ async function loadCityNameMap(): Promise<Map<string, string>> {
 }
 
 export async function buildListView(key: EntityKey): Promise<ListView> {
-  const cfg = fieldConfigFor(key);
+  // ENGINE SWAP: list columns now come from field_definitions (D1), with a SAFE FALLBACK
+  // to the static lib/field-config.ts when the entity has zero rows. Same `listColumns`
+  // shape as before, so the generic list page is unchanged.
+  const cfg = await resolveFieldConfig(key);
   const gate = publishGateColumn(key);
   const db = getReadDb();
 

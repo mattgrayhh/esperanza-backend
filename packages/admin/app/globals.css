@@ -13,6 +13,7 @@
   /* Geist is the dashboard typeface everywhere (body + headings).
      --font-geist is injected by next/font (Geist) via the <html> className. */
   --font-sans: var(--font-geist), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-heading: var(--font-geist), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 html,
@@ -29,11 +30,11 @@ a {
 }
 
 @theme inline {
-  /* Whole dashboard is Geist. The base-nova shadcn primitives (card, dialog,
-     sheet, empty, ...) still apply the `font-heading` utility, so keep the
-     token alive but alias it to --font-sans (Geist) — no Overpass override. */
-  --font-heading: var(--font-sans);
-  --font-sans: var(--font-sans);
+  /* Font tokens (--font-sans, --font-heading -> --font-geist) are defined in the
+     @theme block above and emitted as real :root vars so `font-family:
+     var(--font-sans)` resolves to Geist. Do NOT redeclare them in @theme inline:
+     `--font-sans: var(--font-sans)` is circular, resolves to empty, and the body
+     falls back to the browser default (Times). */
   --color-status-published: var(--status-published);
   --color-status-published-foreground: var(--status-published-foreground);
   --color-status-draft: var(--status-draft);

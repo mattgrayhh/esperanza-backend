@@ -14,13 +14,13 @@ import { eq } from 'drizzle-orm';
 import { getReadDb } from './db';
 import { ENTITIES, type EntityKey, type EntityDef } from './entities';
 import {
-  fieldConfigFor,
   publishGateColumn,
   CITY_COPY_BLOCK_KEYS,
   CITY_VENUE_BLOCK_KEYS,
   type FieldConfig,
   type SelectSource,
 } from './field-config';
+import { resolveFieldConfig } from './field-config-source';
 import { loadOptionSets, loadPromoScopeOptions, type SelectOption } from './select-options';
 import { promotionTargets } from '@esperanza/db';
 import type {
@@ -122,7 +122,10 @@ export function resolveDisplayName(key: EntityKey, row: Row, id: string): string
 /** Load the row + build the full edit view model for an entity record. Returns null if not found. */
 export async function buildEditView(key: EntityKey, id: string): Promise<EditView | null> {
   const def = ENTITIES[key];
-  const cfg = fieldConfigFor(key);
+  // ENGINE SWAP: derive the field set from field_definitions (D1), with a SAFE FALLBACK
+  // to the static lib/field-config.ts when the entity has zero rows. The resolved shape
+  // is identical, so the rest of this builder (and EntityEditForm) is unchanged.
+  const cfg = await resolveFieldConfig(key);
   const db = getReadDb();
 
   const rows = (await db

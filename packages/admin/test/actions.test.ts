@@ -24,17 +24,22 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { eq } from 'drizzle-orm';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { schema, qmi, promotions } from '@esperanza/db';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// packages/admin/test → packages/db/migrations/0000_init.sql
-const INIT_SQL = readFileSync(
-  join(__dirname, '..', '..', 'db', 'migrations', '0000_init.sql'),
-  'utf8'
-);
+// packages/admin/test → packages/db/migrations. Apply the FULL additive migration
+// chain (0000_init → 0001_admin_users → 0002_field_builder) so the in-memory DB
+// matches production — the shared Drizzle schema now references field_definitions
+// and the nullable custom_fields columns added in 0002.
+const MIGRATIONS_DIR = join(__dirname, '..', '..', 'db', 'migrations');
+const INIT_SQL = readdirSync(MIGRATIONS_DIR)
+  .filter((f) => f.endsWith('.sql'))
+  .sort()
+  .map((f) => readFileSync(join(MIGRATIONS_DIR, f), 'utf8'))
+  .join('\n');
 const VIEWS_SQL = readFileSync(join(__dirname, '..', '..', 'db', 'views.sql'), 'utf8');
 
 // --- per-test mutable harness state (read by the module mocks) ---------------

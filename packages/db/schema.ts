@@ -25,6 +25,7 @@ import {
   integer,
   real,
   index,
+  uniqueIndex,
   primaryKey,
   check,
 } from 'drizzle-orm/sqlite-core';
@@ -160,6 +161,9 @@ export const qmi = sqliteTable(
     publishDate: text('publish_date'),
     lastModifiedTime: text('last_modified_time'),
 
+    // Field Builder (0002): JSON values of user-defined fields. Additive, nullable.
+    customFields: text('custom_fields'),
+
     // FP:* lookups REMOVED from qmi (D1 100-col limit). Resolved in v_public_qmi
     // via a LEFT JOIN to floor_plans on COALESCE(override_floor_plan_id,
     // synced_floor_plan_id); the view exposes the same fp_* output names. The
@@ -251,6 +255,9 @@ export const communities = sqliteTable(
     hoaLinksJson: text('hoa_links_json'),
     cityId: text('city_id'),
 
+    // Field Builder (0002): JSON values of user-defined fields. Additive, nullable.
+    customFields: text('custom_fields'),
+
     createdAt: text('created_at').notNull().default(nowIso),
     updatedAt: text('updated_at').notNull().default(nowIso),
   },
@@ -288,6 +295,9 @@ export const cities = sqliteTable(
 
     cityCopyBlocksJson: text('city_copy_blocks_json'),
     cityVenueBlocksJson: text('city_venue_blocks_json'),
+
+    // Field Builder (0002): JSON values of user-defined fields. Additive, nullable.
+    customFields: text('custom_fields'),
 
     createdAt: text('created_at').notNull().default(nowIso),
     updatedAt: text('updated_at').notNull().default(nowIso),
@@ -355,6 +365,9 @@ export const floorPlans = sqliteTable(
     quickMoveInIds: text('quick_move_in_ids'),
     promotionIds: text('promotion_ids'),
 
+    // Field Builder (0002): JSON values of user-defined fields. Additive, nullable.
+    customFields: text('custom_fields'),
+
     createdAt: text('created_at').notNull().default(nowIso),
     updatedAt: text('updated_at').notNull().default(nowIso),
   },
@@ -383,6 +396,9 @@ export const promotions = sqliteTable(
     endDate: text('end_date'),
     active: integer('active', { mode: 'boolean' }).notNull().default(true),
     appliesTo: text('applies_to'), // legacy descriptive label, informational only
+
+    // Field Builder (0002): JSON values of user-defined fields. Additive, nullable.
+    customFields: text('custom_fields'),
 
     createdAt: text('created_at').notNull().default(nowIso),
     updatedAt: text('updated_at').notNull().default(nowIso),
@@ -423,6 +439,8 @@ export const collections = sqliteTable('collections', {
   startingAt: real('starting_at'),
   endingAt: real('ending_at'),
   incentive: text('incentive'),
+  // Field Builder (0002): JSON values of user-defined fields. Additive, nullable.
+  customFields: text('custom_fields'),
   createdAt: text('created_at').notNull().default(nowIso),
   updatedAt: text('updated_at').notNull().default(nowIso),
 });
@@ -437,6 +455,8 @@ export const images = sqliteTable('images', {
   elevationMaterial: text('elevation_material'),
   elevationParsed: text('elevation_parsed'),
   fileUrl: text('file_url'),
+  // Field Builder (0002): JSON values of user-defined fields. Additive, nullable.
+  customFields: text('custom_fields'),
   createdAt: text('created_at').notNull().default(nowIso),
   updatedAt: text('updated_at').notNull().default(nowIso),
 });
@@ -453,6 +473,8 @@ export const blogs = sqliteTable('blogs', {
   seoDescription: text('seo_description'),
   communityName: text('community_name'),
   published: integer('published', { mode: 'boolean' }).notNull().default(true),
+  // Field Builder (0002): JSON values of user-defined fields. Additive, nullable.
+  customFields: text('custom_fields'),
   createdAt: text('created_at').notNull().default(nowIso),
   updatedAt: text('updated_at').notNull().default(nowIso),
 });
@@ -472,6 +494,8 @@ export const testimonials = sqliteTable('testimonials', {
   communityId: text('community_id'),
   communityName: text('community_name'),
   town: text('town'),
+  // Field Builder (0002): JSON values of user-defined fields. Additive, nullable.
+  customFields: text('custom_fields'),
   createdAt: text('created_at').notNull().default(nowIso),
   updatedAt: text('updated_at').notNull().default(nowIso),
 });
@@ -511,6 +535,51 @@ export const adminUsers = sqliteTable('admin_users', {
   createdAt: text('created_at').default(nowIso),
   lastLoginAt: text('last_login_at'),
 });
+
+// =============================================================================
+// FIELD_DEFINITIONS — the Field Builder registry (migration 0002_field_builder.sql).
+//
+// One row per admin field, per entity: the single source of truth for admin form/
+// list rendering and (Phase C) the Framer Managed-collection schema. Seeded from
+// today's packages/admin/lib/field-config.ts so Phase A is behavior-identical.
+//
+//   key            — physical column (admin/synced/publish), QmiOverridableField
+//                    name (override), or the synthetic config key (bespoke widgets).
+//   type           — field-builder type (text·long·rich·number·currency·bool·date·
+//                    url·image·select) or a verbatim bespoke widget name.
+//   system         — 1 = locked/synced (Snowflake-fed); reorder/relabel/group/hide
+//                    allowed, delete/retype not.
+//   framerFieldId/framerType — populated in Phase C when setFields syncs the schema.
+//
+// UNIQUE(entity, key) makes the seed idempotent (upsert on the natural key).
+// =============================================================================
+export const fieldDefinitions = sqliteTable(
+  'field_definitions',
+  {
+    id: text('id').primaryKey(), // seed uses `<entity>__<key>`
+    entity: text('entity').notNull(),
+    key: text('key').notNull(),
+    label: text('label'),
+    help: text('help'),
+    groupLabel: text('group_label'),
+    sort: integer('sort').notNull().default(0),
+    type: text('type').notNull(),
+    optionsJson: text('options_json'),
+    required: integer('required', { mode: 'boolean' }).notNull().default(false),
+    system: integer('system', { mode: 'boolean' }).notNull().default(false),
+    visibleInForm: integer('visible_in_form', { mode: 'boolean' }).notNull().default(true),
+    visibleInList: integer('visible_in_list', { mode: 'boolean' }).notNull().default(false),
+    halfWidth: integer('half_width', { mode: 'boolean' }).notNull().default(false),
+    framerFieldId: text('framer_field_id'),
+    framerType: text('framer_type'),
+    createdAt: text('created_at').default(nowIso),
+    updatedAt: text('updated_at').default(nowIso),
+  },
+  (t) => [
+    index('idx_field_definitions_entity').on(t.entity, t.sort),
+    uniqueIndex('uq_field_definitions_entity_key').on(t.entity, t.key),
+  ]
+);
 
 export const syncLog = sqliteTable(
   'sync_log',
@@ -569,6 +638,8 @@ export type SyncLogRow = typeof syncLog.$inferSelect;
 export type NewSyncLogRow = typeof syncLog.$inferInsert;
 export type AdminUser = typeof adminUsers.$inferSelect;
 export type NewAdminUser = typeof adminUsers.$inferInsert;
+export type FieldDefinition = typeof fieldDefinitions.$inferSelect;
+export type NewFieldDefinition = typeof fieldDefinitions.$inferInsert;
 
 export const schema = {
   qmi,
@@ -584,4 +655,5 @@ export const schema = {
   auditLog,
   syncLog,
   adminUsers,
+  fieldDefinitions,
 };

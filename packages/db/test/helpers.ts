@@ -1,25 +1,37 @@
 // =============================================================================
-// Test harness: load 0000_init.sql + views.sql into an in-memory better-sqlite3
-// DB. This is the same SQL that `wrangler d1 migrations apply` runs against D1,
-// exercised against SQLite directly (D1 IS SQLite), so the tests validate the
-// real DDL/views, not a re-implementation.
+// Test harness: load the FULL migration chain (0000_init.sql → 0001_admin_users.sql
+// → 0002_field_builder.sql) + views.sql into an in-memory better-sqlite3 DB. This is
+// the same SQL that `wrangler d1 migrations apply` runs against D1, exercised against
+// SQLite directly (D1 IS SQLite), so the tests validate the real DDL/views, not a
+// re-implementation. The migrations are additive (0002 only ADDs field_definitions +
+// nullable custom_fields columns), so applying the chain keeps the test DB faithful
+// to production without changing any existing behavior.
 // =============================================================================
 
 import Database from 'better-sqlite3';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_DIR = join(__dirname, '..');
+const MIGRATIONS_DIR = join(DB_DIR, 'migrations');
 
-export const INIT_SQL = readFileSync(join(DB_DIR, 'migrations', '0000_init.sql'), 'utf8');
+/** All migration SQL, concatenated in lexical (numeric-prefix) order. */
+export const MIGRATIONS_SQL = readdirSync(MIGRATIONS_DIR)
+  .filter((f) => f.endsWith('.sql'))
+  .sort()
+  .map((f) => readFileSync(join(MIGRATIONS_DIR, f), 'utf8'))
+  .join('\n');
+
+// Back-compat: INIT_SQL still resolves to the base schema for callers that import it.
+export const INIT_SQL = readFileSync(join(MIGRATIONS_DIR, '0000_init.sql'), 'utf8');
 export const VIEWS_SQL = readFileSync(join(DB_DIR, 'views.sql'), 'utf8');
 
 export function freshDb(): Database.Database {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
-  db.exec(INIT_SQL);
+  db.exec(MIGRATIONS_SQL);
   db.exec(VIEWS_SQL);
   return db;
 }
