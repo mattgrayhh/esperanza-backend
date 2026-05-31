@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import './globals.css';
 import { AppShell } from '../components/app-shell';
+import { FeedbackOverlay } from '../components/dev-feedback/FeedbackOverlay';
 import { getCurrentUserOrNull, signOut } from '../lib/auth';
 import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <AppShell email={currentUser} signOutAction={doSignOut}>
           {children}
         </AppShell>
+        {/* DEV-ONLY visual feedback overlay — authenticated branch only.
+            Renders null unless a reviewer activates it (Cmd/Ctrl+Shift+K,
+            ?feedback=1, or the floating button), so normal admin use is unaffected. */}
+        <FeedbackOverlay />
       </body>
     </html>
   );
