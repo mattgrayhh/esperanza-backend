@@ -30,6 +30,7 @@ export default async function EntityEditor({
       segment={def.segment}
       label={def.label}
       id={id}
+      displayName={view.displayName}
       fields={view.fields}
       publishGate={view.publishGate}
       sideWidgets={view.sideWidgets}

@@ -34,6 +34,7 @@ export function AppSidebar() {
 				"*:data-[slot=sidebar-inner]:bg-background",
 				"duration-(--sidebar-animation-duration) ease-(--sidebar-animation-ease)"
 			)}
+			collapsible="icon"
 			variant="sidebar"
 		>
 			<SidebarHeader className="gap-0 p-0">
@@ -56,7 +57,9 @@ export function AppSidebar() {
 			<SidebarContent>
 				{mainNavLinks.map((group) => (
 					<SidebarGroup key={group.label}>
-						<SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+						<SidebarGroupLabel className="uppercase tracking-wider">
+							{group.label}
+						</SidebarGroupLabel>
 						<SidebarMenu>
 							{group.items.map((item) => (
 								<SidebarMenuItem key={item.title}>

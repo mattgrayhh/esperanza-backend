@@ -64,6 +64,10 @@ export interface FieldConfig {
   options?: string[];
   /** muted helper text under the input. */
   help?: string;
+  /** [32] render at half width (one column of a two-up grid) — for short/number fields
+   *  (bedrooms, baths, garage, stories, sqft, year, …) so the form is shorter. Full-width
+   *  fields (textarea/richtext/long text) omit this and span both columns. */
+  halfWidth?: boolean;
   /** the synced_<col> to display beside an override input (defaults to synced_<field>). */
   syncedColumn?: string;
   /** a related *_name column to show as the human label of a synced/override id. */
@@ -74,8 +78,9 @@ export interface ListColumn {
   /** column key to read off the row (post-COALESCE alias for QMI effective fields). */
   field: string;
   label: string;
-  /** render hint. 'publish' shows the published/active/status pill. */
-  kind?: 'text' | 'number' | 'boolean' | 'publish';
+  /** render hint. 'publish' shows the published/active/status pill.
+   *  [8] 'currency' formats as USD $000,000 (no decimals). */
+  kind?: 'text' | 'number' | 'boolean' | 'publish' | 'currency';
 }
 
 export interface EntityFieldConfig {
@@ -98,7 +103,7 @@ const qmi: EntityFieldConfig = {
     { field: 'address', label: 'Address' }, // effective COALESCE(override,synced)
     { field: 'synced_community_name', label: 'Community' },
     { field: 'synced_floor_plan_name', label: 'Floor Plan' },
-    { field: 'price', label: 'Price', kind: 'number' }, // effective
+    { field: 'price', label: 'Price', kind: 'currency' }, // effective
     { field: 'published', label: 'Published', kind: 'publish' },
     { field: 'available_now', label: 'Available', kind: 'boolean' },
     { field: 'last_modified_time', label: 'Modified' },
@@ -123,6 +128,7 @@ const qmi: EntityFieldConfig = {
       widget: 'syncedOverride',
       bucket: 'override',
       step: '1',
+      halfWidth: true,
     },
     {
       field: of('bedroom_count'),
@@ -130,6 +136,7 @@ const qmi: EntityFieldConfig = {
       widget: 'syncedOverride',
       bucket: 'override',
       step: '1',
+      halfWidth: true,
     },
     {
       field: of('bathroom_count'),
@@ -137,6 +144,7 @@ const qmi: EntityFieldConfig = {
       widget: 'syncedOverride',
       bucket: 'override',
       step: 'any',
+      halfWidth: true,
     },
     {
       field: of('half_bathroom_count'),
@@ -144,6 +152,7 @@ const qmi: EntityFieldConfig = {
       widget: 'syncedOverride',
       bucket: 'override',
       step: '1',
+      halfWidth: true,
     },
     {
       field: of('living_square_footage'),
@@ -151,6 +160,7 @@ const qmi: EntityFieldConfig = {
       widget: 'syncedOverride',
       bucket: 'override',
       step: '1',
+      halfWidth: true,
     },
     {
       field: of('total_square_footage'),
@@ -158,8 +168,9 @@ const qmi: EntityFieldConfig = {
       widget: 'syncedOverride',
       bucket: 'override',
       step: '1',
+      halfWidth: true,
     },
-    { field: of('elevation'), label: 'Elevation', widget: 'syncedOverride', bucket: 'override' },
+    { field: of('elevation'), label: 'Elevation', widget: 'syncedOverride', bucket: 'override', halfWidth: true },
     {
       field: of('construction_stage'),
       label: 'Construction Stage',
@@ -198,12 +209,12 @@ const qmi: EntityFieldConfig = {
     { field: 'rich_slug', label: 'Rich Slug', widget: 'text', bucket: 'admin' },
     { field: 'viewer_slug', label: 'Viewer Slug', widget: 'text', bucket: 'admin' },
     { field: 'collection', label: 'Collection', widget: 'text', bucket: 'admin' },
-    { field: 'estimated_monthly_price', label: 'Est. Monthly Price', widget: 'number', bucket: 'admin', step: 'any' },
-    { field: 'estimated_monthly_payment', label: 'Est. Monthly Payment', widget: 'number', bucket: 'admin', step: 'any' },
-    { field: 'monthly_energy_cost', label: 'Monthly Energy Cost', widget: 'number', bucket: 'admin', step: 'any' },
-    { field: 'car_garage_count', label: 'Car Garage', widget: 'number', bucket: 'admin', step: '1' },
-    { field: 'stories_count', label: 'Stories Count', widget: 'number', bucket: 'admin', step: '1' },
-    { field: 'stories', label: 'Stories', widget: 'number', bucket: 'admin', step: '1' },
+    { field: 'estimated_monthly_price', label: 'Est. Monthly Price', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
+    { field: 'estimated_monthly_payment', label: 'Est. Monthly Payment', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
+    { field: 'monthly_energy_cost', label: 'Monthly Energy Cost', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
+    { field: 'car_garage_count', label: 'Car Garage', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
+    { field: 'stories_count', label: 'Stories Count', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
+    { field: 'stories', label: 'Stories', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
     { field: 'available_now', label: 'Available Now', widget: 'boolean', bucket: 'admin' },
     { field: 'self_tour_available', label: 'Self Tour Available', widget: 'boolean', bucket: 'admin' },
     { field: 'include_in_xml_feed', label: 'Include in XML Feed', widget: 'boolean', bucket: 'admin' },
@@ -219,19 +230,19 @@ const qmi: EntityFieldConfig = {
     { field: 'mls_id', label: 'MLS ID', widget: 'text', bucket: 'admin' },
     { field: 'mls_number', label: 'MLS Number', widget: 'text', bucket: 'admin' },
     { field: 'lot_number', label: 'Lot Number', widget: 'text', bucket: 'admin' },
-    { field: 'year_built', label: 'Year Built', widget: 'number', bucket: 'admin', step: '1' },
-    { field: 'lot_size_sqft', label: 'Lot Size SqFt', widget: 'number', bucket: 'admin', step: '1' },
-    { field: 'move_in_date', label: 'Move-In Date', widget: 'date', bucket: 'admin', help: 'Stored as YYYY-MM-DD' },
-    { field: 'hers_score', label: 'HERS Score', widget: 'number', bucket: 'admin', step: '1' },
+    { field: 'year_built', label: 'Year Built', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
+    { field: 'lot_size_sqft', label: 'Lot Size SqFt', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
+    { field: 'move_in_date', label: 'Move-In Date', widget: 'date', bucket: 'admin', halfWidth: true },
+    { field: 'hers_score', label: 'HERS Score', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
     { field: 'arm_rate', label: 'ARM Rate', widget: 'text', bucket: 'admin' },
     { field: 'promo_text', label: 'Promo Text', widget: 'text', bucket: 'admin' },
     { field: 'availability_text', label: 'Availability Text', widget: 'text', bucket: 'admin' },
     { field: 'nter_now', label: 'Enter Now', widget: 'text', bucket: 'admin' },
     { field: 'cities', label: 'Cities', widget: 'text', bucket: 'admin' },
-    { field: 'latitude', label: 'Latitude', widget: 'number', bucket: 'admin', step: 'any' },
-    { field: 'geo_latitude', label: 'Geo Latitude', widget: 'number', bucket: 'admin', step: 'any' },
-    { field: 'longitude', label: 'Longitude', widget: 'number', bucket: 'admin', step: 'any' },
-    { field: 'geo_longitude', label: 'Geo Longitude', widget: 'number', bucket: 'admin', step: 'any' },
+    { field: 'latitude', label: 'Latitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
+    { field: 'geo_latitude', label: 'Geo Latitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
+    { field: 'longitude', label: 'Longitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
+    { field: 'geo_longitude', label: 'Geo Longitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
   ],
 };
 
@@ -245,7 +256,7 @@ const communities: EntityFieldConfig = {
     { field: 'published', label: 'Published', kind: 'publish' },
     { field: 'draft', label: 'Draft', kind: 'boolean' },
     { field: 'coming_soon', label: 'Coming Soon', kind: 'boolean' },
-    { field: 'price_from', label: 'Price From', kind: 'number' },
+    { field: 'price_from', label: 'Price From', kind: 'currency' },
     { field: 'city_id', label: 'City' },
   ],
   fields: [
@@ -257,15 +268,15 @@ const communities: EntityFieldConfig = {
     { field: 'town', label: 'Town', widget: 'text', bucket: 'admin' },
     { field: 'address', label: 'Address', widget: 'text', bucket: 'admin' },
     { field: 'city_id', label: 'City', widget: 'select', bucket: 'admin', selectSource: 'cities' },
-    { field: 'map_coordinates', label: 'Map Coords (lat,long)', widget: 'text', bucket: 'admin' },
-    { field: 'lat_long', label: 'Lat/Long', widget: 'text', bucket: 'admin' },
-    { field: 'latitude', label: 'Latitude', widget: 'number', bucket: 'admin', step: 'any' },
-    { field: 'longitude', label: 'Longitude', widget: 'number', bucket: 'admin', step: 'any' },
-    { field: 'master_planned', label: 'Master Planned', widget: 'boolean', bucket: 'admin' },
-    { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin' },
-    { field: 'price_from', label: 'Price From', widget: 'number', bucket: 'admin', step: 'any' },
-    { field: 'bed_count', label: 'Bed Count', widget: 'text', bucket: 'admin' },
-    { field: 'bath_count', label: 'Bath Count', widget: 'text', bucket: 'admin' },
+    // [17] map_coordinates + [18] lat_long removed from the admin form (latitude/longitude
+    // below remain the editable geo source; D1 columns + sync unchanged).
+    { field: 'latitude', label: 'Latitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
+    { field: 'longitude', label: 'Longitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
+    { field: 'master_planned', label: 'Master Planned', widget: 'boolean', bucket: 'admin', halfWidth: true },
+    { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin', halfWidth: true },
+    { field: 'price_from', label: 'Price From', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
+    { field: 'bed_count', label: 'Bed Count', widget: 'text', bucket: 'admin', halfWidth: true },
+    { field: 'bath_count', label: 'Bath Count', widget: 'text', bucket: 'admin', halfWidth: true },
     { field: 'description', label: 'Description', widget: 'textarea', bucket: 'admin' },
     // richtext (markdown)
     { field: 'amenities', label: 'Amenities (md)', widget: 'richtext', bucket: 'admin' },
@@ -303,8 +314,8 @@ const communities: EntityFieldConfig = {
     { field: 'office_hours', label: 'Office Hours', widget: 'text', bucket: 'admin' },
     { field: 'schedule_visit', label: 'Schedule Visit', widget: 'text', bucket: 'admin' },
     { field: 'lending', label: 'Lending', widget: 'text', bucket: 'admin' },
-    { field: 'incentive', label: 'Incentive', widget: 'textarea', bucket: 'admin' },
-    { field: 'floor_plan_plaintext', label: 'Floor Plan Plaintext', widget: 'textarea', bucket: 'admin' },
+    // [22] floor_plan_plaintext + [23] incentive removed from the admin form
+    // (D1 columns + sync unchanged).
     // custom widget
     { field: 'hoa_links_json', label: 'HOA Links', widget: 'hoaLinks', bucket: 'admin', help: 'Array of {title, link}; framer pushes the first 7.' },
   ],
@@ -322,15 +333,15 @@ const cities: EntityFieldConfig = {
     { field: 'move_in_homes_count', label: 'Move-In Homes', kind: 'number' },
   ],
   fields: [
-    { field: 'community_count', label: 'Community Count (synced)', widget: 'number', bucket: 'synced' },
-    { field: 'move_in_homes_count', label: 'Move-In Homes (synced)', widget: 'number', bucket: 'synced' },
-    { field: 'floor_plans_count', label: 'Floor Plans Count (synced)', widget: 'number', bucket: 'synced' },
-    { field: 'city_name', label: 'City Name', widget: 'text', bucket: 'admin' },
-    { field: 'slug', label: 'Slug', widget: 'text', bucket: 'admin' },
-    { field: 'state', label: 'State', widget: 'text', bucket: 'admin' },
-    { field: 'status', label: 'Status', widget: 'text', bucket: 'admin' },
-    { field: 'map_latitude', label: 'Map Latitude', widget: 'number', bucket: 'admin', step: 'any' },
-    { field: 'map_longitude', label: 'Map Longitude', widget: 'number', bucket: 'admin', step: 'any' },
+    { field: 'community_count', label: 'Community Count (synced)', widget: 'number', bucket: 'synced', halfWidth: true },
+    { field: 'move_in_homes_count', label: 'Move-In Homes (synced)', widget: 'number', bucket: 'synced', halfWidth: true },
+    { field: 'floor_plans_count', label: 'Floor Plans Count (synced)', widget: 'number', bucket: 'synced', halfWidth: true },
+    { field: 'city_name', label: 'City Name', widget: 'text', bucket: 'admin', halfWidth: true },
+    { field: 'slug', label: 'Slug', widget: 'text', bucket: 'admin', halfWidth: true },
+    { field: 'state', label: 'State', widget: 'text', bucket: 'admin', halfWidth: true },
+    { field: 'status', label: 'Status', widget: 'text', bucket: 'admin', halfWidth: true },
+    { field: 'map_latitude', label: 'Map Latitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
+    { field: 'map_longitude', label: 'Map Longitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
     { field: 'hero_image_url', label: 'Hero Image', widget: 'image', bucket: 'admin' },
     { field: 'hero_description', label: 'Hero Description', widget: 'textarea', bucket: 'admin' },
     { field: 'national_recognition', label: 'National Recognition', widget: 'text', bucket: 'admin' },
@@ -399,29 +410,30 @@ const floor_plans: EntityFieldConfig = {
     { field: 'name', label: 'Name' },
     { field: 'published', label: 'Published', kind: 'publish' },
     { field: 'collection', label: 'Collection' },
-    { field: 'starting_price', label: 'Starting Price', kind: 'number' },
+    { field: 'starting_price', label: 'Starting Price', kind: 'currency' },
     { field: 'bedroom_min', label: 'Bed Min', kind: 'number' },
     { field: 'bedroom_max', label: 'Bed Max', kind: 'number' },
   ],
   fields: [
-    { field: 'synced_image_url', label: 'Synced Render (read-only)', widget: 'image', bucket: 'synced', help: 'OneDrive→R2 synced; image_url below takes precedence.' },
+    // [30] synced_image_url removed from the admin form — the DAM image_url is the
+    // source of truth. (D1 column + sync unchanged; just hidden here.)
     { field: 'force_replace_renderings', label: 'Force Replace Renderings', widget: 'boolean', bucket: 'admin' },
     { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish' },
     { field: 'name', label: 'Name', widget: 'text', bucket: 'admin' },
     { field: 'slug', label: 'Slug', widget: 'text', bucket: 'admin' },
     { field: 'collection', label: 'Collection', widget: 'text', bucket: 'admin' },
-    { field: 'starting_price', label: 'Starting Price', widget: 'number', bucket: 'admin', step: 'any' },
-    { field: 'bedroom_min', label: 'Bedroom Min', widget: 'number', bucket: 'admin', step: '1' },
-    { field: 'bedroom_max', label: 'Bedroom Max', widget: 'number', bucket: 'admin', step: '1' },
-    { field: 'bathroom_min', label: 'Bathroom Min', widget: 'number', bucket: 'admin', step: 'any' },
-    { field: 'bathroom_max', label: 'Bathroom Max', widget: 'number', bucket: 'admin', step: 'any' },
-    { field: 'car_garage_count', label: 'Car Garage', widget: 'number', bucket: 'admin', step: '1' },
-    { field: 'stories_count', label: 'Stories Count', widget: 'number', bucket: 'admin', step: '1' },
-    { field: 'living_square_footage', label: 'Living SqFt', widget: 'number', bucket: 'admin', step: '1' },
-    { field: 'total_square_footage', label: 'Total SqFt', widget: 'number', bucket: 'admin', step: '1' },
-    { field: 'hers_score', label: 'HERS Score', widget: 'number', bucket: 'admin', step: '1' },
-    { field: 'master_bed_location', label: 'Master Bed Location', widget: 'text', bucket: 'admin' },
-    { field: 'image_url', label: 'Main Image (overrides synced)', widget: 'image', bucket: 'admin' },
+    { field: 'starting_price', label: 'Starting Price', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
+    { field: 'bedroom_min', label: 'Bedroom Min', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
+    { field: 'bedroom_max', label: 'Bedroom Max', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
+    { field: 'bathroom_min', label: 'Bathroom Min', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
+    { field: 'bathroom_max', label: 'Bathroom Max', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
+    { field: 'car_garage_count', label: 'Car Garage', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
+    { field: 'stories_count', label: 'Stories Count', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
+    { field: 'living_square_footage', label: 'Living SqFt', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
+    { field: 'total_square_footage', label: 'Total SqFt', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
+    { field: 'hers_score', label: 'HERS Score', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
+    { field: 'master_bed_location', label: 'Master Bed Location', widget: 'text', bucket: 'admin', halfWidth: true },
+    { field: 'image_url', label: 'Main Image', widget: 'image', bucket: 'admin' },
     { field: 'hero_image_2', label: 'Hero Image 2', widget: 'image', bucket: 'admin' },
     { field: 'hero_image_3', label: 'Hero Image 3', widget: 'image', bucket: 'admin' },
     { field: 'description', label: 'Description (md)', widget: 'richtext', bucket: 'admin' },
@@ -429,10 +441,10 @@ const floor_plans: EntityFieldConfig = {
     { field: 'virtual_tour_url', label: 'Virtual Tour URL', widget: 'text', bucket: 'admin' },
     { field: 'brochure_pdf_url', label: 'Brochure PDF URL', widget: 'text', bucket: 'admin', help: 'String, never a link widget.' },
     { field: 'brochure_pdf', label: 'Brochure PDF', widget: 'text', bucket: 'admin' },
-    { field: 'incentive', label: 'Incentive', widget: 'textarea', bucket: 'admin' },
-    { field: 'energy_cost_low', label: 'Energy Cost Low', widget: 'number', bucket: 'admin', step: 'any' },
-    { field: 'energy_cost_high', label: 'Energy Cost High', widget: 'number', bucket: 'admin', step: 'any' },
-    { field: 'energy_cost_avg', label: 'Energy Cost Avg', widget: 'number', bucket: 'admin', step: 'any' },
+    // [34] incentive removed from the admin form (D1 column + sync unchanged).
+    { field: 'energy_cost_low', label: 'Energy Cost Low', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
+    { field: 'energy_cost_high', label: 'Energy Cost High', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
+    { field: 'energy_cost_avg', label: 'Energy Cost Avg', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
   ],
 };
 
@@ -456,9 +468,9 @@ const promotions: EntityFieldConfig = {
     { field: 'cta_url', label: 'CTA URL', widget: 'text', bucket: 'admin' },
     { field: 'copy', label: 'Copy', widget: 'textarea', bucket: 'admin' },
     { field: 'image_url', label: 'Image', widget: 'image', bucket: 'admin' },
-    { field: 'sort_order', label: 'Sort Order', widget: 'number', bucket: 'admin', step: '1' },
-    { field: 'start_date', label: 'Start Date', widget: 'date', bucket: 'admin', help: 'Stored as YYYY-MM-DD' },
-    { field: 'end_date', label: 'End Date', widget: 'date', bucket: 'admin', help: 'Stored as YYYY-MM-DD' },
+    { field: 'sort_order', label: 'Sort Order', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
+    { field: 'start_date', label: 'Start Date', widget: 'date', bucket: 'admin', halfWidth: true },
+    { field: 'end_date', label: 'End Date', widget: 'date', bucket: 'admin', halfWidth: true },
     { field: 'applies_to', label: 'Applies-To Label (legacy)', widget: 'text', bucket: 'admin', help: 'Informational only; does NOT drive targeting.' },
     { field: 'promotion_targets', label: 'Targeting Scope', widget: 'promoScopeTag', bucket: 'target' },
   ],
@@ -471,8 +483,8 @@ const collections: EntityFieldConfig = {
   listColumns: [
     { field: 'title', label: 'Title' },
     { field: 'slug', label: 'Slug' },
-    { field: 'starting_at', label: 'Starting At', kind: 'number' },
-    { field: 'ending_at', label: 'Ending At', kind: 'number' },
+    { field: 'starting_at', label: 'Starting At', kind: 'currency' },
+    { field: 'ending_at', label: 'Ending At', kind: 'currency' },
   ],
   fields: [
     { field: 'title', label: 'Title', widget: 'text', bucket: 'admin' },
@@ -480,8 +492,8 @@ const collections: EntityFieldConfig = {
     { field: 'content', label: 'Content (md)', widget: 'richtext', bucket: 'admin' },
     { field: 'header_image', label: 'Header Image', widget: 'image', bucket: 'admin' },
     { field: 'header_image_alt', label: 'Header Image Alt', widget: 'text', bucket: 'admin' },
-    { field: 'starting_at', label: 'Starting At', widget: 'number', bucket: 'admin', step: 'any' },
-    { field: 'ending_at', label: 'Ending At', widget: 'number', bucket: 'admin', step: 'any' },
+    { field: 'starting_at', label: 'Starting At', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
+    { field: 'ending_at', label: 'Ending At', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
     { field: 'incentive', label: 'Incentive', widget: 'textarea', bucket: 'admin' },
   ],
 };
@@ -523,10 +535,10 @@ const blogs: EntityFieldConfig = {
     { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish' },
     { field: 'title', label: 'Title', widget: 'text', bucket: 'admin' },
     { field: 'slug', label: 'Slug', widget: 'text', bucket: 'admin' },
-    { field: 'category', label: 'Category', widget: 'text', bucket: 'admin' },
+    { field: 'category', label: 'Category', widget: 'text', bucket: 'admin', halfWidth: true },
     { field: 'excerpt', label: 'Excerpt', widget: 'textarea', bucket: 'admin' },
     { field: 'content', label: 'Content (md)', widget: 'richtext', bucket: 'admin' },
-    { field: 'publish_date', label: 'Publish Date', widget: 'date', bucket: 'admin', help: 'Stored as YYYY-MM-DD' },
+    { field: 'publish_date', label: 'Publish Date', widget: 'date', bucket: 'admin', halfWidth: true },
     { field: 'featured_image', label: 'Featured Image', widget: 'image', bucket: 'admin' },
     { field: 'seo_description', label: 'SEO Description', widget: 'textarea', bucket: 'admin' },
     { field: 'community_name', label: 'Community Name', widget: 'text', bucket: 'admin' },
@@ -548,8 +560,8 @@ const testimonials: EntityFieldConfig = {
     { field: 'status', label: 'Status', widget: 'select', bucket: 'publish', options: ['', 'Live', 'Draft'], help: "'Draft' hides; anything else is live." },
     { field: 'person_name', label: 'Person Name', widget: 'text', bucket: 'admin' },
     { field: 'slug', label: 'Slug', widget: 'text', bucket: 'admin' },
-    { field: 'date_posted', label: 'Date Posted', widget: 'date', bucket: 'admin', help: 'Stored as YYYY-MM-DD' },
-    { field: 'move_in_year', label: 'Move-In Year', widget: 'text', bucket: 'admin' },
+    { field: 'date_posted', label: 'Date Posted', widget: 'date', bucket: 'admin', halfWidth: true },
+    { field: 'move_in_year', label: 'Move-In Year', widget: 'text', bucket: 'admin', halfWidth: true },
     { field: 'testimonial_text', label: 'Testimonial', widget: 'textarea', bucket: 'admin' },
     { field: 'image_url', label: 'Photo', widget: 'image', bucket: 'admin' },
     { field: 'floor_plan_id', label: 'Floor Plan', widget: 'select', bucket: 'admin', selectSource: 'floor_plans' },

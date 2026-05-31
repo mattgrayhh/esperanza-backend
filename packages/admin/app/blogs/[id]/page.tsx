@@ -38,6 +38,7 @@ export default async function BlogEditorPage({
       segment={DEF.segment}
       label={DEF.label}
       id={id}
+      displayName={view.displayName}
       fields={view.fields}
       publishGate={view.publishGate}
       sideWidgets={view.sideWidgets}

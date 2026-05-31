@@ -42,7 +42,9 @@ export function CustomMenuButton({
 		<SidebarMenuButton
 			className={cn(
 				"h-9 px-2.75",
-				"text-muted-foreground data-active:text-sidebar-accent-foreground data-active:[&>span]:font-medium",
+				// Label is bold for every item (active or not); active item adds the
+				// mint accent foreground.
+				"[&>span]:font-semibold text-muted-foreground data-active:text-sidebar-accent-foreground",
 				className
 			)}
 			{...props}

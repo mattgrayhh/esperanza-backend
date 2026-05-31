@@ -108,6 +108,17 @@ export function getEntity(key: string): EntityDef | undefined {
   return (ENTITIES as Record<string, EntityDef>)[key];
 }
 
+/** Singularize a plural entity label for "New X" / breadcrumb context. Handles the
+ *  -ies → -y case (Communities→Community, Cities→City) and the plain trailing -s,
+ *  while leaving already-singular labels untouched. Fixes the old `replace(/s$/,'')`
+ *  bug that produced "Communitie"/"Citie". */
+export function singularizeLabel(label: string): string {
+  if (/ies$/i.test(label)) return label.replace(/ies$/i, 'y');
+  if (/ss$/i.test(label)) return label; // e.g. a hypothetical "Address"
+  if (/s$/i.test(label)) return label.replace(/s$/i, '');
+  return label;
+}
+
 // =============================================================================
 // QMI override-field set. Re-exported from the db contract so the admin and the
 // override helper agree on EXACTLY which fields carry a synced_/override_ pair.

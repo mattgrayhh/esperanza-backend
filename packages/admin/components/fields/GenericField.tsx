@@ -46,12 +46,8 @@ export interface GenericFieldProps {
   help?: string;
 }
 
-function FieldLabel({ label, field }: { label: string; field: string }) {
-  return (
-    <Label className="font-medium text-foreground">
-      {label} <span className="font-mono text-xs font-normal text-muted-foreground">{field}</span>
-    </Label>
-  );
+function FieldLabel({ label }: { label: string }) {
+  return <Label className="font-medium text-foreground">{label}</Label>;
 }
 
 export function GenericField({
@@ -67,7 +63,7 @@ export function GenericField({
 }: GenericFieldProps) {
   return (
     <div className="grid gap-1.5 text-sm">
-      <FieldLabel label={label} field={field} />
+      <FieldLabel label={label} />
 
       {widget === 'date' ? (
         // The date popover renders its own Label; suppress the outer one to avoid a

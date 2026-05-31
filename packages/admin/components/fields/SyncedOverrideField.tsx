@@ -72,7 +72,7 @@ export function SyncedOverrideField({
   return (
     <div className="grid gap-1.5 text-sm">
       <Label className="font-medium text-foreground">
-        {label} <span className="font-mono text-xs font-normal text-muted-foreground">{field}</span>
+        {label}
         {overriding ? (
           <Badge
             variant="secondary"

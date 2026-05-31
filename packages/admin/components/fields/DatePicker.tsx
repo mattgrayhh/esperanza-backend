@@ -64,9 +64,7 @@ export function DatePicker({
     <div className="grid gap-1.5 text-sm">
       {/* When embedded in GenericField, the parent renders the label (label=''). */}
       {label !== '' ? (
-        <Label className="font-medium text-foreground">
-          {label} <span className="font-mono text-xs font-normal text-muted-foreground">{field}</span>
-        </Label>
+        <Label className="font-medium text-foreground">{label}</Label>
       ) : null}
 
       {/* The column value travels via this hidden input as a YYYY-MM-DD string. */}

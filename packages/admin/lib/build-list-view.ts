@@ -9,6 +9,7 @@
 // =============================================================================
 
 import { sql } from 'drizzle-orm';
+import { cities } from '@esperanza/db';
 import { getReadDb } from './db';
 import { type EntityKey } from './entities';
 import { fieldConfigFor, publishGateColumn, type ListColumn } from './field-config';
@@ -71,9 +72,20 @@ function tableName(key: EntityKey): string {
   }
 }
 
+// [8] USD currency, no decimals: 425000 -> "$425,000".
+const USD = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  maximumFractionDigits: 0,
+});
+
 function fmt(v: unknown, kind: ListColumn['kind']): string {
   if (v == null || v === '') return '';
   if (kind === 'boolean') return v === 1 || v === true || v === '1' ? 'yes' : 'no';
+  if (kind === 'currency') {
+    const n = typeof v === 'number' ? v : Number(String(v).replace(/[^0-9.-]/g, ''));
+    return Number.isFinite(n) ? USD.format(n) : String(v);
+  }
   return String(v);
 }
 
@@ -84,6 +96,19 @@ function isLive(key: EntityKey, gate: string | null, row: Record<string, unknown
   return Boolean(row[gate]);
 }
 
+/** [9] cityId -> human city name. The communities list stores a raw city_id; we
+ *  resolve it to the city NAME for display (falling back to the raw id when unknown). */
+async function loadCityNameMap(): Promise<Map<string, string>> {
+  const db = getReadDb();
+  const rows = (await db
+    .select({ id: cities.id, name: cities.cityName })
+    .from(cities)
+    .limit(LIMIT)) as Array<{ id: string; name: string | null }>;
+  const m = new Map<string, string>();
+  for (const r of rows) m.set(r.id, r.name?.trim() || r.id);
+  return m;
+}
+
 export async function buildListView(key: EntityKey): Promise<ListView> {
   const cfg = fieldConfigFor(key);
   const gate = publishGateColumn(key);
@@ -91,13 +116,26 @@ export async function buildListView(key: EntityKey): Promise<ListView> {
 
   const raw = await db.all<Record<string, unknown>>(sql.raw(selectSqlFor(key)));
 
+  // [9] Communities list shows the city by NAME, not the raw city_id record id.
+  const cityNames =
+    key === 'communities' && cfg.listColumns.some((c) => c.field === 'city_id')
+      ? await loadCityNameMap()
+      : null;
+
   const rows: ListRow[] = raw.map((r) => ({
     id: String(r['id']),
-    cells: cfg.listColumns.map((c) => ({
-      field: c.field,
-      value: fmt(r[c.field], c.kind),
-      kind: c.kind,
-    })),
+    cells: cfg.listColumns.map((c) => {
+      if (cityNames && c.field === 'city_id') {
+        const cid = r['city_id'];
+        const resolved = cid == null || cid === '' ? '' : (cityNames.get(String(cid)) ?? String(cid));
+        return { field: c.field, value: resolved, kind: c.kind };
+      }
+      return {
+        field: c.field,
+        value: fmt(r[c.field], c.kind),
+        kind: c.kind,
+      };
+    }),
     live: isLive(key, gate, r),
   }));
 

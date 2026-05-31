@@ -34,6 +34,7 @@ export default async function ImageEditor({
       segment={def.segment}
       label={def.label}
       id={id}
+      displayName={view.displayName}
       fields={view.fields}
       publishGate={view.publishGate}
       sideWidgets={view.sideWidgets}

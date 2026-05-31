@@ -71,9 +71,7 @@ export function ImageUploader({
 
   return (
     <div className="grid gap-1.5 text-sm">
-      <Label className="font-medium text-foreground">
-        {label} <span className="font-mono text-xs font-normal text-muted-foreground">{field}</span>
-      </Label>
+      <Label className="font-medium text-foreground">{label}</Label>
 
       {/* The column value travels via this HIDDEN input — never a visible URL field. */}
       <input type="hidden" name={field} value={isAirtable ? '' : url} />

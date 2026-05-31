@@ -62,7 +62,7 @@ import {
 
 // ── serializable shapes (mirror lib/build-list-view.ts ListView, kept local so
 //    this client component imports no server-only modules) ────────────────────
-export type ListCellKind = "text" | "number" | "boolean" | "publish"
+export type ListCellKind = "text" | "number" | "boolean" | "publish" | "currency"
 
 export interface DataTableColumn {
   field: string
@@ -174,7 +174,8 @@ function buildColumns(
       }
       return <span className="text-foreground/80">{value || "—"}</span>
     },
-    sortingFn: c.kind === "number" ? numericSort : "alphanumeric",
+    // Numeric + currency columns sort by value (numericSort strips $ and commas).
+    sortingFn: c.kind === "number" || c.kind === "currency" ? numericSort : "alphanumeric",
     enableHiding: index !== 0, // keep the title column always visible
   }))
 

@@ -59,6 +59,7 @@ export type FieldView =
       staticOptions?: string[];
       readOnly?: boolean;
       help?: string;
+      halfWidth?: boolean;
     }
   | {
       kind: 'image';
@@ -77,6 +78,7 @@ export type FieldView =
       step?: 'any' | '1';
       options?: SelectOption[];
       help?: string;
+      halfWidth?: boolean;
     };
 
 export interface PublishGateView {
@@ -103,11 +105,22 @@ export interface PromoScopeView {
 }
 export type SideWidget = HoaLinksView | JsonBlocksView | PromoScopeView;
 
+/** Singularize a plural entity label for the "New X" / breadcrumb context.
+ *  Handles the -ies → -y case (Communities→Community, Cities→City) and the plain
+ *  trailing -s, while leaving already-singular labels untouched. */
+function singularize(label: string): string {
+  if (/ies$/i.test(label)) return label.replace(/ies$/i, 'y');
+  if (/ss$/i.test(label)) return label; // e.g. a hypothetical "Address"
+  if (/s$/i.test(label)) return label.replace(/s$/i, '');
+  return label;
+}
+
 export function EntityEditForm({
   entityKey,
   segment,
   label,
   id,
+  displayName,
   fields,
   publishGate,
   sideWidgets,
@@ -116,6 +129,7 @@ export function EntityEditForm({
   segment: string;
   label: string;
   id: string;
+  displayName: string;
   fields: FieldView[];
   publishGate: PublishGateView | null;
   sideWidgets: SideWidget[];
@@ -134,22 +148,29 @@ export function EntityEditForm({
   const imageFields = fields.filter((f) => f.kind === 'image');
   const mainFields = fields.filter((f) => f.kind !== 'image');
 
-  const singular = label.replace(/s$/, '');
+  const singular = singularize(label);
   const isError = msg != null && msg.startsWith('Error:');
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto w-full max-w-5xl">
       {/* Header */}
       <div className="mb-5 flex flex-wrap items-center gap-3">
-        <a
-          href={`/${segment}`}
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeftIcon className="size-4" /> {label}
-        </a>
-        <h1 className="font-heading text-lg font-bold">
-          {singular} <span className="font-mono text-sm font-normal text-muted-foreground">{id}</span>
-        </h1>
+        <div className="min-w-0">
+          {/* Back link doubles as the "this is a {singular}" breadcrumb context. */}
+          <a
+            href={`/${segment}`}
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeftIcon className="size-4" /> {label}
+          </a>
+          {/* [13][14][15][43] The H1 IS the record's display name (not "Entitie recXXXX"). */}
+          <h1 className="font-heading mt-1 truncate text-2xl font-bold text-foreground">
+            {displayName}
+          </h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {singular} · {id}
+          </p>
+        </div>
         <div className="ml-auto flex items-center gap-3">
           {publishGate ? (
             <PublishedToggle
@@ -177,40 +198,50 @@ export function EntityEditForm({
             <CardHeader className="border-b">
               <CardTitle>Fields</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-4">
+            {/* [32] Two-up grid: half-width (short/number) fields take one column;
+                everything else spans both. On mobile it collapses to one column. */}
+            <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {mainFields.map((f) => {
+                const span =
+                  'halfWidth' in f && f.halfWidth ? 'sm:col-span-1' : 'col-span-1 sm:col-span-2';
                 if (f.kind === 'syncedOverride') {
                   return (
-                    <SyncedOverrideField
-                      key={f.field}
-                      field={f.field}
-                      label={f.label}
-                      variant={f.variant}
-                      syncedDisplay={f.syncedDisplay}
-                      overrideValue={f.overrideValue}
-                      step={f.step}
-                      options={f.options}
-                      help={f.help}
-                    />
+                    <div key={f.field} className={span}>
+                      <SyncedOverrideField
+                        field={f.field}
+                        label={f.label}
+                        variant={f.variant}
+                        syncedDisplay={f.syncedDisplay}
+                        overrideValue={f.overrideValue}
+                        step={f.step}
+                        options={f.options}
+                        help={f.help}
+                      />
+                    </div>
                   );
                 }
                 return (
-                  <GenericField
-                    key={f.field}
-                    field={f.field}
-                    label={f.label}
-                    widget={f.widget}
-                    value={f.value}
-                    step={f.step}
-                    options={f.options}
-                    staticOptions={f.staticOptions}
-                    readOnly={f.readOnly}
-                    help={f.help}
-                  />
+                  <div key={f.field} className={span}>
+                    <GenericField
+                      field={f.field}
+                      label={f.label}
+                      widget={f.widget}
+                      value={f.value}
+                      step={f.step}
+                      options={f.options}
+                      staticOptions={f.staticOptions}
+                      readOnly={f.readOnly}
+                      help={f.help}
+                    />
+                  </div>
                 );
               })}
-              <Separator />
-              <Button type="submit" disabled={pending} className="justify-self-start">
+              <Separator className="col-span-1 sm:col-span-2" />
+              <Button
+                type="submit"
+                disabled={pending}
+                className="col-span-1 justify-self-start sm:col-span-2"
+              >
                 {pending ? 'Saving…' : 'Save'}
               </Button>
             </CardContent>

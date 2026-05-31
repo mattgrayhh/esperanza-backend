@@ -17,7 +17,7 @@
 
 html,
 body {
-  background: var(--color-surface);
+  background: #fff; /* pure white app background (feedback [12]) */
   /* warm near-black ink to match --foreground (oklch 0.25 0.012 70 ≈ #2a2723) */
   color: #2a2723;
   font-family: var(--font-sans);
@@ -84,20 +84,21 @@ a {
   /* Esperanza light theme — warm off-white surface, brand green, pale mint.
      Neutrals are tinted warm (hue ~85, very low chroma); no pure #000/#fff. */
 
-  /* App + sidebar surface = warm off-white #f3f1ed.
-     (app-sidebar forces sidebar inner to bg-background, so this themes both.) */
-  --background: oklch(0.9586 0.0057 84.57);
+  /* App background = pure white #fff (operator request, feedback [12]).
+     (app-sidebar forces sidebar inner to bg-background, so --background also
+     themes the sidebar shell; --sidebar below is set to match.) */
+  --background: oklch(1 0 0); /* pure white #fff */
   --foreground: oklch(0.25 0.012 70); /* warm near-black ink, ~#2a2723 */
 
-  /* Content cards sit slightly brighter than the warm surface for layering. */
-  --card: oklch(0.9875 0.0026 106.45); /* near-white #fbfbf9 */
+  /* Content cards = pure white #fff to match the white app background. */
+  --card: oklch(1 0 0); /* pure white #fff */
   --card-foreground: oklch(0.25 0.012 70);
-  --popover: oklch(0.9875 0.0026 106.45);
+  --popover: oklch(1 0 0); /* pure white #fff to match the white app surface */
   --popover-foreground: oklch(0.25 0.012 70);
 
   /* Primary actions + active nav = brand green #2f5d4a. */
   --primary: oklch(0.4395 0.0603 164.98);
-  --primary-foreground: oklch(0.9875 0.0026 106.45); /* near-white on green */
+  --primary-foreground: oklch(1 0 0); /* crisp pure-white text on green (feedback [2][10]) */
 
   /* Secondary = pale mint surface, brand-green text. */
   --secondary: oklch(0.9372 0.0224 155.91); /* #dfefe4 */
@@ -127,9 +128,10 @@ a {
 
   --radius: 0.625rem;
 
-  /* Sidebar shell — on-brand warm surface, brand-green active state.
+  /* Sidebar shell — pure white to match the white app background (feedback [12]).
+     Brand stays on-brand via the mint active/hover state + brand-green active text:
      active nav: data-active:bg-sidebar-accent (mint) + text sidebar-accent-foreground (green). */
-  --sidebar: oklch(0.9586 0.0057 84.57); /* #f3f1ed */
+  --sidebar: oklch(1 0 0); /* pure white #fff */
   --sidebar-foreground: oklch(0.25 0.012 70);
   --sidebar-primary: oklch(0.4395 0.0603 164.98); /* brand green */
   --sidebar-primary-foreground: oklch(0.9875 0.0026 106.45);

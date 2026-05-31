@@ -65,9 +65,58 @@ function parseLinks(v: unknown): Array<{ title: string; link: string }> {
 export interface EditView {
   def: EntityDef;
   id: string;
+  /** Human record name for the detail H1 (e.g. a community's name, a blog's title). */
+  displayName: string;
   fields: FieldView[];
   publishGate: PublishGateView | null;
   sideWidgets: SideWidget[];
+}
+
+// =============================================================================
+// [13][14][15][43] Per-entity record DISPLAY NAME resolver. The generic detail H1
+// must read the record's human name (not "Entitie recXXXX"). Row keys are physical
+// snake_case columns (db.select().from(table)); we read the configured display
+// column(s) per entity, with sane fallbacks, and finally to the id.
+// =============================================================================
+function firstNonEmpty(row: Row, cols: string[]): string {
+  for (const c of cols) {
+    const v = s(row[c]).trim();
+    if (v !== '') return v;
+  }
+  return '';
+}
+
+export function resolveDisplayName(key: EntityKey, row: Row, id: string): string {
+  let name = '';
+  switch (key) {
+    case 'communities':
+    case 'floor_plans':
+      name = firstNonEmpty(row, ['name']);
+      break;
+    case 'cities':
+      name = firstNonEmpty(row, ['city_name', 'name']);
+      break;
+    case 'promotions':
+    case 'collections':
+    case 'blogs':
+      name = firstNonEmpty(row, ['title']);
+      break;
+    case 'images':
+      // images has no `name` column; the operator-facing identity is the plan/caption/slug.
+      name = firstNonEmpty(row, ['plan_name', 'caption_clean', 'caption', 'slug']);
+      break;
+    case 'testimonials': {
+      const person = firstNonEmpty(row, ['person_name']);
+      const location = firstNonEmpty(row, ['town', 'community_name', 'city_name']);
+      name = [person, location].filter((x) => x !== '').join(', ');
+      break;
+    }
+    case 'qmi':
+      // QMI has its own bespoke detail header; this is only a fallback.
+      name = firstNonEmpty(row, ['override_address', 'synced_address', 'address']);
+      break;
+  }
+  return name !== '' ? name : id;
 }
 
 /** Load the row + build the full edit view model for an entity record. Returns null if not found. */
@@ -151,7 +200,9 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
     };
   }
 
-  return { def, id, fields, publishGate, sideWidgets };
+  const displayName = resolveDisplayName(key, row, id);
+
+  return { def, id, displayName, fields, publishGate, sideWidgets };
 }
 
 /** Resolve a single config field into a FieldView, reading the row + option sets. */
@@ -197,6 +248,7 @@ function buildFieldView(
       step: f.step,
       options: f.selectSource ? optionSets[f.selectSource] : undefined,
       help: f.help,
+      halfWidth: f.halfWidth,
     };
   }
 
@@ -225,6 +277,7 @@ function buildFieldView(
     options: f.selectSource ? optionSets[f.selectSource] : undefined,
     staticOptions: f.options,
     help: f.help,
+    halfWidth: f.halfWidth,
   };
 }
 

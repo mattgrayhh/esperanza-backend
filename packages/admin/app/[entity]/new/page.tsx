@@ -6,7 +6,7 @@
 // Re-skinned with shadcn (Card/Button). The create() server action (createEntity +
 // redirect) is UNCHANGED.
 import { notFound, redirect } from 'next/navigation';
-import { ENTITY_LIST } from '../../../lib/entities';
+import { ENTITY_LIST, singularizeLabel } from '../../../lib/entities';
 import { createEntity } from '../../../lib/actions';
 import { Button } from '@/components/ui/button';
 import {
@@ -39,7 +39,7 @@ export default async function NewEntityPage({
     throw new Error(res.error);
   }
 
-  const singular = def.label.replace(/s$/, '');
+  const singular = singularizeLabel(def.label);
 
   return (
     <Card size="default" className="mx-auto max-w-lg">

@@ -28,7 +28,8 @@ import { SearchIcon } from "lucide-react";
 
 const groups = mainNavLinks;
 
-const APP_SEARCH_KEYBOARD_SHORTCUT = "f";
+const APP_SEARCH_KEYBOARD_COMBO = ["meta+k", "ctrl+k"];
+const APP_SEARCH_KEYBOARD_HINT = "⌘K";
 
 export function AppSearch() {
 	const router = useRouter();
@@ -38,7 +39,7 @@ export function AppSearch() {
 	const wrapperRef = useRef<HTMLDivElement>(null);
 
 	useKeypress({
-		combo: [APP_SEARCH_KEYBOARD_SHORTCUT],
+		combo: APP_SEARCH_KEYBOARD_COMBO,
 		callback: () => inputRef.current?.focus(),
 	});
 
@@ -56,7 +57,7 @@ export function AppSearch() {
 			className={cn(
 				"[--app-search-duration:250ms]",
 				"[--app-search-ease:cubic-bezier(0.4,0,0.2,1)]",
-				"group relative z-60!"
+				"group relative z-60! h-8 w-20 md:w-36"
 			)}
 			data-state={open ? "open" : "closed"}
 			onBlur={handleBlur}
@@ -106,15 +107,15 @@ export function AppSearch() {
 					<InputGroupAddon align="inline-end" className="hidden md:flex">
 						<Kbd
 							className={cn(
-								"w-5 group-data-[state=open]:w-8",
+								"w-8 group-data-[state=open]:w-8",
 								"transition-[width] duration-(--app-search-duration) ease-(--app-search-ease)"
 							)}
 						>
 							<span
-								className="fade-in-0 animate-in uppercase duration-(--app-search-duration) ease-(--app-search-ease)"
-								key={open ? "Esc" : APP_SEARCH_KEYBOARD_SHORTCUT}
+								className="fade-in-0 animate-in duration-(--app-search-duration) ease-(--app-search-ease)"
+								key={open ? "Esc" : APP_SEARCH_KEYBOARD_HINT}
 							>
-								{open ? "Esc" : APP_SEARCH_KEYBOARD_SHORTCUT}
+								{open ? "Esc" : APP_SEARCH_KEYBOARD_HINT}
 							</span>
 						</Kbd>
 					</InputGroupAddon>

@@ -295,7 +295,6 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
                   label="Move-In Date"
                   widget="date"
                   value={view.admin.moveInDate}
-                  help="Stored as YYYY-MM-DD"
                 />
                 <div className="grid gap-4 sm:grid-cols-2">
                   <GenericField
