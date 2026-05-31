@@ -3,12 +3,12 @@ import type { ReactNode } from 'react';
 import './globals.css';
 import { AppShell } from '../components/app-shell';
 import { getCurrentUserOrNull, signOut } from '../lib/auth';
-import { Geist, Overpass } from "next/font/google";
+import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
-// Esperanza headings — Overpass (brand display face); body stays on Geist sans.
-const overpass = Overpass({subsets:['latin'],weight:['400','500','600','700'],variable:'--font-heading'});
+// Geist is the dashboard typeface everywhere — body and headings alike.
+// Exposes --font-geist; app/globals.css wires --font-sans -> --font-geist.
+const geist = Geist({subsets:['latin'],variable:'--font-geist'});
 
 export const metadata: Metadata = {
   title: 'Esperanza Admin',
@@ -32,13 +32,13 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   // open) render a bare full-width shell — no app shell for a signed-out user.
   if (!currentUser) {
     return (
-      <html lang="en" className={cn("font-sans", geist.variable, overpass.variable)}>
+      <html lang="en" className={cn("font-sans", geist.variable)}>
         <body style={{ margin: 0 }}>{children}</body>
       </html>
     );
   }
   return (
-    <html lang="en" className={cn("font-sans", geist.variable, overpass.variable)}>
+    <html lang="en" className={cn("font-sans", geist.variable)}>
       <body style={{ margin: 0 }}>
         <AppShell email={currentUser} signOutAction={doSignOut}>
           {children}
