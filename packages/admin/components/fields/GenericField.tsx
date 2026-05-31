@@ -19,6 +19,7 @@
 
 import { useState } from 'react';
 import type { SelectOption } from '../../lib/select-options';
+import { DatePicker } from './DatePicker';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -35,7 +36,7 @@ import {
 export interface GenericFieldProps {
   field: string;
   label: string;
-  widget: 'text' | 'textarea' | 'number' | 'boolean' | 'richtext' | 'select' | 'synced';
+  widget: 'text' | 'textarea' | 'number' | 'boolean' | 'richtext' | 'date' | 'select' | 'synced';
   value: string;
   step?: 'any' | '1';
   options?: SelectOption[];
@@ -68,7 +69,11 @@ export function GenericField({
     <div className="grid gap-1.5 text-sm">
       <FieldLabel label={label} field={field} />
 
-      {widget === 'synced' ? (
+      {widget === 'date' ? (
+        // The date popover renders its own Label; suppress the outer one to avoid a
+        // double label by short-circuiting to the DatePicker (it carries name={field}).
+        <DatePicker field={field} label="" value={value} />
+      ) : widget === 'synced' ? (
         <span className="rounded-lg border border-dashed border-input bg-muted/40 px-2.5 py-1.5 text-muted-foreground">
           {value === '' ? '—' : value}
         </span>

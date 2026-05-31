@@ -210,6 +210,7 @@ function buildFieldView(
     f.widget === 'number' ||
     f.widget === 'boolean' ||
     f.widget === 'richtext' ||
+    f.widget === 'date' ||
     f.widget === 'select'
       ? f.widget
       : 'text';

@@ -28,6 +28,7 @@ import {
   cities,
   communities,
   testimonials,
+  images,
   auditLog,
   type NewAuditLogRow,
   type NewPromotionTarget,
@@ -725,5 +726,148 @@ export async function saveCommunityHoaLinks(
   ]);
 
   revalidatePath(`/admin/communities/${id}`);
+  return { ok: true };
+}
+
+// =============================================================================
+// DIGITAL ASSET MANAGER (images library) actions.
+//
+// The IMAGES section is a DAM: operators upload a file and an images row is created
+// whose file_url points at the STABLE r2.dev asset — they never type or see a URL.
+//
+// createImageAsset composes the EXISTING primitives in one server round-trip so the
+// upload dropzone can create + populate a row atomically:
+//   (1) INSERT a fresh `images` row (id prefixed `adm`, like createEntity),
+//   (2) PUT the file to R2 IMAGES at images/<id>/<filename>,
+//   (3) UPDATE the row's file_url to the stable r2.dev url,
+//   (4) audit_log (create + upload_image) + FRAMER_QUEUE enqueue, then revalidate.
+// It obeys every write-contract clause: getCurrentUser() attribution, getDb()
+// first-primary session, postWrite() audit+enqueue, and it REJECTS airtable urls.
+// =============================================================================
+
+export async function createImageAsset(
+  formData: FormData
+): Promise<{ ok: true; id: string; url: string } | { ok: false; error: string }> {
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: 'Empty file' };
+  }
+
+  let actor: string;
+  try {
+    actor = await getCurrentUser();
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Not authenticated' };
+  }
+
+  const env = getCloudflareContext().env;
+  const { db } = getDb();
+  const at = new Date().toISOString();
+  const id = `adm${crypto.randomUUID().replace(/-/g, '').slice(0, 14)}`;
+
+  const safeName = sanitizeFilename(file.name);
+  const key = `images/${id}/${safeName}`;
+  const base = (env.IMAGES_PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+  const url = `${base}/${key}`;
+  // Stable R2 url only — an Airtable attachment host must never be stored.
+  if (url.includes('airtableusercontent.com')) {
+    return { ok: false, error: 'Refusing to store an Airtable attachment URL' };
+  }
+
+  // (1) insert the row with the file_url + a default slug derived from the filename.
+  const slug = safeName.replace(/\.[^.]+$/, '') || id;
+  await db
+    .insert(images)
+    .values(
+      toDrizzlePatch('images', {
+        id,
+        slug,
+        file_url: url,
+        created_at: at,
+        updated_at: at,
+      }) as never
+    );
+
+  // (2) store the asset in R2.
+  await env.IMAGES.put(key, await file.arrayBuffer(), {
+    httpMetadata: { contentType: file.type || 'application/octet-stream' },
+  });
+
+  // (3)+(4) audit (create + upload_image) and enqueue one Framer push.
+  await postWrite(db, 'images', id, [
+    {
+      entity: 'images',
+      entityId: id,
+      field: null,
+      action: 'create',
+      oldValue: null,
+      newValue: id,
+      actor,
+    },
+    {
+      entity: 'images',
+      entityId: id,
+      field: 'file_url',
+      action: 'upload_image',
+      oldValue: null,
+      newValue: url,
+      actor,
+    },
+  ]);
+
+  revalidatePath('/images');
+  return { ok: true, id, url };
+}
+
+// =============================================================================
+// deleteImageAsset — remove an images library row (and its R2 object, best-effort).
+// Audits a `delete` row and enqueues the Framer push so the consumer removes it.
+// =============================================================================
+
+export async function deleteImageAsset(
+  id: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!id) return { ok: false, error: 'Missing image id' };
+
+  let actor: string;
+  try {
+    actor = await getCurrentUser();
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Not authenticated' };
+  }
+
+  const { db } = getDb();
+  const current = await db.select().from(images).where(eq(images.id, id)).limit(1);
+  if (current.length === 0) return { ok: false, error: `Image ${id} not found` };
+  const oldUrl = toStr((current[0]! as Record<string, unknown>)['file_url']);
+
+  // Best-effort delete of the R2 object (keyed images/<id>/<file>). We derive the key
+  // from the stored stable url; failures here don't block the row delete.
+  const env = getCloudflareContext().env;
+  const base = (env.IMAGES_PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+  if (oldUrl && base && oldUrl.startsWith(base + '/')) {
+    const key = oldUrl.slice(base.length + 1);
+    try {
+      await env.IMAGES.delete(key);
+    } catch {
+      // ignore — the DB row is the source of truth; orphan objects are harmless.
+    }
+  }
+
+  await db.delete(images).where(eq(images.id, id));
+
+  await postWrite(db, 'images', id, [
+    {
+      entity: 'images',
+      entityId: id,
+      field: null,
+      action: 'delete',
+      oldValue: oldUrl,
+      newValue: null,
+      actor,
+    },
+  ]);
+
+  revalidatePath('/images');
   return { ok: true };
 }

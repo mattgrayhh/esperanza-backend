@@ -52,7 +52,7 @@ export type FieldView =
       kind: 'generic';
       field: string;
       label: string;
-      widget: 'text' | 'textarea' | 'number' | 'boolean' | 'richtext' | 'select' | 'synced';
+      widget: 'text' | 'textarea' | 'number' | 'boolean' | 'richtext' | 'date' | 'select' | 'synced';
       value: string;
       step?: 'any' | '1';
       options?: SelectOption[];

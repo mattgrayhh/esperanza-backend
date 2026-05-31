@@ -36,6 +36,7 @@ export type Widget =
   | 'boolean'
   | 'richtext'
   | 'image'
+  | 'date'
   | 'select'
   | 'syncedOverride'
   | 'jsonBlocks'
@@ -220,7 +221,7 @@ const qmi: EntityFieldConfig = {
     { field: 'lot_number', label: 'Lot Number', widget: 'text', bucket: 'admin' },
     { field: 'year_built', label: 'Year Built', widget: 'number', bucket: 'admin', step: '1' },
     { field: 'lot_size_sqft', label: 'Lot Size SqFt', widget: 'number', bucket: 'admin', step: '1' },
-    { field: 'move_in_date', label: 'Move-In Date', widget: 'text', bucket: 'admin', help: 'YYYY-MM-DD' },
+    { field: 'move_in_date', label: 'Move-In Date', widget: 'date', bucket: 'admin', help: 'Stored as YYYY-MM-DD' },
     { field: 'hers_score', label: 'HERS Score', widget: 'number', bucket: 'admin', step: '1' },
     { field: 'arm_rate', label: 'ARM Rate', widget: 'text', bucket: 'admin' },
     { field: 'promo_text', label: 'Promo Text', widget: 'text', bucket: 'admin' },
@@ -456,8 +457,8 @@ const promotions: EntityFieldConfig = {
     { field: 'copy', label: 'Copy', widget: 'textarea', bucket: 'admin' },
     { field: 'image_url', label: 'Image', widget: 'image', bucket: 'admin' },
     { field: 'sort_order', label: 'Sort Order', widget: 'number', bucket: 'admin', step: '1' },
-    { field: 'start_date', label: 'Start Date', widget: 'text', bucket: 'admin', help: 'YYYY-MM-DD' },
-    { field: 'end_date', label: 'End Date', widget: 'text', bucket: 'admin', help: 'YYYY-MM-DD' },
+    { field: 'start_date', label: 'Start Date', widget: 'date', bucket: 'admin', help: 'Stored as YYYY-MM-DD' },
+    { field: 'end_date', label: 'End Date', widget: 'date', bucket: 'admin', help: 'Stored as YYYY-MM-DD' },
     { field: 'applies_to', label: 'Applies-To Label (legacy)', widget: 'text', bucket: 'admin', help: 'Informational only; does NOT drive targeting.' },
     { field: 'promotion_targets', label: 'Targeting Scope', widget: 'promoScopeTag', bucket: 'target' },
   ],
@@ -525,7 +526,7 @@ const blogs: EntityFieldConfig = {
     { field: 'category', label: 'Category', widget: 'text', bucket: 'admin' },
     { field: 'excerpt', label: 'Excerpt', widget: 'textarea', bucket: 'admin' },
     { field: 'content', label: 'Content (md)', widget: 'richtext', bucket: 'admin' },
-    { field: 'publish_date', label: 'Publish Date', widget: 'text', bucket: 'admin', help: 'YYYY-MM-DD' },
+    { field: 'publish_date', label: 'Publish Date', widget: 'date', bucket: 'admin', help: 'Stored as YYYY-MM-DD' },
     { field: 'featured_image', label: 'Featured Image', widget: 'image', bucket: 'admin' },
     { field: 'seo_description', label: 'SEO Description', widget: 'textarea', bucket: 'admin' },
     { field: 'community_name', label: 'Community Name', widget: 'text', bucket: 'admin' },
@@ -547,7 +548,7 @@ const testimonials: EntityFieldConfig = {
     { field: 'status', label: 'Status', widget: 'select', bucket: 'publish', options: ['', 'Live', 'Draft'], help: "'Draft' hides; anything else is live." },
     { field: 'person_name', label: 'Person Name', widget: 'text', bucket: 'admin' },
     { field: 'slug', label: 'Slug', widget: 'text', bucket: 'admin' },
-    { field: 'date_posted', label: 'Date Posted', widget: 'text', bucket: 'admin', help: 'YYYY-MM-DD' },
+    { field: 'date_posted', label: 'Date Posted', widget: 'date', bucket: 'admin', help: 'Stored as YYYY-MM-DD' },
     { field: 'move_in_year', label: 'Move-In Year', widget: 'text', bucket: 'admin' },
     { field: 'testimonial_text', label: 'Testimonial', widget: 'textarea', bucket: 'admin' },
     { field: 'image_url', label: 'Photo', widget: 'image', bucket: 'admin' },
