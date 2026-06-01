@@ -68,3 +68,40 @@ The theme editor's live preview iframe resolves through the admin's `PDF` servic
 - **R2 prefix** for renditions (step 7) is an assumption — confirm with `wrangler r2 object list`.
 - **Framer community link:** `qmi.dynamic_pdf` + `floor_plans.brochure_pdf_url` already flow to Framer; `communities.brochure_pdf_url` needs the Phase-4 framer-push field addition to appear on the Framer community record (it's reachable by URL regardless).
 - **Rollback:** these are additive (new worker, new tables, new nullable column, new admin routes). Nothing existing is mutated; deleting the `esperanza-pdf` worker + ignoring the new admin routes reverts cleanly.
+
+## Browser Rendering: account tier, reuse & diagnostics (READ THIS if you see 429s)
+
+**The #1 gotcha — the tier follows the SPECIFIC account this worker deploys to.** Browser
+Rendering limits are set by the Workers plan of whatever Cloudflare account `wrangler`
+resolves to. `wrangler.toml` pins **no** `account_id`, so deploys land on whatever the
+authenticated session resolves to (`wrangler whoami`). Confirm that account is **Workers Paid**:
+- **Free:** 10 min (600s) browser-time/**day** (resets 00:00 UTC), ~3–4 concurrent, 1 new browser / **20s**.
+- **Paid:** no daily cap, **120 concurrent**, 1 new browser / **second**.
+
+A full re-render of all ~249 PDFs is ~6–10 min of browser-time, so a single theme-republish
+on **Free** exhausts the day's allowance → every `launch()` returns
+`429 "Rate limit exceeded"`. This feature requires Workers Paid on **this** account.
+
+**Diagnose non-destructively (zero browser-time):**
+```bash
+curl -s https://esperanza-pdf.<sub>.workers.dev/debug/limits | python3 -m json.tool
+#   maxConcurrentSessions: 4  -> account is FREE   |  120 -> PAID
+#   usedBrowserTimeSeconds frozen near 600 + 429s  -> Free daily cap hit (wait for UTC reset or upgrade)
+curl -s https://esperanza-pdf.<sub>.workers.dev/debug/launch     # guarded launch; surfaces the EXACT error (not a generic 1101)
+```
+After upgrading the plan, **redeploy** (`npm run -w @esperanza/pdf deploy`) so usage re-associates;
+`maxConcurrentSessions` flips 4→120 within a couple minutes.
+
+**Why renders are reliable now — the `BrowserRenderer` Durable Object (`src/renderer-do.ts`).**
+Visitors never render (serve = edge-cached/serve-stale); all rendering is out-of-band via the
+queue (`max_concurrency=1`) → `processJob` → `renderPdf` → the DO. The DO owns **one** browser and:
+- collapses concurrent renders into a single acquisition (in-flight **mutex** — without it a burst all calls `launch()` at once and trips the per-moment acquisition limit);
+- `launch({ keep_alive: 180s })` keeps the browser alive across DO eviction;
+- reconnects to an existing free session (`puppeteer.sessions()`/`connect()`, not rate-limited) before launching.
+Net: **one** `launch` per browser lifetime; every other render reuses it. Verified warm of all
+249 PDFs = **1 launch, 0 reconnects, 0 429s**, ~18–26 renders/min at `max_concurrency=1`.
+
+**Throughput lever (future):** a single reused browser serializes renders. For faster
+theme-republish, run a small **pool** of `BrowserRenderer` instances (e.g. `idFromName('renderer-0..N')`)
+and raise the queue `max_concurrency` to match — Paid allows 120 concurrent browsers. Not needed
+for current volume (full rebuild ≈ 6–10 min).
