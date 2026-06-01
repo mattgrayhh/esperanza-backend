@@ -104,7 +104,8 @@ async function postWrite(
 
   // Mark affected PDF brochures stale so they regenerate on next download (best-effort).
   try {
-    const d1 = env.DB as unknown as D1Database;
+    const d1 = env.DB as unknown as D1Database | undefined;
+    if (!d1) return; // no D1 binding (e.g. unit-test mock) — nothing to invalidate
     const q = async (sql: string, binds: unknown[]) => ((await d1.prepare(sql).bind(...(binds as any[])).all()).results ?? []) as any[];
     const keys = await affectedRenderKeys(q, collection, id);
     for (const k of keys) {
