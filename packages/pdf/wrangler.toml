@@ -18,3 +18,18 @@ bucket_name = "esperanza-cms"
 IMAGES_PUBLIC_BASE_URL = "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev"
 PDF_PUBLIC_BASE_URL = "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev"
 ADMIN_ORIGIN = "https://esperanza-admin.round-base-ed8c.workers.dev"
+
+[[queues.producers]]
+binding = "RENDER_Q"
+queue = "esperanza-pdf-render"
+
+[[queues.consumers]]
+queue = "esperanza-pdf-render"
+max_batch_size = 3
+max_retries = 3
+dead_letter_queue = "esperanza-pdf-render-dlq"
+
+# Nightly list warm/rebuild. GATED: the account is at its 5-cron-trigger cap until the
+# legacy crons are disabled at cutover. Uncomment + deploy ONLY after a slot is freed.
+# [triggers]
+# crons = ["0 7 * * *"]

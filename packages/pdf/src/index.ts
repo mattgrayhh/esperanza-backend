@@ -1,8 +1,9 @@
-import type { Env, PdfType } from './env';
+import type { Env, PdfType, RenderJob } from './env';
 import { renderPdf } from './render';
 import { serve } from './serve';
 import { preview } from './preview';
 import { verifyPreviewToken } from './token';
+import { processJob, enqueueStaleLists } from './queue';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -45,5 +46,16 @@ export default {
       return new Response(body, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
     }
     return new Response('Not found', { status: 404 });
+  },
+
+  async queue(batch: MessageBatch<RenderJob>, env: Env): Promise<void> {
+    for (const msg of batch.messages) {
+      try { await processJob(env, msg.body); msg.ack(); }
+      catch { msg.retry(); }
+    }
+  },
+
+  async scheduled(_event: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
+    await enqueueStaleLists(env);
   },
 };
