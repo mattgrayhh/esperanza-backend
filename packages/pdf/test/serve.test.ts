@@ -48,4 +48,19 @@ describe('serve', () => {
     expect(res.status).toBe(200);
     expect(waitUntil).toHaveBeenCalled();
   });
+  it('never-built render FAILURE → enqueues + 302 to /poll (not 502)', async () => {
+    const isolatedObjects = new Map<string, Uint8Array>();
+    const send = vi.fn(async () => {});
+    const failDeps = {
+      ...deps,
+      render: vi.fn(async () => { throw new Error('browser limit'); }),
+      getObject: async (k: string) => isolatedObjects.has(k) ? { body: isolatedObjects.get(k)!, httpMetadata: { contentType: 'application/pdf' } } : null,
+      putObject: async (k: string, b: Uint8Array) => { isolatedObjects.set(k, b); },
+    };
+    const db = mkDb('not_built', null);
+    const res = await serve({ DB: db, RENDER_Q: { send }, PDF_PUBLIC_BASE_URL: 'https://pdf.test' } as any, 'community', 'anaqua', failDeps as any);
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('/poll/community/anaqua');
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'community', slug: 'anaqua' }));
+  });
 });

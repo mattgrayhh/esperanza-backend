@@ -31,6 +31,15 @@ async function loadData(env: Env, type: PdfType, entityId: string, theme: Awaite
   }
 }
 
+function buildingRedirect(env: Env, type: PdfType, slug: string): Response {
+  const base = (env.PDF_PUBLIC_BASE_URL || '').replace(/\/$/, '');
+  return Response.redirect(`${base}/poll/${type}/${encodeURIComponent(slug)}`, 302);
+}
+
+async function enqueue(env: Env, type: PdfType, slug: string, reason: string): Promise<void> {
+  try { await env.RENDER_Q?.send({ type, slug, reason }); } catch { /* best-effort */ }
+}
+
 export async function serve(env: Env, type: PdfType, slug: string, deps: ServeDeps = {}, ctx?: ExecutionContext): Promise<Response> {
   const render = deps.render ?? realRender;
   const putObject = deps.putObject ?? ((k: string, b: Uint8Array) => realPut(env, k, b));
@@ -67,7 +76,8 @@ export async function serve(env: Env, type: PdfType, slug: string, deps: ServeDe
 
   if (!(await acquireLease(env.DB, type, slug))) {
     const r = await stream(); if (r) return r;
-    return new Response('Building…', { status: 202, headers: { 'retry-after': '3' } });
+    await enqueue(env, type, slug, 'cold');
+    return buildingRedirect(env, type, slug);
   }
   try {
     await rebuild(env, type, slug, row.entity_id!, theme, version, render, putObject);
@@ -76,7 +86,8 @@ export async function serve(env: Env, type: PdfType, slug: string, deps: ServeDe
   } catch (e) {
     await markError(env.DB, type, slug, String(e));
     const r = await stream(); if (r) return r;
-    return new Response('Render failed', { status: 502 });
+    await enqueue(env, type, slug, 'cold');
+    return buildingRedirect(env, type, slug);
   }
 }
 
