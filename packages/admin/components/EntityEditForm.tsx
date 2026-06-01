@@ -119,22 +119,13 @@ export interface PromoScopeView {
 }
 export type SideWidget = HoaLinksView | JsonBlocksView | PromoScopeView;
 
-/** Singularize a plural entity label for the "New X" / breadcrumb context.
- *  Handles the -ies → -y case (Communities→Community, Cities→City) and the plain
- *  trailing -s, while leaving already-singular labels untouched. */
-function singularize(label: string): string {
-  if (/ies$/i.test(label)) return label.replace(/ies$/i, 'y');
-  if (/ss$/i.test(label)) return label; // e.g. a hypothetical "Address"
-  if (/s$/i.test(label)) return label.replace(/s$/i, '');
-  return label;
-}
-
 export function EntityEditForm({
   entityKey,
   segment,
   label,
   id,
   displayName,
+  subtitle = '',
   fields,
   publishGate,
   sideWidgets,
@@ -145,6 +136,9 @@ export function EntityEditForm({
   label: string;
   id: string;
   displayName: string;
+  /** Small line under the H1. Empty → omitted (we no longer show the raw `· recXXXX` id;
+   *  communities show the city, testimonials show nothing — feedback [4][35][36]). */
+  subtitle?: string;
   fields: FieldView[];
   publishGate: PublishGateView | null;
   sideWidgets: SideWidget[];
@@ -195,7 +189,6 @@ export function EntityEditForm({
     sections[idx]!.fields.push(f);
   }
 
-  const singular = singularize(label);
   const isError = msg != null && msg.startsWith('Error:');
 
   return (
@@ -214,9 +207,9 @@ export function EntityEditForm({
           <h1 className="font-heading mt-1 truncate text-2xl font-bold text-foreground">
             {displayName}
           </h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {singular} · {id}
-          </p>
+          {subtitle ? (
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</p>
+          ) : null}
         </div>
         <div className="ml-auto flex items-center gap-3">
           {publishGate && !preview ? (

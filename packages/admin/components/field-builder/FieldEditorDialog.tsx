@@ -139,10 +139,8 @@ export function FieldEditorDialog({
           <div className="grid gap-1.5">
             <Label className="font-medium">Label</Label>
             <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Marketing Note" />
-            <p className="text-xs text-muted-foreground">
-              Key: <code className="rounded bg-muted px-1">{keyPreview}</code>
-              {mode === 'edit' ? ' (immutable)' : ' (auto-generated, made unique on save)'}
-            </p>
+            {/* [25] The raw field key is intentionally hidden — non-technical operators
+                only deal in labels; the key is auto-managed. */}
           </div>
 
           {/* Type */}

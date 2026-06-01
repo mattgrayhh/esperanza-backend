@@ -177,6 +177,7 @@ function rowToFieldConfig(row: FieldDefinition, staticField: FieldConfig | undef
     ...(row.help != null ? { help: row.help } : staticField?.help ? { help: staticField.help } : {}),
     ...(row.halfWidth ? { halfWidth: true } : {}),
     ...(row.groupLabel ? { group: row.groupLabel } : staticField?.group ? { group: staticField.group } : {}),
+    visibleInForm: row.visibleInForm,
     ...(syncedColumn ? { syncedColumn } : {}),
     ...(displayColumn ? { displayColumn } : {}),
   };

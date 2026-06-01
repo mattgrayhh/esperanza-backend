@@ -77,9 +77,18 @@ export interface EditView {
   id: string;
   /** Human record name for the detail H1 (e.g. a community's name, a blog's title). */
   displayName: string;
+  /** Small line under the H1 (city for communities; empty otherwise — no raw rec id). */
+  subtitle: string;
   fields: FieldView[];
   publishGate: PublishGateView | null;
   sideWidgets: SideWidget[];
+}
+
+/** [4][35][36] Sub-line under the detail H1. The raw `rec…` id is gone; communities show
+ *  their city/town, everything else shows nothing. */
+export function resolveSubtitle(key: EntityKey, row: Row): string {
+  if (key === 'communities') return firstNonEmpty(row, ['town', 'city_name']);
+  return '';
 }
 
 // =============================================================================
@@ -88,9 +97,22 @@ export interface EditView {
 // snake_case columns (db.select().from(table)); we read the configured display
 // column(s) per entity, with sane fallbacks, and finally to the id.
 // =============================================================================
+function snakeToCamel(k: string): string {
+  return k.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
+}
+
+/** Read a physical snake_case column from a row. Drizzle's bare `select()` keys rows by
+ *  the schema PROPERTY name (camelCase, e.g. `personName`), so a plain `row['person_name']`
+ *  is undefined for every multi-word column — the latent bug flagged in HANDOFF. Read the
+ *  snake key first (raw-SQL rows) then fall back to camelCase (Drizzle rows). */
+function col(row: Row, key: string): unknown {
+  const v = row[key];
+  return v !== undefined ? v : row[snakeToCamel(key)];
+}
+
 function firstNonEmpty(row: Row, cols: string[]): string {
   for (const c of cols) {
-    const v = s(row[c]).trim();
+    const v = s(col(row, c)).trim();
     if (v !== '') return v;
   }
   return '';
@@ -115,12 +137,10 @@ export function resolveDisplayName(key: EntityKey, row: Row, id: string): string
       // images has no `name` column; the operator-facing identity is the plan/caption/slug.
       name = firstNonEmpty(row, ['plan_name', 'caption_clean', 'caption', 'slug']);
       break;
-    case 'testimonials': {
-      const person = firstNonEmpty(row, ['person_name']);
-      const location = firstNonEmpty(row, ['town', 'community_name', 'city_name']);
-      name = [person, location].filter((x) => x !== '').join(', ');
+    case 'testimonials':
+      // [36] H1 is the person's First + Last name only (not "Name, City").
+      name = firstNonEmpty(row, ['person_name']);
       break;
-    }
     case 'qmi':
       // QMI has its own bespoke detail header; this is only a fallback.
       name = firstNonEmpty(row, ['override_address', 'synced_address', 'address']);
@@ -163,6 +183,8 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
   for (const f of cfg.fields) {
     // The publish-gate field is the header toggle, not a form input.
     if (f.bucket === 'publish') continue;
+    // Operator hid this field from the form (Field Builder / feedback [7]-[11]).
+    if (f.visibleInForm === false) continue;
 
     // Custom side widgets (own actions, rendered below the form).
     if (f.widget === 'hoaLinks') {
@@ -219,8 +241,9 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
   }
 
   const displayName = resolveDisplayName(key, row, id);
+  const subtitle = resolveSubtitle(key, row);
 
-  return { def, id, displayName, fields, publishGate, sideWidgets };
+  return { def, id, displayName, subtitle, fields, publishGate, sideWidgets };
 }
 
 /** Resolve a single config field into a FieldView, reading the row + option sets.
@@ -235,7 +258,7 @@ function buildFieldView(
 ): FieldView {
   // Resolve the value: a custom field reads from custom_fields[key]; everything else
   // reads its real column off the row.
-  const fieldValue = f.custom ? s(customValues[f.field]) : s(row[f.field]);
+  const fieldValue = f.custom ? s(customValues[f.field]) : s(col(row, f.field));
 
   // synced (read-only display) — never submitted. Rendered via the read-only 'synced'
   // GenericField variant regardless of the configured widget (text/number/image).
@@ -245,7 +268,7 @@ function buildFieldView(
       field: f.field,
       label: f.label,
       widget: 'synced',
-      value: s(row[f.field]),
+      value: s(col(row, f.field)),
       help: f.help,
       group: f.group,
     };
@@ -263,14 +286,14 @@ function buildFieldView(
           : 'text';
     // For selects, show the synced human NAME (displayColumn) as the helper, not the id.
     const syncedDisplay =
-      variant === 'select' && f.displayColumn ? s(row[f.displayColumn]) : s(row[syncedCol]);
+      variant === 'select' && f.displayColumn ? s(col(row, f.displayColumn)) : s(col(row, syncedCol));
     return {
       kind: 'syncedOverride',
       field: f.field,
       label: f.label,
       variant,
       syncedDisplay,
-      overrideValue: s(row[overrideCol]),
+      overrideValue: s(col(row, overrideCol)),
       step: f.step,
       options: f.selectSource ? optionSets[f.selectSource] : undefined,
       help: f.help,

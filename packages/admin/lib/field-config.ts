@@ -90,6 +90,9 @@ export interface FieldConfig {
   /** [21][5][6] Section grouping (from field_definitions.group_label): fields sharing a
    *  group render together in one section Card; ungrouped fields fall under "Details". */
   group?: string;
+  /** Field Builder visibility: false hides the field from the edit FORM (field_definitions
+   *  .visible_in_form). Defaults true. Lets operators remove fields (feedback [7]-[11]). */
+  visibleInForm?: boolean;
 }
 
 export interface ListColumn {
