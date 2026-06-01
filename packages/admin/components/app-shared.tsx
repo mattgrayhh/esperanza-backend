@@ -12,6 +12,7 @@ import {
 	ImageIcon,
 	FileTextIcon,
 	QuoteIcon,
+	BookOpenIcon,
 	type LucideIcon,
 } from "lucide-react";
 
@@ -93,6 +94,16 @@ const marketingKeys = ENTITY_LIST.filter(
 export const mainNavLinks: SidebarNavGroup[] = [
 	{ label: "Listings", items: listingsKeys.map(entityItem) },
 	{ label: "Marketing", items: marketingKeys.map(entityItem) },
+	{
+		label: "Brochures",
+		items: [
+			{
+				title: "PDFs",
+				path: "/pdfs",
+				icon: <BookOpenIcon />,
+			},
+		],
+	},
 ];
 
 export const navLinks = mainNavLinks;
