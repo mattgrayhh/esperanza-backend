@@ -7,6 +7,8 @@ import { QmiBrochure } from './qmi';
 import type { QmiData } from '../data/qmi';
 import { FloorPlanBrochure } from './floorplan';
 import type { FloorPlanData } from '../data/floorplan';
+import { ListBrochure } from './list';
+import type { ListData } from '../data/list';
 
 export function renderTemplate(type: PdfType, theme: Theme, data: unknown): string {
   switch (type) {
@@ -27,6 +29,8 @@ export function renderTemplate(type: PdfType, theme: Theme, data: unknown): stri
     }
     case 'floorplan':
       return wrapHtml(theme, <FloorPlanBrochure theme={theme} data={data as FloorPlanData} />);
+    case 'list':
+      return wrapHtml(theme, <ListBrochure theme={theme} data={data as ListData} />);
     default:
       throw new Error(`template not implemented for type: ${type}`);
   }
