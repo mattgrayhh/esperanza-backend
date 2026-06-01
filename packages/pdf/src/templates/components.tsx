@@ -52,3 +52,17 @@ export function FloorPlanCard({ plan }: { plan: PlanCardData }) {
     </div>
   );
 }
+
+export interface Stat { value: string; label: string }
+export function StatRow({ stats }: { stats: Stat[] }) {
+  return (
+    <div style={{ background: '#eee', display: 'flex', justifyContent: 'space-around', padding: '12px 6px', borderRadius: 4 }}>
+      {stats.map((s) => (
+        <div key={s.label} style={{ textAlign: 'center' }}>
+          <div style={{ fontFamily: 'var(--pdf-font-heading)', fontSize: 22, color: 'var(--pdf-primary)' }}>{s.value}</div>
+          <div className="pdf-label" style={{ fontSize: 8 }}>{s.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
