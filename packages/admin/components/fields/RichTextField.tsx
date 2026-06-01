@@ -22,7 +22,25 @@ import { useRef, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { BoldIcon, ItalicIcon, LinkIcon, EyeIcon, PencilIcon } from 'lucide-react';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
+  BoldIcon,
+  ItalicIcon,
+  LinkIcon,
+  EyeIcon,
+  PencilIcon,
+  ChevronRightIcon,
+} from 'lucide-react';
+
+/** Plain-text snippet of markdown for the collapsed trigger row. */
+function snippet(md: string): string {
+  const text = md.replace(/[*_#>[\]()`]/g, '').replace(/\s+/g, ' ').trim();
+  return text ? (text.length > 48 ? `${text.slice(0, 48)}…` : text) : 'Empty';
+}
 
 /** Escape HTML so author text can't inject markup; the preview only adds OUR tags. */
 function escapeHtml(s: string): string {
@@ -130,13 +148,30 @@ export function RichTextField({
   }
 
   return (
-    <div className="grid gap-1.5 text-sm">
-      <Label className="font-medium text-foreground">{label}</Label>
-
+    <Collapsible className="group/rt grid gap-1.5 text-sm">
       {/* The column value travels via this hidden input as a markdown string — exactly
-          like the old textarea's name={field}. */}
+          like the old textarea's name={field}. Kept OUTSIDE the panel so it always submits,
+          even while the editor is collapsed (feedback [13]). */}
       <input type="hidden" name={field} value={md} />
 
+      {/* Collapsed trigger: label + a content snippet + chevron. Collapsed by default so the
+          long rich-text sections don't bloat the form. */}
+      <CollapsibleTrigger
+        render={
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-lg border border-input bg-muted/30 px-3 py-2 text-left transition-colors hover:bg-muted/50"
+          />
+        }
+      >
+        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[panel-open]/rt:rotate-90" />
+        <Label className="pointer-events-none font-medium text-foreground">{label}</Label>
+        <span className="ml-auto truncate text-xs text-muted-foreground group-data-[panel-open]/rt:hidden">
+          {snippet(md)}
+        </span>
+      </CollapsibleTrigger>
+
+      <CollapsibleContent className="grid gap-1.5">
       {/* Toolbar */}
       <div className="flex items-center gap-1 rounded-t-lg border border-b-0 border-input bg-muted/40 px-1.5 py-1">
         <Button
@@ -213,6 +248,7 @@ export function RichTextField({
       )}
 
       {help ? <span className="text-xs text-muted-foreground">{help}</span> : null}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

@@ -25,9 +25,30 @@ import { useRef, useState, useTransition } from 'react';
 import { uploadImage } from '../../lib/actions';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { ImageIcon, UploadIcon, RefreshCwIcon, XIcon } from 'lucide-react';
+import { ImageIcon, UploadIcon, RefreshCwIcon, XIcon, FileTextIcon, ExternalLinkIcon } from 'lucide-react';
 
 const AIRTABLE_HOST = 'airtableusercontent.com';
+const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'avif'];
+
+/** True when the url points at a real image (vs a PDF/doc we should show as a file).
+ *  Inspect only the FILENAME's extension — splitting the whole URL on '.' would trip on
+ *  the dots in the host (e.g. pub-….r2.dev), mis-flagging extension-less image keys. */
+function isImageUrl(url: string): boolean {
+  const path = url.split(/[?#]/)[0] ?? '';
+  const file = path.split('/').pop() ?? '';
+  if (!file.includes('.')) return true; // no extension on the key → assume image
+  const ext = file.split('.').pop()!.toLowerCase();
+  return IMAGE_EXTS.includes(ext);
+}
+
+function fileName(url: string): string {
+  try {
+    const last = new URL(url).pathname.split('/').filter(Boolean).pop();
+    return last ? decodeURIComponent(last) : 'file';
+  } catch {
+    return url.split(/[?#]/)[0]?.split('/').pop() || 'file';
+  }
+}
 
 export function ImageUploader({
   entity,
@@ -67,7 +88,13 @@ export function ImageUploader({
   // A previously-stored Airtable attachment URL must never be previewed (it expires and
   // is rejected on save). Treat it as "no usable image" and prompt a re-upload.
   const isAirtable = url.includes(AIRTABLE_HOST);
-  const hasImage = url !== '' && !isAirtable;
+  const hasFile = url !== '' && !isAirtable;
+  // Download/brochure/PDF fields hold documents even when the migrated R2 key has no
+  // extension — detect them by field name so they show a file card, not a broken <img>
+  // (feedback [14]). Plus any url whose filename is a non-image extension.
+  const isDocField = /download|brochure|pdf/i.test(field);
+  const isDoc = hasFile && (isDocField || !isImageUrl(url));
+  const hasImage = hasFile && !isDoc;
 
   return (
     <div className="grid gap-1.5 text-sm">
@@ -76,15 +103,30 @@ export function ImageUploader({
       {/* The column value travels via this HIDDEN input — never a visible URL field. */}
       <input type="hidden" name={field} value={isAirtable ? '' : url} />
 
-      {/* Inline preview (or an empty placeholder) — operators see the image, not a URL. */}
+      {/* Inline preview — image thumbnail, a file card for PDFs/docs, or an empty placeholder. */}
       <div className="relative flex h-32 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/30">
         {hasImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={url} alt={label} className="h-full w-full object-contain" />
+        ) : isDoc ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex flex-col items-center gap-1.5 px-3 text-center text-muted-foreground hover:text-foreground"
+          >
+            <FileTextIcon className="size-7 text-primary" />
+            <span className="max-w-full truncate text-xs font-medium">
+              {fileName(url).includes('.') ? fileName(url) : 'Attached file'}
+            </span>
+            <span className="inline-flex items-center gap-1 text-primary text-xs">
+              View <ExternalLinkIcon className="size-3" />
+            </span>
+          </a>
         ) : (
           <div className="flex flex-col items-center gap-1 text-muted-foreground">
             <ImageIcon className="size-6" />
-            <span className="text-xs">{isAirtable ? 'Stale Airtable image — re-upload' : 'No image yet'}</span>
+            <span className="text-xs">{isAirtable ? 'Stale Airtable image — re-upload' : 'No file yet'}</span>
           </div>
         )}
       </div>
@@ -92,7 +134,7 @@ export function ImageUploader({
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
+        accept="image/*,application/pdf"
         disabled={pending}
         onChange={(e) => onPick(e.target.files?.[0])}
         className="hidden"
@@ -106,10 +148,10 @@ export function ImageUploader({
           disabled={pending}
           onClick={() => fileRef.current?.click()}
         >
-          {hasImage ? <RefreshCwIcon /> : <UploadIcon />}
-          {pending ? 'Uploading…' : hasImage ? 'Replace' : 'Upload'}
+          {hasFile ? <RefreshCwIcon /> : <UploadIcon />}
+          {pending ? 'Uploading…' : hasFile ? 'Replace' : 'Upload'}
         </Button>
-        {hasImage ? (
+        {hasFile ? (
           <Button
             type="button"
             variant="ghost"
