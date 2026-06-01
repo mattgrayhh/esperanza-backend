@@ -67,14 +67,16 @@ export function AppSidebar({
 					<SidebarMenuItem>
 						<DropdownMenu>
 							<DropdownMenuTrigger render={<SidebarMenuButton size="lg" className="gap-2" />}>
-								<LogoIcon className="size-5 shrink-0 text-primary" />
-								<div className="grid flex-1 text-left leading-tight">
-									<span className="truncate font-heading font-semibold text-sm">
-										Esperanza Homes
-									</span>
-									<span className="truncate text-muted-foreground text-xs">Admin</span>
-								</div>
-								<ChevronsUpDownIcon className="ml-auto size-4 text-muted-foreground" />
+								{/* Esperanza Homes wordmark = the current site. Collapses to the
+								    compact LogoIcon when the rail is icon-only. */}
+								{/* eslint-disable-next-line @next/next/no-img-element */}
+								<img
+									src="/esperanza-logo.svg"
+									alt="Esperanza Homes"
+									className="h-9 w-auto shrink-0 group-data-[collapsible=icon]:hidden"
+								/>
+								<LogoIcon className="hidden size-5 shrink-0 text-primary group-data-[collapsible=icon]:block" />
+								<ChevronsUpDownIcon className="ml-auto size-4 shrink-0 text-muted-foreground group-data-[collapsible=icon]:hidden" />
 							</DropdownMenuTrigger>
 							<DropdownMenuContent
 								align="start"
@@ -82,13 +84,14 @@ export function AppSidebar({
 								sideOffset={4}
 							>
 								<DropdownMenuGroup>
-									<DropdownMenuLabel className="text-muted-foreground text-xs">
-										Site
+									{/* Parent org = Rhodes; sites live under it (Esperanza Homes active). */}
+									<DropdownMenuLabel className="flex items-center py-1.5">
+										{/* eslint-disable-next-line @next/next/no-img-element */}
+										<img src="/rhodes-logo.svg" alt="Rhodes" className="h-3.5 w-auto opacity-80" />
 									</DropdownMenuLabel>
 									<DropdownMenuItem className="gap-2" render={<Link href="/" />}>
-										<LogoIcon className="size-4 text-primary" />
 										<span className="flex-1">Esperanza Homes</span>
-										<CheckIcon className="size-4" />
+										<CheckIcon className="size-4 text-primary" />
 									</DropdownMenuItem>
 								</DropdownMenuGroup>
 							</DropdownMenuContent>

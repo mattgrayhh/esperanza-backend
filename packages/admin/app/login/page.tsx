@@ -16,7 +16,6 @@ import { redirect } from 'next/navigation';
 import { AuthError } from 'next-auth';
 import { signIn } from '../../lib/auth';
 import { cn } from '@/lib/utils';
-import { LogoIcon } from '@/components/logo';
 import { Button } from '@/components/ui/button';
 import {
   InputGroup,
@@ -71,9 +70,10 @@ export default async function LoginPage({
         <DecorIcon position="bottom-right" />
 
         <div className="w-full max-w-sm animate-in space-y-8">
-          <div className="flex flex-col space-y-2">
-            <LogoIcon className="h-7 w-7 text-primary" />
-            <h1 className="font-heading font-bold text-2xl tracking-wide">Esperanza Admin</h1>
+          <div className="flex flex-col space-y-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/esperanza-logo.svg" alt="Esperanza Homes" className="h-12 w-auto self-start" />
+            <h1 className="font-heading font-bold text-xl tracking-wide">Admin</h1>
             <p className="text-base text-muted-foreground">Sign in to continue.</p>
           </div>
 
