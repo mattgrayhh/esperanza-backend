@@ -7,7 +7,7 @@ export interface CommunityData { id: string; name: string; citySlug: string; gro
 const num = (v: unknown): number | null => (v == null || v === '' ? null : Number(v));
 
 export async function loadCommunityData(db: D1Database, communityId: string, collectionIntros: Record<string,string> = {}): Promise<CommunityData | null> {
-  const c = await db.prepare(`SELECT id, name, slug FROM communities WHERE id = ?`).bind(communityId).first<any>();
+  const c = await db.prepare(`SELECT c.id, c.name, c.slug, ci.slug AS city_slug FROM communities c LEFT JOIN cities ci ON ci.id = c.city_id WHERE c.id = ?`).bind(communityId).first<any>();
   if (!c) return null;
 
   const res = await db.prepare(
@@ -36,5 +36,5 @@ export async function loadCommunityData(db: D1Database, communityId: string, col
   const groups: CommunityGroup[] = [...byCollection.entries()].map(([collection, plans]) => ({
     collection, intro: collectionIntros[collection] ?? '', plans,
   }));
-  return { id: String(c.id), name: String(c.name ?? ''), citySlug: '', groups };
+  return { id: String(c.id), name: String(c.name ?? ''), citySlug: String(c.city_slug ?? ''), groups };
 }

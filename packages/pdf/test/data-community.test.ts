@@ -26,4 +26,15 @@ describe('loadCommunityData', () => {
     expect(data?.groups[0]!.collection).toBe('Hearth');
     expect(data?.groups[0]!.plans.map(p => p.name)).toEqual(['Hickory']);
   });
+
+  it('groups a floor plan with NULL collection under "Other"', async () => {
+    const raw = db();
+    raw.exec(`INSERT INTO communities (id,name,slug,published) VALUES ('recD','Paloma','paloma',1)`);
+    raw.exec(`INSERT INTO floor_plans (id,name,collection,starting_price,published)
+      VALUES ('fpN','Nogal',NULL,299990,1)`);
+    raw.exec(`INSERT INTO qmi (id,published,synced_community_id,synced_floor_plan_id) VALUES ('q2',1,'recD','fpN')`);
+    const data = await loadCommunityData(d1FromSqlite(raw), 'recD');
+    expect(data?.groups[0]!.collection).toBe('Other');
+    expect(data?.groups[0]!.plans[0]!.name).toBe('Nogal');
+  });
 });
