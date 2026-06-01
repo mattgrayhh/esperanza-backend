@@ -5,17 +5,10 @@ import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { AppBreadcrumbs } from "@/components/app-breadcrumbs";
-import { NavUser, type SignOutAction } from "@/components/nav-user";
 import { AppSearch } from "@/components/app-search";
 import { isActivePath, navLinks } from "@/components/app-shared";
 
-export function AppHeader({
-	email,
-	signOutAction,
-}: {
-	email: string | null;
-	signOutAction: SignOutAction;
-}) {
+export function AppHeader() {
 	const pathname = usePathname();
 	const activeItem = navLinks
 		.flatMap((group) => group.items)
@@ -41,13 +34,9 @@ export function AppHeader({
 				<div className="flex items-center justify-self-center">
 					<AppSearch />
 				</div>
-				<div className="flex items-center gap-3 justify-self-end">
-					<Separator
-						className="h-4 data-[orientation=vertical]:self-center"
-						orientation="vertical"
-					/>
-					<NavUser email={email} signOutAction={signOutAction} />
-				</div>
+				{/* Account moved to the sidebar footer (feedback [13][20]); keep the
+				    right grid cell so the search stays centered. */}
+				<div className="justify-self-end" />
 			</div>
 		</header>
 	);

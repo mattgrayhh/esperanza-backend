@@ -37,7 +37,6 @@ import type { SelectOptionItem } from '../lib/field-config';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import {
   Card,
   CardContent,
@@ -72,6 +71,7 @@ export type FieldView =
       readOnly?: boolean;
       help?: string;
       halfWidth?: boolean;
+      group?: string;
     }
   | {
       kind: 'image';
@@ -79,6 +79,7 @@ export type FieldView =
       label: string;
       value: string;
       help?: string;
+      group?: string;
     }
   | {
       kind: 'syncedOverride';
@@ -91,6 +92,7 @@ export type FieldView =
       options?: SelectOption[];
       help?: string;
       halfWidth?: boolean;
+      group?: string;
     };
 
 export interface PublishGateView {
@@ -164,6 +166,35 @@ export function EntityEditForm({
   const imageFields = fields.filter((f) => f.kind === 'image');
   const mainFields = fields.filter((f) => f.kind !== 'image');
 
+  // [21][5][6] Group the main fields into section cards by their `group`
+  // (field_definitions.group_label). Ungrouped fields fall under "Details".
+  // First-seen order is preserved so the Field Builder's sort drives section order.
+  // An explicit group_label (set in the Field Builder) always wins. Otherwise fall back
+  // to a sensible default so the form reads as form-layout2 sections instead of one slab:
+  // synced/override → "Pricing & specifications"; long copy → "Content"; the rest → "Details".
+  // mainFields excludes the image variant (TS narrows it from the `kind !== 'image'`
+  // predicate); keep that narrowing so the section render can read generic-field props.
+  type MainField = (typeof mainFields)[number];
+  const groupOf = (f: MainField): string => {
+    if (f.group) return f.group;
+    if (f.kind === 'syncedOverride') return 'Pricing & specifications';
+    if (f.kind === 'generic' && f.widget === 'synced') return 'Pricing & specifications';
+    if (f.kind === 'generic' && (f.widget === 'richtext' || f.widget === 'textarea')) return 'Content';
+    return 'Details';
+  };
+  const sections: { label: string; fields: MainField[] }[] = [];
+  const sectionIndex = new Map<string, number>();
+  for (const f of mainFields) {
+    const g = groupOf(f);
+    let idx = sectionIndex.get(g);
+    if (idx === undefined) {
+      idx = sections.length;
+      sectionIndex.set(g, idx);
+      sections.push({ label: g, fields: [] });
+    }
+    sections[idx]!.fields.push(f);
+  }
+
   const singular = singularize(label);
   const isError = msg != null && msg.startsWith('Error:');
 
@@ -214,64 +245,63 @@ export function EntityEditForm({
 
       <form action={onSubmit}>
         <div className={cn('grid gap-5', imageFields.length ? 'lg:grid-cols-[1fr_20rem]' : 'grid-cols-1')}>
-          {/* MAIN column */}
-          <Card>
-            <CardHeader className="border-b">
-              <CardTitle>Fields</CardTitle>
-            </CardHeader>
-            {/* [32] Two-up grid: half-width (short/number) fields take one column;
-                everything else spans both. On mobile it collapses to one column. */}
-            <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {mainFields.map((f) => {
-                const span =
-                  'halfWidth' in f && f.halfWidth ? 'sm:col-span-1' : 'col-span-1 sm:col-span-2';
-                if (f.kind === 'syncedOverride') {
-                  return (
-                    <div key={f.field} className={span}>
-                      <SyncedOverrideField
-                        field={f.field}
-                        label={f.label}
-                        variant={f.variant}
-                        syncedDisplay={f.syncedDisplay}
-                        overrideValue={f.overrideValue}
-                        step={f.step}
-                        options={f.options}
-                        help={f.help}
-                      />
-                    </div>
-                  );
-                }
-                return (
-                  <div key={f.field} className={span}>
-                    <GenericField
-                      field={f.field}
-                      label={f.label}
-                      widget={f.widget}
-                      value={f.value}
-                      step={f.step}
-                      options={f.options}
-                      staticOptions={f.staticOptions}
-                      optionItems={f.optionItems}
-                      readOnly={f.readOnly}
-                      help={f.help}
-                    />
-                  </div>
-                );
-              })}
-              {preview ? null : (
-                <>
-                  <Separator className="col-span-1 sm:col-span-2" />
-                  <Button
-                    type="submit"
-                    disabled={pending}
-                    className="col-span-1 justify-self-start sm:col-span-2"
-                  >
-                    {pending ? 'Saving…' : 'Save'}
-                  </Button>
-                </>
-              )}
-            </CardContent>
-          </Card>
+          {/* MAIN column — one Card per field group (feedback [21][5][6]); ungrouped
+              fields collapse into a single "Details" section. */}
+          <div className="min-w-0 space-y-5">
+            {sections.map((section) => (
+              <Card key={section.label}>
+                <CardHeader className="border-b">
+                  <CardTitle>{section.label}</CardTitle>
+                </CardHeader>
+                {/* [32] Two-up grid: half-width fields take one column; the rest span both. */}
+                <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {section.fields.map((f) => {
+                    const span =
+                      'halfWidth' in f && f.halfWidth ? 'sm:col-span-1' : 'col-span-1 sm:col-span-2';
+                    if (f.kind === 'syncedOverride') {
+                      return (
+                        <div key={f.field} className={span}>
+                          <SyncedOverrideField
+                            field={f.field}
+                            label={f.label}
+                            variant={f.variant}
+                            syncedDisplay={f.syncedDisplay}
+                            overrideValue={f.overrideValue}
+                            step={f.step}
+                            options={f.options}
+                            help={f.help}
+                          />
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={f.field} className={span}>
+                        <GenericField
+                          field={f.field}
+                          label={f.label}
+                          widget={f.widget}
+                          value={f.value}
+                          step={f.step}
+                          options={f.options}
+                          staticOptions={f.staticOptions}
+                          optionItems={f.optionItems}
+                          readOnly={f.readOnly}
+                          help={f.help}
+                        />
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            ))}
+            {preview ? null : (
+              <div className="flex items-center gap-3">
+                <Button type="submit" disabled={pending}>
+                  {pending ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
+            )}
+          </div>
 
           {/* RIGHT RAIL: image widgets (still inside the form → same FormData). */}
           {imageFields.length ? (

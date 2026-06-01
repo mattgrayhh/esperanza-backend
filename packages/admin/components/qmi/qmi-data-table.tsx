@@ -603,7 +603,11 @@ export function QmiDataTable({ rows, truncated }: QmiDataTableProps) {
       </div>
 
       {/* ── table ── */}
-      <div className="overflow-hidden rounded-lg border border-border bg-card">
+      {/* overflow-x-auto (not -hidden) so the bordered card is the horizontal scroll
+          container: on narrow screens the right-hand columns (price/availability/status/
+          actions) stay reachable by swipe instead of being clipped. min-w-0 prevents the
+          card growing past its flex/grid parent (the min-width:auto trap). */}
+      <div className="min-w-0 overflow-x-auto rounded-lg border border-border bg-card">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (

@@ -368,12 +368,15 @@ export function mapFloorPlan(r: AirtableRecord): Row {
     name: str(x['name']),
     slug: str(x['slug']),
     published,
-    collection: str(x['collection']),
+    collection: str(x['collection'] ?? x['Collection']),
     starting_price: num(x['starting_price']),
-    bedroom_min: int(x['bedroom_min'] ?? x['Bedrooms (Min)']),
-    bedroom_max: int(x['bedroom_max'] ?? x['Bedrooms (Max)']),
-    bathroom_min: num(x['bathroom_min'] ?? x['Bathrooms (Min)']),
-    bathroom_max: num(x['bathroom_max'] ?? x['Bathrooms (Max)']),
+    // Live Airtable uses bedroom_count_minimum/maximum + bathroom_count_minimum/maximum
+    // (the bedroom_min / 'Bedrooms (Min)' variants don't exist on this base). Keep the
+    // legacy names first so a future schema rename still resolves.
+    bedroom_min: int(x['bedroom_min'] ?? x['bedroom_count_minimum'] ?? x['Bedrooms (Min)']),
+    bedroom_max: int(x['bedroom_max'] ?? x['bedroom_count_maximum'] ?? x['Bedrooms (Max)']),
+    bathroom_min: num(x['bathroom_min'] ?? x['bathroom_count_minimum'] ?? x['Bathrooms (Min)']),
+    bathroom_max: num(x['bathroom_max'] ?? x['bathroom_count_maximum'] ?? x['Bathrooms (Max)']),
     car_garage_count: int(x['car_garage_count'] ?? x['Garage']),
     stories_count: int(x['stories_count'] ?? x['Stories']),
     living_square_footage: int(x['living_square_footage'] ?? x['Living SqFt']),
@@ -382,8 +385,8 @@ export function mapFloorPlan(r: AirtableRecord): Row {
     hers_score: int(x['hers_score'] ?? x['HERS Score']),
 
     image_url: firstAttachmentUrl(x['image_url (Attachment)']) ?? str(x['image_url']),
-    hero_image_2: firstAttachmentUrl(x['hero_image_2 (Attachment)']) ?? str(x['hero_image_2']),
-    hero_image_3: firstAttachmentUrl(x['hero_image_3 (Attachment)']) ?? str(x['hero_image_3']),
+    hero_image_2: firstAttachmentUrl(x['Hero Image 2']) ?? firstAttachmentUrl(x['hero_image_2 (Attachment)']) ?? str(x['hero_image_2']),
+    hero_image_3: firstAttachmentUrl(x['Hero Image 3']) ?? firstAttachmentUrl(x['hero_image_3 (Attachment)']) ?? str(x['hero_image_3']),
     // FP:* image lookups: store the floor plan's own image attachment as a JSON
     // array of {url,filename}-ONLY elements so v_public_qmi can expose it as the
     // `FP: Image` [{...}] contract shape (migrate-images rewrites item.url to R2).
@@ -425,15 +428,18 @@ export function mapFloorPlan(r: AirtableRecord): Row {
     ),
 
     description: str(x['description'] ?? x['Description']),
-    plan_viewer_url: str(x['plan_viewer_url'] ?? x['Plan Viewer']),
-    virtual_tour_url: str(x['virtual_tour_url'] ?? x['Virtual Tour']),
+    plan_viewer_url: str(x['plan_viewer_url'] ?? x['Plan Viewer URL'] ?? x['Plan Viewer']),
+    virtual_tour_url: str(x['virtual_tour_url'] ?? x['Virtual Tour URL'] ?? x['Virtual Tour']),
     incentive: str(x['incentive'] ?? x['Incentive']),
-    brochure_pdf_url: firstAttachmentUrl(x['Brochure PDF (Attachment)']) ?? str(x['brochure_pdf_url']),
-    brochure_pdf: firstAttachmentUrl(x['Brochure PDF (Attachment)']) ?? str(x['brochure_pdf']),
+    brochure_pdf_url: firstAttachmentUrl(x['Brochure PDF (Attachment)']) ?? str(x['brochure_pdf_url'] ?? x['Brochure PDF URL']),
+    brochure_pdf: firstAttachmentUrl(x['Brochure PDF (Attachment)']) ?? str(x['brochure_pdf'] ?? x['Brochure PDF URL']),
 
-    energy_cost_low: num(x['energy_cost_low']),
-    energy_cost_high: num(x['energy_cost_high']),
-    energy_cost_avg: num(x['energy_cost_avg']),
+    // Live names are 'Energy Cost - Esperanza Monthly' (low) / 'Energy Cost - Pre-Owned
+    // Monthly' (high) / 'Energy Cost Monthly Savings' (avg-slot). The framer-push contract
+    // maps low→esperanza_monthly, high→preowned_monthly, avg→monthly_savings.
+    energy_cost_low: num(x['energy_cost_low'] ?? x['Energy Cost - Esperanza Monthly']),
+    energy_cost_high: num(x['energy_cost_high'] ?? x['Energy Cost - Pre-Owned Monthly']),
+    energy_cost_avg: num(x['energy_cost_avg'] ?? x['Energy Cost Monthly Savings']),
 
     communities: str(x['Community Names']),
     community_count: int(x['Community Count']),

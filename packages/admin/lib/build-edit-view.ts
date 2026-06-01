@@ -247,6 +247,7 @@ function buildFieldView(
       widget: 'synced',
       value: s(row[f.field]),
       help: f.help,
+      group: f.group,
     };
   }
 
@@ -274,13 +275,14 @@ function buildFieldView(
       options: f.selectSource ? optionSets[f.selectSource] : undefined,
       help: f.help,
       halfWidth: f.halfWidth,
+      group: f.group,
     };
   }
 
   // admin: image widget → ImageUploader; else GenericField. (fieldValue resolves the
   // custom_fields value for a builder-added image field, the column otherwise.)
   if (f.widget === 'image') {
-    return { kind: 'image', field: f.field, label: f.label, value: fieldValue, help: f.help };
+    return { kind: 'image', field: f.field, label: f.label, value: fieldValue, help: f.help, group: f.group };
   }
 
   const genericWidget =
@@ -306,6 +308,7 @@ function buildFieldView(
     optionItems: f.optionItems,
     help: f.help,
     halfWidth: f.halfWidth,
+    group: f.group,
   };
 }
 

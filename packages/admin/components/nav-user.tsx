@@ -1,9 +1,7 @@
 "use client";
 
-import {
-	Avatar,
-	AvatarFallback,
-} from "@/components/ui/avatar";
+import Link from "next/link";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -13,7 +11,13 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOutIcon } from "lucide-react";
+import {
+	SidebarMenu,
+	SidebarMenuButton,
+	SidebarMenuItem,
+	useSidebar,
+} from "@/components/ui/sidebar";
+import { ChevronsUpDownIcon, LogOutIcon, SlidersHorizontalIcon } from "lucide-react";
 
 /** Server action wired up by the layout — calls the existing Auth.js signOut. */
 export type SignOutAction = () => void | Promise<void>;
@@ -27,53 +31,88 @@ function initials(email: string): string {
 	return (local.slice(0, 2) || "?").toUpperCase();
 }
 
+/**
+ * Sidebar-footer account control (feedback [13][20] — user + settings live at the
+ * BOTTOM of the sidebar, dashboard-1 style: large avatar + email row that opens an
+ * upward menu with Field settings (admins) + Sign out). Moved here from the top header.
+ */
 export function NavUser({
 	email,
 	signOutAction,
+	isAdmin = false,
 }: {
 	email: string | null;
 	signOutAction: SignOutAction;
+	isAdmin?: boolean;
 }) {
+	const { isMobile } = useSidebar();
 	const display = email ?? "Not signed in";
+	const local = email ? (email.split("@")[0] ?? email) : "Not signed in";
 
 	return (
-		<DropdownMenu>
-			<DropdownMenuTrigger render={<Avatar className="size-8 cursor-pointer" />}>
-				<AvatarFallback>{email ? initials(email) : "?"}</AvatarFallback>
-			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end" className="w-60">
-				<DropdownMenuItem className="flex items-center justify-start gap-2">
-					<DropdownMenuLabel className="flex items-center gap-3">
-						<Avatar className="size-10">
-							<AvatarFallback>{email ? initials(email) : "?"}</AvatarFallback>
+		<SidebarMenu>
+			<SidebarMenuItem>
+				<DropdownMenu>
+					<DropdownMenuTrigger render={<SidebarMenuButton size="lg" />}>
+						<Avatar className="size-8 rounded-lg">
+							<AvatarFallback className="rounded-lg">
+								{email ? initials(email) : "?"}
+							</AvatarFallback>
 						</Avatar>
-						<div className="min-w-0">
-							<span className="font-medium text-foreground">Signed in</span>
-							<br />
-							<div className="max-w-full overflow-hidden overflow-ellipsis whitespace-nowrap text-muted-foreground text-xs">
-								{display}
-							</div>
+						<div className="grid flex-1 text-left text-sm leading-tight">
+							<span className="truncate font-medium capitalize">{local}</span>
+							<span className="truncate text-muted-foreground text-xs">{display}</span>
 						</div>
-					</DropdownMenuLabel>
-				</DropdownMenuItem>
-				<DropdownMenuSeparator />
-				<DropdownMenuGroup>
-					{/* Posts to the Auth.js signOut server action (form so it works
-					    without client-side fetch). */}
-					<form action={signOutAction} className="w-full">
-						<DropdownMenuItem
-							className="w-full cursor-pointer"
-							render={
-								<button className="w-full" type="submit" />
-							}
-							variant="destructive"
-						>
-							<LogOutIcon />
-							Sign out
-						</DropdownMenuItem>
-					</form>
-				</DropdownMenuGroup>
-			</DropdownMenuContent>
-		</DropdownMenu>
+						<ChevronsUpDownIcon className="ml-auto size-4" />
+					</DropdownMenuTrigger>
+					<DropdownMenuContent
+						align="end"
+						className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+						side={isMobile ? "bottom" : "right"}
+						sideOffset={4}
+					>
+						{/* Base UI requires MenuGroupLabel (DropdownMenuLabel) to live inside a
+						    DropdownMenuGroup — omitting the wrapper throws MenuGroupContext-missing. */}
+						<DropdownMenuGroup>
+							<DropdownMenuLabel className="p-0 font-normal">
+								<div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
+									<Avatar className="size-8 rounded-lg">
+										<AvatarFallback className="rounded-lg">
+											{email ? initials(email) : "?"}
+										</AvatarFallback>
+									</Avatar>
+									<div className="grid min-w-0 flex-1 leading-tight">
+										<span className="truncate font-medium text-foreground">Signed in</span>
+										<span className="truncate text-muted-foreground text-xs">{display}</span>
+									</div>
+								</div>
+							</DropdownMenuLabel>
+						</DropdownMenuGroup>
+						<DropdownMenuSeparator />
+						{isAdmin ? (
+							<>
+								<DropdownMenuGroup>
+									<DropdownMenuItem render={<Link href="/settings/fields" />}>
+										<SlidersHorizontalIcon />
+										Field settings
+									</DropdownMenuItem>
+								</DropdownMenuGroup>
+								<DropdownMenuSeparator />
+							</>
+						) : null}
+						<form action={signOutAction} className="w-full">
+							<DropdownMenuItem
+								className="w-full cursor-pointer"
+								render={<button className="w-full" type="submit" />}
+								variant="destructive"
+							>
+								<LogOutIcon />
+								Sign out
+							</DropdownMenuItem>
+						</form>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			</SidebarMenuItem>
+		</SidebarMenu>
 	);
 }

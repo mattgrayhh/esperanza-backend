@@ -329,7 +329,11 @@ export function DataTable({
       </div>
 
       {/* ── table ── */}
-      <div className="overflow-hidden rounded-lg border border-border bg-card">
+      {/* overflow-x-auto (not -hidden) so the bordered card is the horizontal scroll
+          container: on narrow screens the right-hand columns stay reachable by swipe
+          instead of being clipped. min-w-0 prevents the card growing past its flex/grid
+          parent (the min-width:auto trap that otherwise lets the table push the layout). */}
+      <div className="min-w-0 overflow-x-auto rounded-lg border border-border bg-card">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (

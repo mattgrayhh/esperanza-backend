@@ -87,6 +87,9 @@ export interface FieldConfig {
   syncedColumn?: string;
   /** a related *_name column to show as the human label of a synced/override id. */
   displayColumn?: string;
+  /** [21][5][6] Section grouping (from field_definitions.group_label): fields sharing a
+   *  group render together in one section Card; ungrouped fields fall under "Details". */
+  group?: string;
 }
 
 export interface ListColumn {

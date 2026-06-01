@@ -57,7 +57,7 @@ export function AppSearch() {
 			className={cn(
 				"[--app-search-duration:250ms]",
 				"[--app-search-ease:cubic-bezier(0.4,0,0.2,1)]",
-				"group relative z-60! h-8 w-20 md:w-36"
+				"group relative z-60! h-9 w-32 md:w-72 lg:w-96"
 			)}
 			data-state={open ? "open" : "closed"}
 			onBlur={handleBlur}
@@ -67,10 +67,10 @@ export function AppSearch() {
 				className={cn(
 					"absolute top-0 right-0 z-60! w-full overflow-visible p-0",
 					"group-data-[state=open]:-top-1 group-data-[state=open]:-right-2",
-					"w-20 group-data-[state=open]:w-64 md:w-36",
+					"w-32 group-data-[state=open]:w-[32rem] md:w-72 lg:w-96",
 					"group-data-[state=open]:shadow-md",
 					"group-data-[state=closed]:bg-background",
-					"h-8 group-data-[state=open]:h-80",
+					"h-9 group-data-[state=open]:h-80",
 					"border border-transparent group-data-[state=open]:border-border",
 					"transition-all duration-(--app-search-duration) ease-(--app-search-ease)"
 				)}

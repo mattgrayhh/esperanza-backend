@@ -9,7 +9,7 @@ export function ContentBorder() {
 		<div
 			className={cn(
 				"pointer-events-none absolute inset-0 z-50",
-				"mx-auto w-full max-w-[calc(var(--app-wrapper-max-width)+2px)]",
+				"mx-auto w-full max-w-(--app-wrapper-max-width)",
 				open ? "xl:border-x" : "lg:border-x"
 			)}
 		/>
