@@ -222,6 +222,52 @@ async function seedQmi(
 }
 
 // ---------------------------------------------------------------------------
+// Seed lists (aggregate city × kind rows)
+// ---------------------------------------------------------------------------
+interface CitySlugRow {
+  id: string;
+  slug: string;
+}
+
+const LIST_KINDS = ['locations', 'qmis', 'plans'] as const;
+type ListKind = (typeof LIST_KINDS)[number];
+
+async function seedLists(
+  sink: D1Sink,
+  mode: 'local' | 'remote',
+  dryRun: boolean
+): Promise<number> {
+  const cities = queryD1<CitySlugRow>(
+    `SELECT id, slug FROM cities WHERE slug IS NOT NULL`,
+    mode,
+    dryRun
+  );
+
+  let count = 0;
+  for (const city of cities) {
+    const citySlug = city.slug ?? '';
+    if (!citySlug) continue;
+
+    for (const kind of LIST_KINDS) {
+      const type: PdfType = 'list';
+      const slug = slugFor(type, { citySlug, kind });
+      const entityId = `list:${citySlug}:${kind}`;
+      const r2Key = r2KeyFor(type, entityId);
+
+      // INSERT OR IGNORE — idempotent; no URL backfill for list rows.
+      sink.add(
+        `INSERT OR IGNORE INTO pdf_renders (type, slug, entity_id, city_slug, community_id, r2_key, status)` +
+          ` VALUES (${q(type)}, ${q(slug)}, ${q(entityId)}, ${q(citySlug)}, NULL, ${q(r2Key)}, 'not_built')`
+      );
+
+      count++;
+    }
+  }
+
+  return count;
+}
+
+// ---------------------------------------------------------------------------
 // Seed floor_plans
 // ---------------------------------------------------------------------------
 interface FloorPlanRow {
@@ -302,12 +348,18 @@ async function main(): Promise<void> {
   sink.flush();
   console.log(`  → ${n(nFloorPlans)} floor_plans queued`);
 
+  console.log('Seeding lists...');
+  const nLists = await seedLists(sink, mode, dryRun);
+  sink.flush();
+  console.log(`  → ${n(nLists)} lists queued`);
+
   sink.close();
 
   console.log(`\n=== Summary (${dryRun ? 'DRY RUN' : mode}) ===`);
   console.log(`communities : ${n(nCommunities)}`);
   console.log(`qmi         : ${n(nQmi)}`);
   console.log(`floor_plans : ${n(nFloorPlans)}`);
+  console.log(`lists       : ${n(nLists)}`);
   console.log(`statements  : ${n(sink.executed)}`);
   console.log('\nDone.');
 }
