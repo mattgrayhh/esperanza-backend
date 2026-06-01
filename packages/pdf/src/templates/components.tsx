@@ -66,3 +66,28 @@ export function StatRow({ stats }: { stats: Stat[] }) {
     </div>
   );
 }
+
+export function CoverBand({ theme, title, subtitle }: { theme: Theme; title: string; subtitle?: string }) {
+  return (
+    <div className="pdf-band" style={{ padding: '28px 24px', textAlign: 'center', borderRadius: 4,
+      backgroundImage: theme.brand.headerPatternUrl ? `url(${theme.brand.headerPatternUrl})` : undefined, backgroundSize: 'cover' }}>
+      <div style={{ fontFamily: 'var(--pdf-font-heading)', fontSize: 34 }}>{title}</div>
+      {subtitle ? <div style={{ fontSize: 13, opacity: 0.9 }}>{subtitle}</div> : null}
+    </div>
+  );
+}
+
+export function ImageGrid({ cols, items }: { cols: number; items: { label?: string; url: string }[] }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols},1fr)`, gap: 14 }}>
+      {items.map((it, i) => (
+        <div key={i} style={{ breakInside: 'avoid' }}>
+          <div style={{ height: 150, background: '#eef0ee', borderRadius: 3, overflow: 'hidden' }}>
+            {it.url ? <img src={it.url} alt={it.label ?? ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+          </div>
+          {it.label ? <div className="pdf-band" style={{ textAlign: 'center', padding: 6, fontSize: 11 }}>{it.label}</div> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
