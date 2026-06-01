@@ -14,7 +14,6 @@ import {
 	SidebarMenu,
 	SidebarMenuButton,
 	SidebarMenuItem,
-	SidebarTrigger,
 } from "@/components/ui/sidebar";
 import {
 	DropdownMenu,
@@ -62,7 +61,9 @@ export function AppSidebar({
 		>
 			{/* Site selector at the TOP (feedback [20], dashboard-1 pattern). One site today;
 			    the dropdown is where additional Rhodes-subsidiary sites would switch in. */}
-			<SidebarHeader className="relative gap-0 border-b p-2">
+			{/* Fixed to the top-bar height so the sidebar header and AppHeader borders line
+			    up (feedback [5]). */}
+			<SidebarHeader className="relative h-(--app-header-height) justify-center gap-0 border-b px-2">
 				<SidebarMenu>
 					<SidebarMenuItem>
 						<DropdownMenu>
@@ -98,12 +99,9 @@ export function AppSidebar({
 						</DropdownMenu>
 					</SidebarMenuItem>
 				</SidebarMenu>
-				<SidebarTrigger
-					className={cn(
-						"absolute top-3.5 right-3 z-60! md:hidden lg:flex",
-						"transition-[right] duration-(--sidebar-animation-duration) ease-(--sidebar-animation-ease)"
-					)}
-				/>
+				{/* No absolute SidebarTrigger here — it overlapped the selector's click target
+				    (feedback [1]). Desktop collapse is handled by CustomSidebarRail; mobile by
+				    the trigger in AppHeader. */}
 			</SidebarHeader>
 			<SidebarContent>
 				{mainNavLinks.map((group) => (

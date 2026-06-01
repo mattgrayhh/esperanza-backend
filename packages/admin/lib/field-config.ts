@@ -460,7 +460,7 @@ const floor_plans: EntityFieldConfig = {
     { field: 'description', label: 'Description (md)', widget: 'richtext', bucket: 'admin' },
     { field: 'plan_viewer_url', label: 'Plan Viewer URL', widget: 'text', bucket: 'admin' },
     { field: 'virtual_tour_url', label: 'Virtual Tour URL', widget: 'text', bucket: 'admin' },
-    { field: 'brochure_pdf_url', label: 'Brochure PDF URL', widget: 'text', bucket: 'admin', help: 'String, never a link widget.' },
+    { field: 'brochure_pdf_url', label: 'Brochure PDF', widget: 'text', bucket: 'admin' },
     { field: 'brochure_pdf', label: 'Brochure PDF', widget: 'text', bucket: 'admin' },
     // [34] incentive removed from the admin form (D1 column + sync unchanged).
     { field: 'energy_cost_low', label: 'Energy Cost Low', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },

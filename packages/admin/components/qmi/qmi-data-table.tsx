@@ -268,11 +268,11 @@ function StatusCell({ row }: { row: QmiRow }) {
       <span
         className={cn(
           "size-2 shrink-0 rounded-full",
-          row.published ? "bg-status-published" : "bg-status-draft",
+          row.published ? "bg-status-published" : "bg-muted-foreground/25",
         )}
         aria-hidden
       />
-      <span className={cn("text-sm", row.published ? "text-foreground" : "text-muted-foreground")}>
+      <span className={cn("text-sm", row.published ? "text-foreground" : "text-muted-foreground/70")}>
         {row.published ? "Published" : "Draft"}
       </span>
     </span>

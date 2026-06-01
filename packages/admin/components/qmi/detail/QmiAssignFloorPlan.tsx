@@ -71,8 +71,9 @@ export function QmiAssignFloorPlan({
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
-          This home arrived from Snowflake without a floor plan. Assigning one auto-fills beds,
-          baths, square footage, images, description, and the base price from the plan.
+          This home doesn&apos;t have a floor plan yet. Assign one and it auto-fills the beds,
+          baths, square footage, images, description, and base price from the plan — give it a
+          few minutes to sync through.
         </p>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Select value={value} onValueChange={(v) => setValue((v as string) ?? '')}>

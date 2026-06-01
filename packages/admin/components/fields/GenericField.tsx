@@ -166,8 +166,17 @@ function SelectField({
   options?: SelectOption[];
   staticOptions?: string[];
 }) {
+  // base-ui Select.Value renders the raw VALUE unless Root gets an `items` map; for
+  // id-pickers (value=recXXXX, label=name) that map is what shows the name, not the id
+  // (feedback [12]).
+  const items: Record<string, string> = { '': '(none)' };
+  if (staticOptions) {
+    for (const o of staticOptions) if (o !== '') items[o] = o;
+  } else {
+    for (const o of options ?? []) items[o.id] = o.label;
+  }
   return (
-    <Select name={field} defaultValue={value}>
+    <Select name={field} defaultValue={value} items={items}>
       <SelectTrigger className={cn('w-full')}>
         <SelectValue placeholder="(none)" />
       </SelectTrigger>

@@ -26,6 +26,22 @@ import { loadOptions, type SelectOption } from './select-options';
 
 type Row = Record<string, unknown>;
 
+/**
+ * Drizzle's bare `select()` keys rows by the schema PROPERTY name (camelCase, e.g.
+ * `syncedFloorPlanId`, `fpImage`), but this builder reads PHYSICAL snake_case columns
+ * (`synced_floor_plan_id`, `fp_image`). Without this, every snake_case read is undefined —
+ * the detail treats assigned homes as unassigned and the gallery comes up empty
+ * (feedback [15][16]). Add snake_case aliases alongside the camelCase keys.
+ */
+function snakeRow(row: Row): Row {
+  const out: Row = { ...row };
+  for (const [k, v] of Object.entries(row)) {
+    const snake = k.replace(/[A-Z0-9]+/g, (m) => `_${m.toLowerCase()}`);
+    if (snake !== k && !(snake in out)) out[snake] = v;
+  }
+  return out;
+}
+
 function s(v: unknown): string {
   return v == null ? '' : String(v);
 }
@@ -184,7 +200,7 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
 
   const rows = (await db.select().from(qmi).where(eq(qmi.id, id)).limit(1)) as Row[];
   if (rows.length === 0) return null;
-  const r = rows[0]!;
+  const r = snakeRow(rows[0]!);
 
   // Effective (COALESCE override/synced) ids for the joins — exactly like v_public_qmi.
   const effFloorPlanId = s(effectiveValue(r.synced_floor_plan_id, r.override_floor_plan_id));
@@ -199,7 +215,7 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
       .from(floorPlans)
       .where(eq(floorPlans.id, effFloorPlanId))
       .limit(1)) as Row[];
-    fp = fpRows[0] ?? null;
+    fp = fpRows[0] ? snakeRow(fpRows[0]) : null;
   }
 
   // Resolve community / city NAMES — prefer the joined table, fall back to the synced
