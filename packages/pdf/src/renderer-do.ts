@@ -1,22 +1,60 @@
 import puppeteer, { type Browser } from '@cloudflare/puppeteer';
 import type { Env } from './env';
 
-const KEEP_ALIVE_MS = 60_000; // keep the browser warm ~60s after the last render, then close
+// Browser stays alive server-side for this long after we disconnect (or the DO is evicted),
+// so the NEXT render reconnects to it instead of launching a new one. Launching is the only
+// rate-limited operation (allowedBrowserAcquisitions); reconnecting is free. 3 min comfortably
+// bridges gaps within a bulk drain while capping idle browser-time cost. Platform max is 600s.
+const KEEP_ALIVE_MS = 180_000;
 
-interface RenderReq { html: string; marginsMm?: { top: number; right: number; bottom: number; left: number } }
+interface RenderReq {
+  html: string;
+  marginsMm?: { top: number; right: number; bottom: number; left: number };
+}
 
-/** Durable Object that owns a single reused browser. Renders go through newPage() on the
- *  warm browser → no per-render launch → no new-instance rate limit. Closes on idle via alarm. */
+/**
+ * Durable Object that owns ONE browser and reuses it across every render.
+ *
+ * A DO id maps to a single global instance, so all renders funnel through this one object.
+ * Three things keep us under Browser Rendering's new-instance rate limit:
+ *   1. An in-flight acquisition mutex (`acquiring`) collapses concurrent renders into a SINGLE
+ *      launch/reconnect — without it, a burst of renders each sees "no browser" and all call
+ *      launch() at once, blowing the per-moment acquisition allowance (the 429 we hit).
+ *   2. launch({ keep_alive }) leaves the browser running after we disconnect, so it survives
+ *      DO eviction between renders.
+ *   3. Before launching we look for an existing free session and reconnect to it (not rate-limited).
+ * Net effect: at most one acquisition per ~3-min browser lifetime; everything else reuses/reconnects.
+ */
 export class BrowserRenderer {
   private browser?: Browser;
-  private keepAliveUntil = 0;
+  private acquiring?: Promise<Browser>;
+
   constructor(private state: DurableObjectState, private env: Env) {}
 
-  private async ensureBrowser(): Promise<Browser> {
-    if (!this.browser || !this.browser.isConnected()) {
-      this.browser = await puppeteer.launch(this.env.BROWSER);
+  /** Reconnect to a live session if one is free, else launch (the rate-limited path). */
+  private async acquire(): Promise<Browser> {
+    const sessions = await puppeteer.sessions(this.env.BROWSER).catch(() => []);
+    const free = sessions.find((s) => !s.connectionId);
+    if (free) {
+      console.log(`[DO] reconnect session ${free.sessionId} (${sessions.length} live)`);
+      return puppeteer.connect(this.env.BROWSER, free.sessionId);
     }
-    return this.browser;
+    const lim = await puppeteer.limits(this.env.BROWSER).catch(() => null);
+    console.log(`[DO] launch new browser (0 free of ${sessions.length}); limits=${JSON.stringify(lim)}`);
+    return puppeteer.launch(this.env.BROWSER, { keep_alive: KEEP_ALIVE_MS });
+  }
+
+  /** Return a connected browser, acquiring at most once even under concurrent calls. */
+  private async ensureBrowser(): Promise<Browser> {
+    if (this.browser?.isConnected()) return this.browser;
+    if (!this.acquiring) {
+      this.acquiring = this.acquire().finally(() => {
+        this.acquiring = undefined;
+      });
+    }
+    const b = await this.acquiring;
+    this.browser = b;
+    return b;
   }
 
   async fetch(req: Request): Promise<Response> {
@@ -28,25 +66,14 @@ export class BrowserRenderer {
       await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30_000 });
       await page.evaluate(() => (document as any).fonts?.ready).catch(() => {});
       const pdf = await page.pdf({
-        format: 'Letter', printBackground: true,
+        format: 'Letter',
+        printBackground: true,
         margin: { top: `${m.top}mm`, right: `${m.right}mm`, bottom: `${m.bottom}mm`, left: `${m.left}mm` },
       });
-      // keep warm + ensure an alarm is scheduled to eventually close on idle
-      this.keepAliveUntil = Date.now() + KEEP_ALIVE_MS;
-      if ((await this.state.storage.getAlarm()) == null) {
-        await this.state.storage.setAlarm(Date.now() + KEEP_ALIVE_MS);
-      }
+      console.log(`[DO] rendered ${pdf.byteLength}b; connected=${browser.isConnected()}`);
       return new Response(pdf as unknown as BodyInit, { headers: { 'content-type': 'application/pdf' } });
     } finally {
       await page.close().catch(() => {});
     }
-  }
-
-  async alarm(): Promise<void> {
-    if (Date.now() < this.keepAliveUntil) {
-      await this.state.storage.setAlarm(this.keepAliveUntil + 1000); // still active → reschedule
-      return;
-    }
-    if (this.browser) { try { await this.browser.close(); } catch {} this.browser = undefined; }
   }
 }
