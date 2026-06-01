@@ -1,0 +1,20 @@
+name = "esperanza-pdf"
+main = "src/index.ts"
+compatibility_date = "2025-05-20"
+compatibility_flags = ["nodejs_compat"]
+
+browser = { binding = "BROWSER" }
+
+[[d1_databases]]
+binding = "DB"
+database_name = "esperanza"
+database_id = "023ea995-0abc-4165-a1e1-6e2373fc43e9"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "esperanza-cms"
+
+[vars]
+IMAGES_PUBLIC_BASE_URL = "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev"
+PDF_PUBLIC_BASE_URL = "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev"
+ADMIN_ORIGIN = "https://esperanza-admin.round-base-ed8c.workers.dev"
