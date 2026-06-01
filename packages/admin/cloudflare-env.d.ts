@@ -40,6 +40,7 @@ declare global {
 
     // --- vars ---
     IMAGES_PUBLIC_BASE_URL: string;
+    PDF_PUBLIC_BASE_URL?: string;
 
     // --- secrets (wrangler secret put) ---
     /** Auth.js v5 JWT signing secret. REQUIRED in production. */

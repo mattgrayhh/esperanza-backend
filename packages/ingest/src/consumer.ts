@@ -105,6 +105,8 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage) {
       .bind(...vals)
       .run();
     result.created = 1;
+    // TODO(pdf): call ensurePdfRender(q, r, 'qmi', id, baseUrl) here on synced create.
+    // Wire at cutover: add PDF_PUBLIC_BASE_URL to ConsumerEnv + thread baseUrl from env.
     return result;
   }
 

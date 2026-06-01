@@ -44,6 +44,7 @@ import {
 } from '@esperanza/db/override';
 import type { PromoTargetType } from '@esperanza/db/promo';
 import { affectedRenderKeys } from '@esperanza/db/pdf-invalidate';
+import { ensurePdfRender } from '@esperanza/db/pdf-ensure';
 import { getDb, idColumn, type Db } from './db';
 import { getCurrentUser, isAdmin } from './auth';
 import { getEntity, isQmiOverrideField, type EntityKey } from './entities';
@@ -107,6 +108,7 @@ async function postWrite(
     const d1 = env.DB as unknown as D1Database | undefined;
     if (!d1) return; // no D1 binding (e.g. unit-test mock) — nothing to invalidate
     const q = async (sql: string, binds: unknown[]) => ((await d1.prepare(sql).bind(...(binds as any[])).all()).results ?? []) as any[];
+    const r = async (sql: string, binds: unknown[]) => { await d1.prepare(sql).bind(...(binds as any[])).run(); };
     const keys = await affectedRenderKeys(q, collection, id);
     for (const k of keys) {
       if (k.type === 'list') {
@@ -114,6 +116,12 @@ async function postWrite(
       } else {
         await d1.prepare(`UPDATE pdf_renders SET status='stale' WHERE type=? AND entity_id=? AND status<>'rendering'`).bind(k.type, k.entityId).run();
       }
+    }
+    // Idempotently register a pdf_renders row + backfill the URL for newly-created /
+    // synced entities so new records self-register without a manual seed run.
+    const baseUrl = (env as any).PDF_PUBLIC_BASE_URL || (env as any).IMAGES_PUBLIC_BASE_URL || '';
+    if (baseUrl) {
+      await ensurePdfRender(q, r, collection, id, baseUrl);
     }
   } catch (e) {
     console.error('[pdf-invalidate]', e);

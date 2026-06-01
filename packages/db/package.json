@@ -10,7 +10,8 @@
     ".": "./schema.ts",
     "./promo": "./lib/promo.ts",
     "./override": "./lib/override.ts",
-    "./pdf-invalidate": "./lib/pdf-invalidate.ts"
+    "./pdf-invalidate": "./lib/pdf-invalidate.ts",
+    "./pdf-ensure": "./lib/pdf-ensure.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",
