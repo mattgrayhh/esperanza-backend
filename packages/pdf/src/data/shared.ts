@@ -3,5 +3,10 @@ export const money = (n: number | null | undefined): string =>
 
 export function renditionUrl(originalUrl: string, variant: 'w1200' | 'w2000'): string {
   if (!originalUrl) return '';
-  return originalUrl.replace(/(\.[a-z]+)(\?.*)?$/i, `-${variant}$1$2`);
+  // strip query string for extension detection
+  const hasExt = /\.[a-z0-9]+(\?.*)?$/i.test(originalUrl);
+  if (hasExt) return originalUrl.replace(/(\.[a-z0-9]+)(\?.*)?$/i, `-${variant}$1$2`);
+  // extensionless (common for R2 attachment keys): append suffix, preserving query string
+  const m = originalUrl.match(/^([^?]*)(\?.*)?$/);
+  return `${m![1]}-${variant}${m![2] ?? ''}`;
 }

@@ -1,220 +1,182 @@
 #!/usr/bin/env -S npx tsx
 // =============================================================================
-// esperanza-cf — PDF platform Task 1.12: derive-renditions.
+// esperanza-cf — PDF platform Task 1.12: derive-renditions (D1-driven).
 //
-// For each source image in the R2 bucket under the floor-plan and community
-// image prefixes, generate -w1200 and -w2000 JPEG variants via sharp and upload
-// them so the brochure templates can embed web-optimised images.
+// Enumerates source image URLs from D1 (via `wrangler d1 execute --remote --json`)
+// rather than listing R2 via the S3 API. No R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY
+// required — wrangler auth is sufficient.
 //
-// This is the 35 MB → <5 MB lever described in the PDF platform design.
-//
-// LISTING: uses the Cloudflare R2 S3-compatible ListObjectsV2 XML API.
-// DOWNLOAD: `wrangler r2 object get <bucket>/<key> --pipe` → stdout → sharp.
-// UPLOAD: `wrangler r2 object put <bucket>/<key> --file=<tmp>` (same pattern as
-//         packages/db/scripts/lib/r2.ts).
-//
-// Required env vars for remote operation:
-//   CLOUDFLARE_ACCOUNT_ID  — your CF account (used for the S3-compat endpoint)
-//   R2_ACCESS_KEY_ID       — R2 API token access-key-id (S3-compat)
-//   R2_SECRET_ACCESS_KEY   — R2 API token secret (S3-compat)
+// For each original public URL:
+//   1. Compute the two rendition URLs (w1200, w2000) using the same logic as
+//      renditionUrl() in src/data/shared.ts.
+//   2. Derive the R2 object key by stripping the IMAGES_PUBLIC_BASE_URL prefix.
+//   3. Idempotency: HEAD the rendition public URL — skip if 200.
+//   4. Fetch the original via https, resize with sharp, upload via wrangler r2 put.
 //
 // USAGE (from packages/pdf):
 //   npx tsx scripts/derive-renditions.ts [options]
-//   --local | --remote          target R2 (default local)
-//   --dry-run                   list what WOULD be produced; no downloads/uploads
-//   --prefix=floor_plans/       process only this R2 prefix (repeatable or comma-sep)
-//   --bucket=esperanza-cms      override bucket name (default esperanza-cms)
-//
-// Default prefixes (image keys the PDF templates reference):
-//   floor_plans/   — floor-plan images (cover + elevations + gallery)
-//   communities/   — community images (featured, gallery, logo)
+//   --type=floorplan|qmi|community|all    which table(s) to enumerate (default: floorplan)
+//   --limit=N                             cap the number of source images processed
+//   --dry-run                             print what would be done; D1 enumeration runs,
+//                                         no fetches or uploads
+//   --remote                              target remote D1 + wrangler uploads (default: remote)
+//   --local                               target local D1 (for dev/test — images fetched from
+//                                         public URLs regardless; wrangler uploads go local)
 // =============================================================================
 
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { writeFileSync, mkdtempSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import sharp from 'sharp';
 import { parseArgs, getMode, n, bytesHuman } from '../../db/scripts/lib/cli.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// Run wrangler from packages/pdf (has the IMAGES r2_bucket binding in wrangler.toml).
+// Run wrangler from packages/pdf (has the IMAGES r2_bucket + DB d1_database bindings).
 const PKG_PDF_DIR = join(__dirname, '..');
+// Run wrangler for D1 reads from packages/db (also has the DB binding and migrations).
+const PKG_DB_DIR = join(__dirname, '..', '..', 'db');
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 const DEFAULT_BUCKET = 'esperanza-cms';
-const DEFAULT_PREFIXES = ['floor_plans/', 'communities/'];
+const DEFAULT_PUBLIC_BASE =
+  process.env['IMAGES_PUBLIC_BASE_URL'] ??
+  'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev';
+
 const VARIANTS: Array<{ name: 'w1200' | 'w2000'; width: number }> = [
   { name: 'w1200', width: 1200 },
   { name: 'w2000', width: 2000 },
 ];
 
-/** Regex to detect keys that are already a rendition (skip them as sources). */
-const RENDITION_RE = /-w(1200|2000)\.[a-z]+$/i;
-
-/** Detect existing rendition variant suffix in a key. */
-function isRendition(key: string): boolean {
-  return RENDITION_RE.test(key);
+// ---------------------------------------------------------------------------
+// renditionUrl logic (mirrors src/data/shared.ts — kept local so the script
+// is self-contained and doesn't pull in the worker-side module graph)
+// ---------------------------------------------------------------------------
+function renditionUrl(originalUrl: string, variant: 'w1200' | 'w2000'): string {
+  if (!originalUrl) return '';
+  const hasExt = /\.[a-z0-9]+(\?.*)?$/i.test(originalUrl);
+  if (hasExt) return originalUrl.replace(/(\.[a-z0-9]+)(\?.*)?$/i, `-${variant}$1$2`);
+  const m = originalUrl.match(/^([^?]*)(\?.*)?$/);
+  return `${m![1]}-${variant}${m![2] ?? ''}`;
 }
 
-/** Build the rendition key for a source key + variant. */
-function renditionKey(sourceKey: string, variant: 'w1200' | 'w2000'): string {
-  return sourceKey.replace(/(\.[a-z]+)$/i, `-${variant}$1`);
+/** Derive the R2 object key from a public URL by stripping the base prefix. */
+function publicUrlToKey(publicUrl: string, publicBase: string): string {
+  const base = publicBase.endsWith('/') ? publicBase : publicBase + '/';
+  if (publicUrl.startsWith(base)) return publicUrl.slice(base.length);
+  // Fallback: strip leading slash from the URL path
+  const u = new URL(publicUrl);
+  return u.pathname.replace(/^\//, '');
 }
 
 // ---------------------------------------------------------------------------
-// S3-compatible list (Cloudflare R2)
+// D1 enumeration via wrangler d1 execute --json
 // ---------------------------------------------------------------------------
 
-/** Minimal parsed S3 list object. */
-interface S3Object {
-  key: string;
-  size: number;
+interface D1Row {
+  image_url?: string | null;
+  synced_image_url?: string | null;
+  featured_image_url?: string | null;
 }
 
 /**
- * Build an AWS Signature V4 signed URL for the R2 S3-compat ListObjectsV2.
- * Uses only stdlib — no aws-sdk dep — to stay consistent with the rest of the
- * scripts which avoid heavy deps.
+ * Run a SQL query against D1 via wrangler and return parsed rows.
+ * wrangler d1 execute --json returns an array of result sets:
+ *   [{ results: [{...}, ...], success: true }]
  */
-import { createHmac, createHash } from 'node:crypto';
+function d1Query(sql: string, mode: 'local' | 'remote'): D1Row[] {
+  const args = [
+    'wrangler',
+    'd1',
+    'execute',
+    'esperanza',
+    mode === 'remote' ? '--remote' : '--local',
+    '--json',
+    '--command',
+    sql,
+  ];
 
-function sha256Hex(data: string | Buffer): string {
-  return createHash('sha256').update(data).digest('hex');
-}
-
-function hmacSha256(key: Buffer | string, data: string): Buffer {
-  return createHmac('sha256', key).update(data, 'utf8').digest();
-}
-
-function deriveSigningKey(secretKey: string, dateStamp: string, region: string, service: string): Buffer {
-  const kDate = hmacSha256(`AWS4${secretKey}`, dateStamp);
-  const kRegion = hmacSha256(kDate, region);
-  const kService = hmacSha256(kRegion, service);
-  return hmacSha256(kService, 'aws4_request');
-}
-
-interface ListR2Opts {
-  accountId: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  bucket: string;
-  prefix: string;
-}
-
-async function listR2Objects(opts: ListR2Opts): Promise<S3Object[]> {
-  const endpoint = `https://${opts.accountId}.r2.cloudflarestorage.com`;
-  const region = 'auto';
-  const service = 's3';
-
-  const objects: S3Object[] = [];
-  let continuationToken: string | null = null;
-
-  do {
-    const url = new URL(`${endpoint}/${opts.bucket}`);
-    url.searchParams.set('list-type', '2');
-    url.searchParams.set('prefix', opts.prefix);
-    url.searchParams.set('max-keys', '1000');
-    if (continuationToken) url.searchParams.set('continuation-token', continuationToken);
-
-    // Sort query params for canonical request.
-    const sortedParams = [...url.searchParams.entries()].sort(([a], [b]) => a.localeCompare(b));
-    const canonicalQueryString = sortedParams
-      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-      .join('&');
-
-    const now = new Date();
-    const amzDate = now.toISOString().replace(/[:\-]|\.\d{3}/g, '').slice(0, 15) + 'Z';
-    const dateStamp = amzDate.slice(0, 8);
-    const host = `${opts.accountId}.r2.cloudflarestorage.com`;
-
-    const canonicalHeaders = `host:${host}\nx-amz-date:${amzDate}\n`;
-    const signedHeaders = 'host;x-amz-date';
-    const payloadHash = sha256Hex('');
-    const canonicalUri = `/${opts.bucket}/`;
-
-    const canonicalRequest = [
-      'GET',
-      canonicalUri,
-      canonicalQueryString,
-      canonicalHeaders,
-      signedHeaders,
-      payloadHash,
-    ].join('\n');
-
-    const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
-    const stringToSign = [
-      'AWS4-HMAC-SHA256',
-      amzDate,
-      credentialScope,
-      sha256Hex(canonicalRequest),
-    ].join('\n');
-
-    const signingKey = deriveSigningKey(opts.secretAccessKey, dateStamp, region, service);
-    const signature = createHmac('sha256', signingKey).update(stringToSign).digest('hex');
-
-    const authHeader =
-      `AWS4-HMAC-SHA256 Credential=${opts.accessKeyId}/${credentialScope}, ` +
-      `SignedHeaders=${signedHeaders}, Signature=${signature}`;
-
-    // Use the URL with sorted params for the actual fetch.
-    const fetchUrl = `${endpoint}/${opts.bucket}/?${canonicalQueryString}`;
-
-    const res = await fetch(fetchUrl, {
-      headers: {
-        'x-amz-date': amzDate,
-        Authorization: authHeader,
-      },
+  let stdout: Buffer;
+  try {
+    stdout = execFileSync('npx', args, {
+      cwd: PKG_DB_DIR,
+      env: process.env,
+      maxBuffer: 10 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
+  } catch (e: unknown) {
+    const err = e as { stdout?: Buffer; stderr?: Buffer; message?: string };
+    const stderr = err.stderr?.toString() ?? '';
+    const out = err.stdout?.toString() ?? '';
+    throw new Error(
+      `wrangler d1 execute failed:\nstderr: ${stderr.slice(0, 400)}\nstdout: ${out.slice(0, 400)}`
+    );
+  }
 
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`R2 ListObjectsV2 failed ${res.status}: ${body.slice(0, 400)}`);
+  const raw = stdout.toString().trim();
+  // wrangler sometimes emits ANSI codes or warning lines before the JSON.
+  // Find the first '[' to locate the JSON array.
+  const jsonStart = raw.indexOf('[');
+  if (jsonStart < 0) {
+    throw new Error(`d1Query: no JSON array in wrangler output:\n${raw.slice(0, 400)}`);
+  }
+  const parsed = JSON.parse(raw.slice(jsonStart)) as Array<{ results: D1Row[] }>;
+  return parsed[0]?.results ?? [];
+}
+
+/** Collect the distinct non-empty source image URLs for the given type. */
+function enumerateSourceUrls(type: 'floorplan' | 'qmi' | 'community' | 'all', mode: 'local' | 'remote'): string[] {
+  const urls = new Set<string>();
+
+  const addRows = (rows: D1Row[], primaryCol: keyof D1Row, fallbackCol?: keyof D1Row) => {
+    for (const row of rows) {
+      const primary = row[primaryCol];
+      const fallback = fallbackCol ? row[fallbackCol] : null;
+      const url = (primary ?? fallback ?? '').toString().trim();
+      if (url) urls.add(url);
     }
+  };
 
-    const xml = await res.text();
+  if (type === 'floorplan' || type === 'all') {
+    const rows = d1Query(
+      'SELECT image_url, synced_image_url FROM floor_plans WHERE published=1 AND (image_url IS NOT NULL OR synced_image_url IS NOT NULL)',
+      mode
+    );
+    addRows(rows, 'image_url', 'synced_image_url');
+  }
 
-    // Parse keys + sizes from the XML (minimal parser — no deps).
-    const keyMatches = xml.matchAll(/<Key>([^<]+)<\/Key>/g);
-    const sizeMatches = xml.matchAll(/<Size>([^<]+)<\/Size>/g);
-    const keys = [...keyMatches].map((m) => m[1] ?? '');
-    const sizes = [...sizeMatches].map((m) => Number(m[1] ?? '0'));
-    for (let i = 0; i < keys.length; i++) {
-      objects.push({ key: keys[i] ?? '', size: sizes[i] ?? 0 });
-    }
+  if (type === 'qmi' || type === 'all') {
+    const rows = d1Query(
+      'SELECT image_url FROM qmi WHERE published=1 AND image_url IS NOT NULL',
+      mode
+    );
+    addRows(rows, 'image_url');
+  }
 
-    const nextToken = xml.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/)?.[1];
-    continuationToken = nextToken ?? null;
-  } while (continuationToken);
+  if (type === 'community' || type === 'all') {
+    const rows = d1Query(
+      'SELECT featured_image_url FROM communities WHERE featured_image_url IS NOT NULL',
+      mode
+    );
+    addRows(rows, 'featured_image_url');
+  }
 
-  return objects;
+  return [...urls];
 }
 
 // ---------------------------------------------------------------------------
-// Download via wrangler r2 object get --pipe
+// Idempotency check: HEAD the rendition public URL
 // ---------------------------------------------------------------------------
-function downloadR2Object(bucket: string, key: string, mode: 'local' | 'remote'): Buffer {
-  const result = spawnSync(
-    'npx',
-    [
-      'wrangler',
-      'r2',
-      'object',
-      'get',
-      `${bucket}/${key}`,
-      '--pipe',
-      mode === 'remote' ? '--remote' : '--local',
-    ],
-    { cwd: PKG_PDF_DIR, env: process.env, maxBuffer: 50 * 1024 * 1024 }
-  );
-  if (result.status !== 0) {
-    const err = result.stderr?.toString() ?? '';
-    throw new Error(`wrangler r2 get failed for ${key}: ${err.slice(0, 200)}`);
+async function renditionExists(renditionPublicUrl: string): Promise<boolean> {
+  try {
+    const res = await fetch(renditionPublicUrl, { method: 'HEAD' });
+    return res.status === 200;
+  } catch {
+    return false;
   }
-  return result.stdout as Buffer;
 }
 
 // ---------------------------------------------------------------------------
@@ -238,7 +200,8 @@ function uploadR2Object(
         'object',
         'put',
         `${bucket}/${key}`,
-        `--file=${tmp}`,
+        '--file',
+        tmp,
         '--content-type',
         'image/jpeg',
         mode === 'remote' ? '--remote' : '--local',
@@ -251,61 +214,50 @@ function uploadR2Object(
 }
 
 // ---------------------------------------------------------------------------
-// Check whether a rendition key already exists (via wrangler get, exit 0 = exists)
-// ---------------------------------------------------------------------------
-function renditionExists(bucket: string, key: string, mode: 'local' | 'remote'): boolean {
-  const result = spawnSync(
-    'npx',
-    [
-      'wrangler',
-      'r2',
-      'object',
-      'get',
-      `${bucket}/${key}`,
-      '--pipe',
-      mode === 'remote' ? '--remote' : '--local',
-    ],
-    { cwd: PKG_PDF_DIR, env: process.env, maxBuffer: 64 * 1024 }
-  );
-  return result.status === 0;
-}
-
-// ---------------------------------------------------------------------------
-// Process one source image → produce renditions
+// Result types
 // ---------------------------------------------------------------------------
 interface RenditionResult {
-  sourceKey: string;
+  sourceUrl: string;
   variant: 'w1200' | 'w2000';
   action: 'uploaded' | 'skipped_exists' | 'dry_run' | 'error';
   bytes?: number;
   error?: string;
 }
 
-async function processSourceKey(
-  bucket: string,
-  sourceKey: string,
+// ---------------------------------------------------------------------------
+// Process one source image → produce renditions
+// ---------------------------------------------------------------------------
+async function processSourceUrl(
+  sourceUrl: string,
   mode: 'local' | 'remote',
-  dryRun: boolean
+  dryRun: boolean,
+  publicBase: string,
+  bucket: string
 ): Promise<RenditionResult[]> {
   const results: RenditionResult[] = [];
 
   for (const variant of VARIANTS) {
-    const destKey = renditionKey(sourceKey, variant.name);
+    const rendUrl = renditionUrl(sourceUrl, variant.name);
+    const rendKey = publicUrlToKey(rendUrl, publicBase);
 
     if (dryRun) {
-      results.push({ sourceKey, variant: variant.name, action: 'dry_run' });
+      console.log(`  [dry-run] ${variant.name}: ${sourceUrl} → key: ${rendKey}`);
+      results.push({ sourceUrl, variant: variant.name, action: 'dry_run' });
       continue;
     }
 
-    // Skip if rendition already exists.
-    if (renditionExists(bucket, destKey, mode)) {
-      results.push({ sourceKey, variant: variant.name, action: 'skipped_exists' });
+    // Skip if rendition already exists (idempotency via HTTP HEAD).
+    if (await renditionExists(rendUrl)) {
+      results.push({ sourceUrl, variant: variant.name, action: 'skipped_exists' });
       continue;
     }
 
     try {
-      // Download source.
-      const srcBuf = downloadR2Object(bucket, sourceKey, mode);
+      // Fetch original image via its public https URL.
+      const res = await fetch(sourceUrl);
+      if (!res.ok) throw new Error(`fetch ${sourceUrl} → ${res.status} ${res.statusText}`);
+      const arrayBuf = await res.arrayBuffer();
+      const srcBuf = Buffer.from(arrayBuf);
 
       // Resize + JPEG encode via sharp.
       const outBuf = await sharp(srcBuf)
@@ -313,14 +265,14 @@ async function processSourceKey(
         .jpeg({ quality: 78 })
         .toBuffer();
 
-      // Upload rendition.
-      uploadR2Object(bucket, destKey, outBuf, mode);
+      // Upload rendition to R2 via wrangler.
+      uploadR2Object(bucket, rendKey, outBuf, mode);
 
-      results.push({ sourceKey, variant: variant.name, action: 'uploaded', bytes: outBuf.length });
+      results.push({ sourceUrl, variant: variant.name, action: 'uploaded', bytes: outBuf.length });
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
-      console.error(`  ERROR ${sourceKey} ${variant.name}: ${error}`);
-      results.push({ sourceKey, variant: variant.name, action: 'error', error });
+      console.error(`  ERROR ${sourceUrl} ${variant.name}: ${error}`);
+      results.push({ sourceUrl, variant: variant.name, action: 'error', error });
     }
   }
 
@@ -335,87 +287,80 @@ async function main(): Promise<void> {
   const mode = getMode(args);
   const dryRun = args.flags.has('dry-run');
   const bucket = args.values.get('bucket') ?? DEFAULT_BUCKET;
+  const publicBase = process.env['IMAGES_PUBLIC_BASE_URL'] ?? DEFAULT_PUBLIC_BASE;
+  const limitRaw = args.values.get('limit');
+  const limit = limitRaw != null ? parseInt(limitRaw, 10) : undefined;
 
-  // --prefix may be given multiple times (but parseArgs handles =val form only;
-  // collect comma-sep too for convenience).
-  const rawPrefix = args.values.get('prefix');
-  const prefixes = rawPrefix
-    ? rawPrefix.split(',').map((p) => p.trim()).filter(Boolean)
-    : DEFAULT_PREFIXES;
-
-  // For remote listing, require Cloudflare credentials.
-  const accountId = process.env['CLOUDFLARE_ACCOUNT_ID'] ?? '';
-  const accessKeyId = process.env['R2_ACCESS_KEY_ID'] ?? '';
-  const secretAccessKey = process.env['R2_SECRET_ACCESS_KEY'] ?? '';
-  if (mode === 'remote' && (!accountId || !accessKeyId || !secretAccessKey)) {
-    console.error(
-      'ERROR: CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY must be set for --remote mode.'
-    );
+  const rawType = args.values.get('type') ?? 'floorplan';
+  const validTypes = ['floorplan', 'qmi', 'community', 'all'] as const;
+  type ImageType = (typeof validTypes)[number];
+  if (!validTypes.includes(rawType as ImageType)) {
+    console.error(`ERROR: --type must be one of: ${validTypes.join(', ')}`);
     process.exit(1);
   }
+  const imageType = rawType as ImageType;
 
-  console.log(`\n=== derive-renditions ===`);
-  console.log(`mode=${mode} bucket=${bucket} dryRun=${dryRun}`);
-  console.log(`prefixes: ${prefixes.join(', ')}\n`);
+  console.log(`\n=== derive-renditions (D1-driven) ===`);
+  console.log(`mode=${mode}  type=${imageType}  bucket=${bucket}  dryRun=${dryRun}`);
+  console.log(`publicBase=${publicBase}`);
+  if (limit != null) console.log(`limit=${limit}`);
+  console.log('');
+
+  // Enumerate source URLs from D1 (always runs — even in dry-run, so the count is real).
+  console.log(`Enumerating source image URLs from D1 (${mode})...`);
+  let sourceUrls = enumerateSourceUrls(imageType, mode);
+  console.log(`  found ${n(sourceUrls.length)} distinct source URLs`);
+
+  if (limit != null && sourceUrls.length > limit) {
+    console.log(`  capping to ${n(limit)} (--limit)`);
+    sourceUrls = sourceUrls.slice(0, limit);
+  }
+
+  if (sourceUrls.length === 0) {
+    console.log('No source images found — nothing to do.');
+    return;
+  }
+
+  console.log('');
 
   // Summary counters.
-  let totalSources = 0;
   let totalUploaded = 0;
   let totalSkipped = 0;
   let totalErrors = 0;
   let totalBytes = 0;
 
-  for (const prefix of prefixes) {
-    console.log(`Listing ${bucket}/${prefix}...`);
+  for (let i = 0; i < sourceUrls.length; i++) {
+    const url = sourceUrls[i];
+    if (!url) continue;
 
-    let sourceKeys: string[];
-    if (mode === 'remote') {
-      const objects = await listR2Objects({ accountId, accessKeyId, secretAccessKey, bucket, prefix });
-      sourceKeys = objects
-        .map((o) => o.key)
-        .filter((k) => !isRendition(k) && /\.(jpe?g|png|webp|gif|tiff?)$/i.test(k));
-    } else {
-      // For local mode: use wrangler d1 execute isn't relevant here.
-      // We can't list local R2 via wrangler; fall back to a note and skip.
-      console.warn(
-        `  NOTE: listing local R2 objects requires Cloudflare credentials even for local mode.\n` +
-        `  Set CLOUDFLARE_ACCOUNT_ID + R2_ACCESS_KEY_ID + R2_SECRET_ACCESS_KEY to enable listing,\n` +
-        `  or use --remote to target the live bucket.\n` +
-        `  Skipping prefix ${prefix} in local mode.`
-      );
-      continue;
+    if (!dryRun && (i % 10 === 0 || i === sourceUrls.length - 1)) {
+      process.stdout.write(`\r  processing ${i + 1}/${sourceUrls.length}...`);
     }
 
-    console.log(`  found ${n(sourceKeys.length)} source images (non-rendition)`);
-    totalSources += sourceKeys.length;
-
-    for (let i = 0; i < sourceKeys.length; i++) {
-      const key = sourceKeys[i];
-      if (!key) continue;
-      if (i % 25 === 0 || i === sourceKeys.length - 1) {
-        process.stdout.write(`\r  processing ${i + 1}/${sourceKeys.length}...`);
-      }
-
-      const results = await processSourceKey(bucket, key, mode, dryRun);
-      for (const r of results) {
-        if (r.action === 'uploaded') {
-          totalUploaded++;
-          totalBytes += r.bytes ?? 0;
-        } else if (r.action === 'skipped_exists') {
-          totalSkipped++;
-        } else if (r.action === 'error') {
-          totalErrors++;
-        }
+    const results = await processSourceUrl(url, mode, dryRun, publicBase, bucket);
+    for (const r of results) {
+      if (r.action === 'uploaded') {
+        totalUploaded++;
+        totalBytes += r.bytes ?? 0;
+      } else if (r.action === 'skipped_exists') {
+        totalSkipped++;
+      } else if (r.action === 'error') {
+        totalErrors++;
       }
     }
-    console.log('');
   }
 
+  if (!dryRun) console.log('');
+
   console.log(`\n=== Summary (${dryRun ? 'DRY RUN' : mode}) ===`);
-  console.log(`source images found : ${n(totalSources)}`);
-  console.log(`renditions uploaded : ${n(totalUploaded)} (${bytesHuman(totalBytes)})`);
-  console.log(`already existed     : ${n(totalSkipped)}`);
-  console.log(`errors              : ${n(totalErrors)}`);
+  console.log(`source images       : ${n(sourceUrls.length)}`);
+  if (dryRun) {
+    console.log(`would generate      : ${n(sourceUrls.length * VARIANTS.length)} renditions (${VARIANTS.length} variants × ${n(sourceUrls.length)} sources)`);
+  } else {
+    console.log(`renditions uploaded : ${n(totalUploaded)} (${bytesHuman(totalBytes)})`);
+    console.log(`already existed     : ${n(totalSkipped)}`);
+    console.log(`errors              : ${n(totalErrors)}`);
+  }
   console.log('\nDone.');
 
   if (totalErrors > 0) process.exitCode = 2;
