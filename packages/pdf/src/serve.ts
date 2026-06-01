@@ -5,6 +5,8 @@ import { loadActiveTheme } from './theme';
 import { renderTemplate } from './templates';
 import { stableHash } from './hash';
 import { loadCommunityData } from './data/community';
+import { loadQmiData } from './data/qmi';
+import { loadFloorPlanData } from './data/floorplan';
 import { renderPdf as realRender } from './render';
 
 export interface ServeDeps {
@@ -17,6 +19,8 @@ export interface ServeDeps {
 async function loadData(env: Env, type: PdfType, entityId: string, theme: Awaited<ReturnType<typeof loadActiveTheme>>['theme']) {
   switch (type) {
     case 'community': return loadCommunityData(env.DB, entityId, theme.copy.collectionIntros);
+    case 'qmi': return loadQmiData(env.DB, entityId, { appendFloorPlanPages: theme.qmi.appendFloorPlanPages });
+    case 'floorplan': return loadFloorPlanData(env.DB, entityId);
     default: throw new Error(`loadData not implemented for ${type}`);
   }
 }

@@ -12,8 +12,19 @@ export function renderTemplate(type: PdfType, theme: Theme, data: unknown): stri
   switch (type) {
     case 'community':
       return wrapHtml(theme, <CommunityBrochure theme={theme} data={data as CommunityData} />);
-    case 'qmi':
-      return wrapHtml(theme, <QmiBrochure theme={theme} data={data as QmiData} />);
+    case 'qmi': {
+      const q = data as QmiData;
+      return wrapHtml(theme, (
+        <>
+          <QmiBrochure theme={theme} data={q} />
+          {q.floorPlan ? (
+            <div style={{ breakBefore: 'page' }}>
+              <FloorPlanBrochure theme={theme} data={q.floorPlan} />
+            </div>
+          ) : null}
+        </>
+      ));
+    }
     case 'floorplan':
       return wrapHtml(theme, <FloorPlanBrochure theme={theme} data={data as FloorPlanData} />);
     default:

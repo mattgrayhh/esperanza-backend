@@ -2,6 +2,8 @@ import type { Env, PdfType } from './env';
 import { loadActiveTheme, loadDraftTheme } from './theme';
 import { renderTemplate } from './templates';
 import { loadCommunityData } from './data/community';
+import { loadQmiData } from './data/qmi';
+import { loadFloorPlanData } from './data/floorplan';
 
 export async function preview(env: Env, type: PdfType, slug: string, which: 'active' | 'draft'): Promise<Response> {
   const row = await env.DB.prepare(`SELECT entity_id FROM pdf_renders WHERE type=? AND slug=?`).bind(type, slug).first<{ entity_id: string }>();
@@ -10,6 +12,8 @@ export async function preview(env: Env, type: PdfType, slug: string, which: 'act
   let data: unknown;
   switch (type) {
     case 'community': data = await loadCommunityData(env.DB, row.entity_id, theme.copy.collectionIntros); break;
+    case 'qmi': data = await loadQmiData(env.DB, row.entity_id, { appendFloorPlanPages: theme.qmi.appendFloorPlanPages }); break;
+    case 'floorplan': data = await loadFloorPlanData(env.DB, row.entity_id); break;
     default: return new Response('preview not implemented', { status: 501 });
   }
   if (!data) return new Response('Not found', { status: 404 });
