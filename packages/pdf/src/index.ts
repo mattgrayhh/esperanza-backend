@@ -1,3 +1,4 @@
+import puppeteer from '@cloudflare/puppeteer';
 import type { Env, PdfType, RenderJob } from './env';
 import { renderPdf } from './render';
 import { serve } from './serve';
@@ -12,6 +13,27 @@ export default {
     const url = new URL(request.url);
     if (request.method === 'GET' && url.pathname === '/health') {
       return new Response('ok', { status: 200 });
+    }
+    if (request.method === 'GET' && url.pathname === '/debug/limits') {
+      // Non-destructive probe: reads account limits + live sessions WITHOUT launching a
+      // browser (consumes zero browser-time). Used to diagnose 429s and confirm plan tier.
+      const [limits, sessions] = await Promise.all([
+        puppeteer.limits(env.BROWSER).catch((e) => ({ error: (e as Error).message })),
+        puppeteer.sessions(env.BROWSER).catch((e) => ({ error: (e as Error).message })),
+      ]);
+      return Response.json({ limits, sessions });
+    }
+    if (request.method === 'GET' && url.pathname === '/debug/launch') {
+      // Attempt a single guarded launch and surface the EXACT error (vs the generic 1101).
+      try {
+        const b = await puppeteer.launch(env.BROWSER, { keep_alive: 60_000 });
+        const ok = b.isConnected();
+        const sid = b.sessionId?.();
+        await b.close().catch(() => {});
+        return Response.json({ ok, sessionId: sid });
+      } catch (e) {
+        return Response.json({ ok: false, error: (e as Error).message, name: (e as Error).name }, { status: 200 });
+      }
     }
     if (request.method === 'GET' && url.pathname === '/debug/render') {
       const html = url.searchParams.get('html') ?? '<h1>hi</h1>';
