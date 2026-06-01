@@ -244,6 +244,7 @@ export const communities = sqliteTable(
     featuresDownloadUrl: text('features_download_url'),
     resourcesDownloadUrl: text('resources_download_url'),
     featuredVideo: text('featured_video'),
+    brochurePdfUrl: text('brochure_pdf_url'),
 
     officePhone: text('office_phone'),
     officeHours: text('office_hours'),
@@ -585,6 +586,55 @@ export const fieldDefinitions = sqliteTable(
   ]
 );
 
+// =============================================================================
+// PDF PLATFORM — theme storage, render tracking, render log (migration 0004)
+// =============================================================================
+export const pdfThemes = sqliteTable('pdf_themes', {
+  kind: text('kind').primaryKey(),
+  version: integer('version').notNull().default(1),
+  themeJson: text('theme_json').notNull(),
+  updatedBy: text('updated_by'),
+  updatedAt: text('updated_at').notNull().default(nowIso),
+});
+export const pdfThemeHistory = sqliteTable('pdf_theme_history', {
+  version: integer('version').primaryKey(),
+  themeJson: text('theme_json').notNull(),
+  publishedBy: text('published_by'),
+  publishedAt: text('published_at').notNull().default(nowIso),
+});
+export const pdfRenders = sqliteTable('pdf_renders', {
+  type: text('type').notNull(),
+  slug: text('slug').notNull(),
+  entityId: text('entity_id'),
+  citySlug: text('city_slug'),
+  communityId: text('community_id'),
+  r2Key: text('r2_key'),
+  status: text('status').notNull().default('not_built'),
+  leaseAt: text('lease_at'),
+  dataHash: text('data_hash'),
+  themeVersion: integer('theme_version'),
+  bytes: integer('bytes'),
+  lastRenderedAt: text('last_rendered_at'),
+  lastError: text('last_error'),
+}, (t) => [
+  primaryKey({ columns: [t.type, t.slug] }),
+  index('idx_pdf_renders_status').on(t.status),
+  index('idx_pdf_renders_drill').on(t.citySlug, t.communityId, t.type),
+]);
+export const pdfRenderLog = sqliteTable('pdf_render_log', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  runId: text('run_id'),
+  type: text('type'),
+  slug: text('slug'),
+  action: text('action'),
+  status: text('status'),
+  durationS: real('duration_s'),
+  bytes: integer('bytes'),
+  themeVersion: integer('theme_version'),
+  errorMessage: text('error_message'),
+  at: text('at').notNull().default(nowIso),
+});
+
 export const syncLog = sqliteTable(
   'sync_log',
   {
@@ -644,6 +694,9 @@ export type AdminUser = typeof adminUsers.$inferSelect;
 export type NewAdminUser = typeof adminUsers.$inferInsert;
 export type FieldDefinition = typeof fieldDefinitions.$inferSelect;
 export type NewFieldDefinition = typeof fieldDefinitions.$inferInsert;
+export type PdfThemeRow = typeof pdfThemes.$inferSelect;
+export type PdfRenderRow = typeof pdfRenders.$inferSelect;
+export type PdfRenderLogRow = typeof pdfRenderLog.$inferSelect;
 
 export const schema = {
   qmi,
@@ -660,4 +713,8 @@ export const schema = {
   syncLog,
   adminUsers,
   fieldDefinitions,
+  pdfThemes,
+  pdfThemeHistory,
+  pdfRenders,
+  pdfRenderLog,
 };

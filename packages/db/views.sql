@@ -112,6 +112,7 @@ SELECT
   c.description_image_url,
   c.community_logo_url, c.community_logo_alt,
   c.features_download_url, c.resources_download_url, c.featured_video,
+  c.brochure_pdf_url,
   c.office_phone, c.office_hours, c.schedule_visit, c.lending,
   c.mine_link, c.community_map_embed, c.incentive, c.floor_plan_plaintext,
   c.hoa_links_json, c.city_id

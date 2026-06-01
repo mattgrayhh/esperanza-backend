@@ -17,7 +17,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import Database from 'better-sqlite3';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -35,8 +35,13 @@ import { resolveEffectivePromo, type PromoLike } from '@esperanza/db/promo';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_DIR = join(__dirname, '..', '..', 'db');
 const GOLDEN_DIR = join(__dirname, 'golden');
+const MIGRATIONS_DIR = join(DB_DIR, 'migrations');
 
-const INIT_SQL = readFileSync(join(DB_DIR, 'migrations', '0000_init.sql'), 'utf8');
+const MIGRATIONS_SQL = readdirSync(MIGRATIONS_DIR)
+  .filter((f) => f.endsWith('.sql'))
+  .sort()
+  .map((f) => readFileSync(join(MIGRATIONS_DIR, f), 'utf8'))
+  .join('\n');
 const VIEWS_SQL = readFileSync(join(DB_DIR, 'views.sql'), 'utf8');
 
 const goldenQmi = JSON.parse(readFileSync(join(GOLDEN_DIR, 'qmi.json'), 'utf8'));
@@ -48,7 +53,7 @@ type Row = Record<string, unknown>;
 function freshDb(): Database.Database {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
-  db.exec(INIT_SQL);
+  db.exec(MIGRATIONS_SQL);
   db.exec(VIEWS_SQL);
   return db;
 }
