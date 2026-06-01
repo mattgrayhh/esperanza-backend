@@ -8,6 +8,7 @@ import { r2KeyFor } from './slug';
 import { loadCommunityData } from './data/community';
 import { loadQmiData } from './data/qmi';
 import { loadFloorPlanData } from './data/floorplan';
+import { loadListData, type ListKind } from './data/list';
 import { renderPdf as realRender } from './render';
 
 export interface ServeDeps {
@@ -22,6 +23,10 @@ async function loadData(env: Env, type: PdfType, entityId: string, theme: Awaite
     case 'community': return loadCommunityData(env.DB, entityId, theme.copy.collectionIntros);
     case 'qmi': return loadQmiData(env.DB, entityId, { appendFloorPlanPages: theme.qmi.appendFloorPlanPages });
     case 'floorplan': return loadFloorPlanData(env.DB, entityId);
+    case 'list': {
+      const [, citySlug, kind] = entityId.split(':'); // "list:<citySlug>:<kind>"
+      return loadListData(env.DB, citySlug!, kind as ListKind);
+    }
     default: throw new Error(`loadData not implemented for ${type}`);
   }
 }

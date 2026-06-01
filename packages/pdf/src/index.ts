@@ -33,6 +33,17 @@ export default {
       }
       return preview(env, pvMatch[1] as PdfType, decodeURIComponent(pvMatch[2]!), which);
     }
+    const pollMatch = url.pathname.match(/^\/poll\/(community|qmi|floorplan|list)\/(.+)$/);
+    if (request.method === 'GET' && pollMatch) {
+      const [, type, rawSlug] = pollMatch;
+      const slug = decodeURIComponent(rawSlug!);
+      const row = await env.DB.prepare(`SELECT status FROM pdf_renders WHERE type=? AND slug=?`).bind(type, slug).first<{ status: string }>();
+      if (row?.status === 'live') {
+        return Response.redirect(`${new URL(request.url).origin}/pdf/${type}/${encodeURIComponent(slug)}`, 302);
+      }
+      const body = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="3"><title>Building…</title></head><body style="font-family:system-ui;text-align:center;padding:3rem"><p>Building your PDF…</p><p style="color:#888;font-size:.9rem">This page refreshes automatically.</p></body></html>`;
+      return new Response(body, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
+    }
     return new Response('Not found', { status: 404 });
   },
 };
