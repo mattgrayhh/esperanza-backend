@@ -27,7 +27,7 @@ export async function loadCommunityData(db: D1Database, communityId: string, col
       id: String(fp.id), name: String(fp.name ?? ''),
       beds: num(fp.bedroom_max), baths: num(fp.bathroom_max), garage: num(fp.car_garage_count),
       stories: num(fp.stories_count), sqft: num(fp.total_square_footage), price: num(fp.starting_price),
-      imageUrl: renditionUrl(String(fp.image_url || fp.synced_image_url || ''), 'w1200'),
+      imageUrl: renditionUrl(String(fp.image_url || fp.synced_image_url || ''), 'w600'),
     };
     if (!byCollection.has(key)) byCollection.set(key, []);
     byCollection.get(key)!.push(card);

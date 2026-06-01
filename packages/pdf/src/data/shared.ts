@@ -1,7 +1,7 @@
 export const money = (n: number | null | undefined): string =>
   n == null ? '' : `$${Math.round(n).toLocaleString('en-US')}`;
 
-export function renditionUrl(originalUrl: string, variant: 'w1200' | 'w2000'): string {
+export function renditionUrl(originalUrl: string, variant: 'w600' | 'w1200' | 'w2000'): string {
   if (!originalUrl) return '';
   // strip query string for extension detection
   const hasExt = /\.[a-z0-9]+(\?.*)?$/i.test(originalUrl);

@@ -10,4 +10,8 @@ describe('renditionUrl', () => {
     expect(renditionUrl('https://x/floor_plans/recA/abc', 'w1200')).toBe('https://x/floor_plans/recA/abc-w1200');
     expect(renditionUrl('https://x/floor_plans/recA/abc?v=2', 'w2000')).toBe('https://x/floor_plans/recA/abc-w2000?v=2');
   });
+  it('supports w600 variant (extensionless and .jpg)', () => {
+    expect(renditionUrl('https://x/y/a', 'w600')).toBe('https://x/y/a-w600');
+    expect(renditionUrl('https://x/y/a.jpg', 'w600')).toBe('https://x/y/a-w600.jpg');
+  });
 });

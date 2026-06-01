@@ -46,16 +46,19 @@ const DEFAULT_PUBLIC_BASE =
   process.env['IMAGES_PUBLIC_BASE_URL'] ??
   'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev';
 
-const VARIANTS: Array<{ name: 'w1200' | 'w2000'; width: number }> = [
-  { name: 'w1200', width: 1200 },
-  { name: 'w2000', width: 2000 },
-];
+const WIDTHS = [600, 1200, 2000] as const;
+type RenditionVariant = `w${(typeof WIDTHS)[number]}`;
+
+const VARIANTS: Array<{ name: RenditionVariant; width: number }> = WIDTHS.map((w) => ({
+  name: `w${w}` as RenditionVariant,
+  width: w,
+}));
 
 // ---------------------------------------------------------------------------
 // renditionUrl logic (mirrors src/data/shared.ts — kept local so the script
 // is self-contained and doesn't pull in the worker-side module graph)
 // ---------------------------------------------------------------------------
-function renditionUrl(originalUrl: string, variant: 'w1200' | 'w2000'): string {
+function renditionUrl(originalUrl: string, variant: RenditionVariant): string {
   if (!originalUrl) return '';
   const hasExt = /\.[a-z0-9]+(\?.*)?$/i.test(originalUrl);
   if (hasExt) return originalUrl.replace(/(\.[a-z0-9]+)(\?.*)?$/i, `-${variant}$1$2`);
@@ -218,7 +221,7 @@ function uploadR2Object(
 // ---------------------------------------------------------------------------
 interface RenditionResult {
   sourceUrl: string;
-  variant: 'w1200' | 'w2000';
+  variant: RenditionVariant;
   action: 'uploaded' | 'skipped_exists' | 'dry_run' | 'error';
   bytes?: number;
   error?: string;
