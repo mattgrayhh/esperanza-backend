@@ -41,6 +41,7 @@ export default async function EntityListPage({
     id: r.id,
     values: Object.fromEntries(r.cells.map((cell) => [cell.field, cell.value])),
     live: r.live,
+    status: r.status,
   }));
 
   return (

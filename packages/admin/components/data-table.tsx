@@ -40,6 +40,7 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { statusTone } from "@/lib/status"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -76,6 +77,8 @@ export interface DataTableRow {
   values: Record<string, string>
   /** publish-gate value: true=live, false=draft, null=no gate for this entity. */
   live: boolean | null
+  /** derived tri-state status (Draft / Coming Soon / Live | Scheduled / Published). */
+  status: string
 }
 
 export interface DataTableProps {
@@ -119,14 +122,19 @@ function StatusBadge({ tone, text }: { tone: StatusTone; text: string }) {
   )
 }
 
-/** The synthetic "State" column derives its tone from the boolean gate. */
-function GateBadge({ live }: { live: boolean | null }) {
-  if (live == null) return <span className="text-muted-foreground">—</span>
-  return live ? (
-    <StatusBadge tone="published" text="live" />
-  ) : (
-    <StatusBadge tone="draft" text="draft" />
-  )
+/** The synthetic "Status" column — tri-state badge from the derived status string.
+ *  Live/Published = filled green; Coming Soon/Scheduled = outline green (on-site, not
+ *  fully live); Draft = muted. */
+function StatusChip({ status }: { status: string }) {
+  if (!status) return <span className="text-muted-foreground">—</span>
+  const tone = statusTone(status)
+  const cls =
+    tone === "live"
+      ? "bg-status-published text-status-published-foreground"
+      : tone === "pending"
+        ? "border border-status-published/40 bg-transparent text-status-published"
+        : "bg-status-draft text-status-draft-foreground"
+  return <Badge className={cn("capitalize", cls)}>{status}</Badge>
 }
 
 // =============================================================================
@@ -140,7 +148,11 @@ function buildColumns(
   cols: DataTableColumn[],
   gateColumn: string | null,
 ): ColumnDef<DataTableRow>[] {
-  const defs: ColumnDef<DataTableRow>[] = cols.map((c, index) => ({
+  // Drop any raw publish-gate list column ("1"/"0") — the synthetic "Status" column
+  // below renders the single tri-state badge instead (feedback [16][41]).
+  const defs: ColumnDef<DataTableRow>[] = cols
+    .filter((c) => c.kind !== "publish")
+    .map((c, index) => ({
     id: c.field,
     accessorFn: (row) => row.values[c.field] ?? "",
     header: ({ column }) => (
@@ -179,13 +191,13 @@ function buildColumns(
     enableHiding: index !== 0, // keep the title column always visible
   }))
 
-  // Synthetic State column for entities that have a publish gate.
+  // Synthetic "Status" column (the single publish indicator) for gated entities.
   if (gateColumn != null) {
     defs.push({
       id: STATE_COL_ID,
-      accessorFn: (row) => (row.live == null ? "" : row.live ? "live" : "draft"),
-      header: "State",
-      cell: ({ row }) => <GateBadge live={row.original.live} />,
+      accessorFn: (row) => row.status,
+      header: "Status",
+      cell: ({ row }) => <StatusChip status={row.original.status} />,
       enableSorting: true,
     })
   }
@@ -268,7 +280,7 @@ export function DataTable({
 
   // Map ColumnDef id -> label for the visibility menu.
   const labelFor = (id: string): string => {
-    if (id === STATE_COL_ID) return "State"
+    if (id === STATE_COL_ID) return "Status"
     return columns.find((c) => c.field === id)?.label ?? id
   }
 

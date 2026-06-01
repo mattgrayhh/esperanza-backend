@@ -14,12 +14,15 @@ import { getReadDb } from './db';
 import { type EntityKey } from './entities';
 import { publishGateColumn, type ListColumn } from './field-config';
 import { resolveFieldConfig } from './field-config-source';
+import { statusGate, deriveStatus } from './status';
 
 export interface ListRow {
   id: string;
   cells: Array<{ field: string; value: string; kind: ListColumn['kind'] }>;
   /** raw gate value for the published indicator (true=live). */
   live: boolean | null;
+  /** derived tri-state status string ('' when the entity has no gate). */
+  status: string;
 }
 
 export interface ListView {
@@ -126,6 +129,8 @@ export async function buildListView(key: EntityKey): Promise<ListView> {
       ? await loadCityNameMap()
       : null;
 
+  const sg = statusGate(key);
+  const now = new Date().toISOString();
   const rows: ListRow[] = raw.map((r) => ({
     id: String(r['id']),
     cells: cfg.listColumns.map((c) => {
@@ -141,6 +146,16 @@ export async function buildListView(key: EntityKey): Promise<ListView> {
       };
     }),
     live: isLive(key, gate, r),
+    status: sg
+      ? deriveStatus(sg, {
+          published: Boolean(r['published']),
+          comingSoon: Boolean(r['coming_soon']),
+          active: Boolean(r['active']),
+          status: r['status'] != null ? String(r['status']) : null,
+          publishDate: r['publish_date'] != null ? String(r['publish_date']) : null,
+          now,
+        })
+      : '',
   }));
 
   return {
