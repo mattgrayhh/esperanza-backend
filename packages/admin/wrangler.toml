@@ -58,7 +58,8 @@ service = "esperanza-pdf"
 # can never be bypassed in a deployed environment.
 [vars]
 IMAGES_PUBLIC_BASE_URL = "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev"
-PDF_PUBLIC_BASE_URL = "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev"
+# PDF links resolve through the esperanza-pdf WORKER route, not the raw R2 bucket.
+PDF_PUBLIC_BASE_URL = "https://esperanza-pdf.round-base-ed8c.workers.dev"
 
 # === REQUIRED SECRETS (set via `wrangler secret put`, NOT here) ===
 #   AUTH_SECRET — Auth.js v5 JWT signing secret. The deployed Worker WILL NOT
