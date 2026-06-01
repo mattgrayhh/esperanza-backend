@@ -41,6 +41,13 @@ bucket_name = "esperanza-cms"
 binding = "FRAMER_QUEUE"
 queue = "esperanza-framer-queue"
 
+# Service binding to the PDF renderer worker (same-origin preview proxy).
+# The admin's /api/pdf-preview/... route fetches via this binding instead of a
+# public URL so the preview never traverses the public internet.
+[[services]]
+binding = "PDF"
+service = "esperanza-pdf"
+
 # Non-secret vars.
 #   IMAGES_PUBLIC_BASE_URL — public base for the R2 bucket. uploadImage() builds the
 #                            STABLE url as `${IMAGES_PUBLIC_BASE_URL}/<entity>/<id>/<file>`.
@@ -52,9 +59,16 @@ queue = "esperanza-framer-queue"
 [vars]
 IMAGES_PUBLIC_BASE_URL = "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev"
 
-# === REQUIRED SECRET (set via `wrangler secret put`, NOT here) ===
+# === REQUIRED SECRETS (set via `wrangler secret put`, NOT here) ===
 #   AUTH_SECRET — Auth.js v5 JWT signing secret. The deployed Worker WILL NOT
 #                 authenticate without it. Generate + set with:
 #                   openssl rand -base64 32
 #                   wrangler secret put AUTH_SECRET --config packages/admin/wrangler.toml
 #                 (locally, put AUTH_SECRET=... in packages/admin/.dev.vars instead).
+#
+#   PDF_PREVIEW_SECRET — shared HMAC secret for preview tokens. Must match the value
+#                        deployed to the esperanza-pdf worker's PDF_PREVIEW_SECRET secret.
+#                        Generate + set with:
+#                          openssl rand -base64 32
+#                          wrangler secret put PDF_PREVIEW_SECRET --config packages/admin/wrangler.toml
+#                        (locally, put PDF_PREVIEW_SECRET=... in packages/admin/.dev.vars).

@@ -7,7 +7,7 @@
 // getCloudflareContext().env, so we augment it here.
 // =============================================================================
 
-import type { D1Database, R2Bucket, Queue, Fetcher } from '@cloudflare/workers-types';
+import type { D1Database, R2Bucket, Queue, Fetcher, Service } from '@cloudflare/workers-types';
 
 /** Message enqueued onto esperanza-framer-queue (matches framer-push types.ts). */
 export interface FramerSyncMessage {
@@ -35,6 +35,8 @@ declare global {
     FRAMER_QUEUE: Queue<FramerSyncMessage>;
     /** OpenNext static assets. */
     ASSETS: Fetcher;
+    /** Service binding to the esperanza-pdf worker (preview proxy). */
+    PDF: Service;
 
     // --- vars ---
     IMAGES_PUBLIC_BASE_URL: string;
@@ -42,6 +44,8 @@ declare global {
     // --- secrets (wrangler secret put) ---
     /** Auth.js v5 JWT signing secret. REQUIRED in production. */
     AUTH_SECRET?: string;
+    /** Shared HMAC secret for PDF preview tokens. Must match esperanza-pdf PDF_PREVIEW_SECRET. */
+    PDF_PREVIEW_SECRET?: string;
 
     // --- local-only (.dev.vars) ---
     /** Local dev login bypass — attributes writes to this email under `next dev`.

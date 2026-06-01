@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./token": "./src/token.ts"
+    "./token": "./src/token.ts",
+    "./theme": "./src/theme.ts"
   },
   "scripts": {
     "deploy": "wrangler deploy",
