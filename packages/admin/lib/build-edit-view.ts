@@ -14,12 +14,12 @@ import { eq } from 'drizzle-orm';
 import { getReadDb } from './db';
 import { ENTITIES, type EntityKey, type EntityDef } from './entities';
 import {
-  publishGateColumn,
   CITY_COPY_BLOCK_KEYS,
   CITY_VENUE_BLOCK_KEYS,
   type FieldConfig,
   type SelectSource,
 } from './field-config';
+import { statusGate, deriveStatus, statusOptions } from './status';
 import { resolveFieldConfig } from './field-config-source';
 import { loadOptionSets, loadPromoScopeOptions, type SelectOption } from './select-options';
 import { promotionTargets } from '@esperanza/db';
@@ -171,7 +171,6 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
   for (const f of cfg.fields) if (f.selectSource) sources.add(f.selectSource);
   const optionSets = await loadOptionSets(sources);
 
-  const gateCol = publishGateColumn(key);
   // Field-Builder custom-field VALUES live in the row's `custom_fields` JSON blob (a field
   // whose key is NOT a real column resolves its value from here). Parse it once. Drizzle's
   // bare select() keys rows by the JS PROPERTY name (camelCase `customFields`), so read
@@ -227,17 +226,21 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
     });
   }
 
-  // Publish gate view model.
+  // Publish gate view model — tri-state status derived from the existing columns
+  // (feedback [16][17][27][41][45]; see lib/status.ts). One 'status' select for every
+  // publishable entity; setStatus maps the choice back to the underlying columns.
   let publishGate: PublishGateView | null = null;
-  if (gateCol === 'published' || gateCol === 'active') {
-    publishGate = { gate: gateCol, published: Boolean(row[gateCol]) };
-  } else if (gateCol === 'status') {
-    const statusCfg = cfg.fields.find((f) => f.field === 'status');
-    publishGate = {
-      gate: 'status',
-      status: s(row['status']),
-      statusOptions: statusCfg?.options ?? ['', 'Live', 'Draft'],
-    };
+  const gate = statusGate(key);
+  if (gate) {
+    const status = deriveStatus(gate, {
+      published: Boolean(col(row, 'published')),
+      comingSoon: Boolean(col(row, 'coming_soon')),
+      active: Boolean(col(row, 'active')),
+      status: s(col(row, 'status')),
+      publishDate: s(col(row, 'publish_date')) || null,
+      now: new Date().toISOString(),
+    });
+    publishGate = { gate: 'status', status, statusOptions: statusOptions(gate) };
   }
 
   const displayName = resolveDisplayName(key, row, id);

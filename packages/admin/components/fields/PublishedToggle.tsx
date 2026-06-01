@@ -22,7 +22,7 @@ import { useState, useTransition } from 'react';
 import {
   togglePublished,
   toggleActive,
-  setTestimonialStatus,
+  setStatus as setRecordStatus,
 } from '../../lib/actions';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
@@ -78,8 +78,8 @@ export function PublishedToggle({
   function onChangeStatus(next: string) {
     setStatus(next);
     startTransition(async () => {
-      const res = await setTestimonialStatus(id, next);
-      report(res, next === 'Draft' ? 'Set to Draft (hidden)' : 'Live');
+      const res = await setRecordStatus(entityKey, id, next);
+      report(res, next === 'Draft' ? 'Set to Draft' : `Set to ${next}`);
     });
   }
 

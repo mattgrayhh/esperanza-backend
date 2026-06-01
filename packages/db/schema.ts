@@ -123,6 +123,8 @@ export const qmi = sqliteTable(
     availableNow: integer('available_now', { mode: 'boolean' }).notNull().default(false),
     selfTourAvailable: integer('self_tour_available', { mode: 'boolean' }).notNull().default(false),
     includeInXmlFeed: integer('include_in_xml_feed', { mode: 'boolean' }).notNull().default(false),
+    // tri-state status: published + coming_soon → Draft / Coming Soon / Live (migration 0003)
+    comingSoon: integer('coming_soon', { mode: 'boolean' }).notNull().default(false),
 
     // STABLE image / doc urls
     imageUrl: text('image_url'),
@@ -322,6 +324,8 @@ export const floorPlans = sqliteTable(
     name: text('name'),
     slug: text('slug'),
     published: integer('published', { mode: 'boolean' }).notNull().default(false),
+    // tri-state status: published + coming_soon → Draft / Coming Soon / Live (migration 0003)
+    comingSoon: integer('coming_soon', { mode: 'boolean' }).notNull().default(false),
     collection: text('collection'),
     startingPrice: real('starting_price'),
     bedroomMin: integer('bedroom_min'),

@@ -48,6 +48,7 @@ import { getCurrentUser, isAdmin } from './auth';
 import { getEntity, isQmiOverrideField, type EntityKey } from './entities';
 import { columnMapForEntity, coerceForColumn, toDrizzlePatch } from './fields';
 import { publishGateColumn } from './field-config';
+import { statusGate, statusPatch, deriveStatus } from './status';
 import { resolveCustomFieldDefs, type CustomFieldDef } from './field-config-source';
 import {
   isFieldType,
@@ -460,6 +461,71 @@ export async function toggleActive(
 
   revalidatePath(`/admin/promotions/${id}`);
   revalidatePath(`/admin/promotions`);
+  return { ok: true };
+}
+
+// =============================================================================
+// setStatus — generic tri-state publish gate (feedback [16][17][27][41][45]). Maps a
+// chosen status to the underlying columns per entity (see lib/status.ts):
+//   location (qmi/communities/floor_plans): Draft/Coming Soon/Live → published+coming_soon
+//   blog: Draft/Published → published (Scheduled is derived from publish_date)
+//   promotion: Draft/Live → active   ·   testimonial: status text column
+// Going to anything other than Draft is the 'publish' audit action.
+// =============================================================================
+export async function setStatus(
+  entity: string,
+  id: string,
+  status: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const def = getEntity(entity);
+  if (!def) return { ok: false, error: `Unknown entity: ${entity}` };
+  const gate = statusGate(def.key);
+  if (!gate) return { ok: false, error: `${def.label} has no status gate` };
+
+  let actor: string;
+  try {
+    actor = await getCurrentUser();
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Not authenticated' };
+  }
+
+  const { db } = getDb();
+  const at = new Date().toISOString();
+  const current = (await db
+    .select()
+    .from(def.table)
+    .where(eq(idColumn(def.table), id))
+    .limit(1)) as Array<Record<string, unknown>>;
+  if (current.length === 0) return { ok: false, error: `${def.label} ${id} not found` };
+  const row = current[0]!;
+  const oldStatus = deriveStatus(gate, {
+    published: Boolean(row['published']),
+    comingSoon: Boolean(row['comingSoon']),
+    active: Boolean(row['active']),
+    status: toStr(row['status']),
+    publishDate: toStr(row['publishDate']) || null,
+    now: at,
+  });
+
+  await db
+    .update(def.table)
+    .set(toDrizzlePatch(def.key, { ...statusPatch(gate, status), updated_at: at }) as never)
+    .where(eq(idColumn(def.table), id));
+
+  await postWrite(db, def.key, id, [
+    {
+      entity: def.key,
+      entityId: id,
+      field: 'status',
+      action: status === 'Draft' ? 'unpublish' : 'publish',
+      oldValue: oldStatus,
+      newValue: status,
+      actor,
+    },
+  ]);
+
+  revalidatePath(`/admin/${def.segment}/${id}`);
+  revalidatePath(`/admin/${def.segment}`);
   return { ok: true };
 }
 
