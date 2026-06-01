@@ -3,7 +3,7 @@ import { renderPdf } from './render';
 import { serve } from './serve';
 import { preview } from './preview';
 import { verifyPreviewToken } from './token';
-import { processJob, enqueueStaleLists } from './queue';
+import { processJob, enqueueStaleLists, enqueueAllStale } from './queue';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -63,6 +63,6 @@ export default {
   },
 
   async scheduled(_event: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
-    await enqueueStaleLists(env);
+    await enqueueAllStale(env);
   },
 };

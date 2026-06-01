@@ -15,6 +15,11 @@ export async function processJob(env: Env, job: RenderJob, deps: ServeDeps = {})
   const putObject = deps.putObject ?? ((k: string, b: Uint8Array) => realPut(env, k, b));
   try {
     await rebuild(env, job.type, job.slug, row.entity_id, theme, version, render, putObject);
+    // Best-effort edge purge so the fresh render is served (per-colo; global purge needs the zone at cutover).
+    try {
+      const base = (env.PDF_PUBLIC_BASE_URL || '').replace(/\/$/, '');
+      await (caches as any).default.delete(new Request(`${base}/pdf/${job.type}/${encodeURIComponent(job.slug)}`));
+    } catch {}
     return 'rendered';
   } catch (e) {
     await markError(env.DB, job.type, job.slug, String(e));
@@ -26,6 +31,20 @@ export async function processJob(env: Env, job: RenderJob, deps: ServeDeps = {})
 export async function enqueueStaleLists(env: Env): Promise<number> {
   if (!env.RENDER_Q) return 0;
   const res = await env.DB.prepare(`SELECT type, slug FROM pdf_renders WHERE type='list' AND status<>'live'`).all<{ type: PdfType; slug: string }>();
+  const rows = res.results ?? [];
+  for (const r of rows) await env.RENDER_Q.send({ type: r.type, slug: r.slug, reason: 'nightly' });
+  return rows.length;
+}
+
+/** Nightly backstop: enqueue every render across ALL types that isn't currently fresh
+ *  (status != live, or theme_version IS NULL, or theme_version != active theme version). */
+export async function enqueueAllStale(env: Env): Promise<number> {
+  if (!env.RENDER_Q) return 0;
+  const active = await env.DB.prepare(`SELECT version FROM pdf_themes WHERE kind='active'`).first<{ version: number }>();
+  const av = active?.version ?? 1;
+  const res = await env.DB.prepare(
+    `SELECT type, slug FROM pdf_renders WHERE status<>'live' OR theme_version IS NULL OR theme_version<>?`
+  ).bind(av).all<{ type: PdfType; slug: string }>();
   const rows = res.results ?? [];
   for (const r of rows) await env.RENDER_Q.send({ type: r.type, slug: r.slug, reason: 'nightly' });
   return rows.length;

@@ -30,6 +30,9 @@ queue = "esperanza-pdf-render"
 max_batch_size = 3
 max_retries = 3
 dead_letter_queue = "esperanza-pdf-render-dlq"
+# Cap simultaneous render invocations to 2 so Browser Rendering's per-account concurrency
+# and launch-rate limits are never exceeded. The queue retries handle any transient rejection.
+max_concurrency = 2
 
 # Nightly list warm/rebuild. GATED: the account is at its 5-cron-trigger cap until the
 # legacy crons are disabled at cutover. Uncomment + deploy ONLY after a slot is freed.
