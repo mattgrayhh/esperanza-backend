@@ -103,25 +103,36 @@ async function postWrite(
   const env = getCloudflareContext().env;
   await env.FRAMER_QUEUE.send({ collection, action: 'upsert', id });
 
-  // Mark affected PDF brochures stale so they regenerate on next download (best-effort).
+  // Mark affected PDF brochures stale + enqueue re-renders (best-effort, event-driven freshness).
   try {
     const d1 = env.DB as unknown as D1Database | undefined;
     if (!d1) return; // no D1 binding (e.g. unit-test mock) — nothing to invalidate
     const q = async (sql: string, binds: unknown[]) => ((await d1.prepare(sql).bind(...(binds as any[])).all()).results ?? []) as any[];
     const r = async (sql: string, binds: unknown[]) => { await d1.prepare(sql).bind(...(binds as any[])).run(); };
     const keys = await affectedRenderKeys(q, collection, id);
+    // Mark stale via RETURNING so we can collect the rows to enqueue without an extra SELECT.
+    const toEnqueue: { type: string; slug: string }[] = [];
     for (const k of keys) {
-      if (k.type === 'list') {
-        await d1.prepare(`UPDATE pdf_renders SET status='stale' WHERE type='list' AND city_slug=? AND status<>'rendering'`).bind(k.citySlug).run();
-      } else {
-        await d1.prepare(`UPDATE pdf_renders SET status='stale' WHERE type=? AND entity_id=? AND status<>'rendering'`).bind(k.type, k.entityId).run();
-      }
+      const res = k.type === 'list'
+        ? await d1.prepare(`UPDATE pdf_renders SET status='stale' WHERE type='list' AND city_slug=? AND status<>'rendering' RETURNING type, slug`).bind(k.citySlug).all()
+        : await d1.prepare(`UPDATE pdf_renders SET status='stale' WHERE type=? AND entity_id=? AND status<>'rendering' RETURNING type, slug`).bind(k.type, k.entityId).all();
+      for (const row of (res.results ?? []) as any[]) toEnqueue.push({ type: row.type, slug: row.slug });
     }
     // Idempotently register a pdf_renders row + backfill the URL for newly-created /
     // synced entities so new records self-register without a manual seed run.
     const baseUrl = (env as any).PDF_PUBLIC_BASE_URL || (env as any).IMAGES_PUBLIC_BASE_URL || '';
     if (baseUrl) {
       await ensurePdfRender(q, r, collection, id, baseUrl);
+    }
+    // Also pick up the entity's own row (covers a brand-new entity just inserted by ensurePdfRender).
+    const own = await d1.prepare(`SELECT type, slug FROM pdf_renders WHERE entity_id=? AND status<>'rendering'`).bind(id).all();
+    for (const row of (own.results ?? []) as any[]) toEnqueue.push({ type: row.type, slug: row.slug });
+    // Dedupe and enqueue.
+    const seen = new Set<string>();
+    for (const j of toEnqueue) {
+      const key = `${j.type}/${j.slug}`;
+      if (seen.has(key)) continue; seen.add(key);
+      try { await (env as any).RENDER_Q?.send({ type: j.type, slug: j.slug, reason: 'edit' }); } catch {}
     }
   } catch (e) {
     console.error('[pdf-invalidate]', e);

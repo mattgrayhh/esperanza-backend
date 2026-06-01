@@ -67,6 +67,12 @@ export async function publishTheme(): Promise<number> {
     .prepare(`INSERT INTO pdf_theme_history (version, theme_json, published_by) VALUES (?,?,?)`)
     .bind(next, draft?.theme_json ?? '{}', byEmail)
     .run();
+  // Enqueue every PDF render so they all regenerate with the new theme (best-effort).
+  try {
+    const rows = await db.prepare(`SELECT type, slug FROM pdf_renders`).all<{ type: string; slug: string }>();
+    const env2 = getCloudflareContext().env as any;
+    for (const r of (rows.results ?? [])) { try { await env2.RENDER_Q?.send({ type: r.type, slug: r.slug, reason: 'theme' }); } catch {} }
+  } catch {}
   revalidatePath('/settings/pdf-theme');
   return next;
 }

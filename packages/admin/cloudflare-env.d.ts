@@ -33,6 +33,8 @@ declare global {
     IMAGES: R2Bucket;
     /** Producer for esperanza-framer-queue. */
     FRAMER_QUEUE: Queue<FramerSyncMessage>;
+    /** Producer for esperanza-pdf-render — enqueues affected PDF re-renders on edit + all on theme publish. */
+    RENDER_Q?: Queue<{ type: string; slug: string; reason: string }>;
     /** OpenNext static assets. */
     ASSETS: Fetcher;
     /** Service binding to the esperanza-pdf worker (preview proxy). */

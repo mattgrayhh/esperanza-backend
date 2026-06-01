@@ -41,6 +41,12 @@ bucket_name = "esperanza-cms"
 binding = "FRAMER_QUEUE"
 queue = "esperanza-framer-queue"
 
+# Producer: enqueue affected PDF renders on every admin write + all renders on theme publish.
+# The esperanza-pdf worker consumes this queue at max_concurrency=2.
+[[queues.producers]]
+binding = "RENDER_Q"
+queue = "esperanza-pdf-render"
+
 # Service binding to the PDF renderer worker (same-origin preview proxy).
 # The admin's /api/pdf-preview/... route fetches via this binding instead of a
 # public URL so the preview never traverses the public internet.
