@@ -20,17 +20,18 @@ describe('store leasing', () => {
     expect(await acquireLease(d, 'community', 'anaqua')).toBe(true);
     expect(await acquireLease(d, 'community', 'anaqua')).toBe(false);
   });
-  it('markLive sets status + hash + version', async () => {
+  it('markLive sets status + hash + version + r2_key', async () => {
     const d = db();
     await acquireLease(d, 'community', 'anaqua');
-    await markLive(d, 'community', 'anaqua', { dataHash: 'h1', themeVersion: 7, bytes: 4096 });
+    await markLive(d, 'community', 'anaqua', { dataHash: 'h1', themeVersion: 7, bytes: 4096, r2Key: 'pdf/community/recC.pdf' });
     const row = await getRender(d, 'community', 'anaqua');
     expect(row?.status).toBe('live'); expect(row?.theme_version).toBe(7); expect(row?.data_hash).toBe('h1');
+    expect(row?.r2_key).toBe('pdf/community/recC.pdf');
   });
   it('markStale flips a live row to stale', async () => {
     const d = db();
     await acquireLease(d, 'community', 'anaqua');
-    await markLive(d, 'community', 'anaqua', { dataHash: 'h1', themeVersion: 7, bytes: 1 });
+    await markLive(d, 'community', 'anaqua', { dataHash: 'h1', themeVersion: 7, bytes: 1, r2Key: 'pdf/community/recC.pdf' });
     await markStale(d, 'community', 'anaqua');
     expect((await getRender(d, 'community', 'anaqua'))?.status).toBe('stale');
   });

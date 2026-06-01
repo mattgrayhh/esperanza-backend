@@ -17,11 +17,11 @@ export async function acquireLease(db: D1Database, type: PdfType, slug: string):
   return (r.meta?.changes ?? 0) > 0;
 }
 
-export async function markLive(db: D1Database, type: PdfType, slug: string, o: { dataHash: string; themeVersion: number; bytes: number }): Promise<void> {
+export async function markLive(db: D1Database, type: PdfType, slug: string, o: { dataHash: string; themeVersion: number; bytes: number; r2Key: string }): Promise<void> {
   await db.prepare(
-    `UPDATE pdf_renders SET status='live', data_hash=?, theme_version=?, bytes=?, last_rendered_at=?, last_error=NULL, lease_at=NULL
+    `UPDATE pdf_renders SET status='live', r2_key=?, data_hash=?, theme_version=?, bytes=?, last_rendered_at=?, last_error=NULL, lease_at=NULL
        WHERE type=? AND slug=?`
-  ).bind(o.dataHash, o.themeVersion, o.bytes, new Date().toISOString(), type, slug).run();
+  ).bind(o.r2Key, o.dataHash, o.themeVersion, o.bytes, new Date().toISOString(), type, slug).run();
 }
 
 export async function markError(db: D1Database, type: PdfType, slug: string, message: string): Promise<void> {

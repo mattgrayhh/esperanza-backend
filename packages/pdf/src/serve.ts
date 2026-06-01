@@ -4,6 +4,7 @@ import { decideFreshness } from './freshness';
 import { loadActiveTheme } from './theme';
 import { renderTemplate } from './templates';
 import { stableHash } from './hash';
+import { r2KeyFor } from './slug';
 import { loadCommunityData } from './data/community';
 import { loadQmiData } from './data/qmi';
 import { loadFloorPlanData } from './data/floorplan';
@@ -39,7 +40,8 @@ export async function serve(env: Env, type: PdfType, slug: string, deps: ServeDe
 
   const state = decideFreshness(row as any, version);
   const stream = async (): Promise<Response | null> => {
-    const o = await getObject(row.r2_key!);
+    const key = r2KeyFor(type, row.entity_id!);
+    const o = await getObject(key);
     if (!o) return null;
     return new Response(o.body as any, { headers: { 'content-type': 'application/pdf', 'x-cache': 'HIT' } });
   };
@@ -84,9 +86,9 @@ export async function rebuild(
   const html = renderTemplate(type, theme, data);
   const dataHash = await stableHash(data);
   const pdf = await render(env, html, theme.page.marginsMm);
-  const key = `pdf/${type}/${entityId}.pdf`;
+  const key = r2KeyFor(type, entityId);
   await putObject(key, pdf);
-  await markLive(env.DB, type, slug, { dataHash, themeVersion: version, bytes: pdf.byteLength });
+  await markLive(env.DB, type, slug, { dataHash, themeVersion: version, bytes: pdf.byteLength, r2Key: key });
   await env.DB.prepare(
     `INSERT INTO pdf_render_log (type, slug, action, status, bytes, theme_version) VALUES (?,?,?,?,?,?)`
   ).bind(type, slug, 'render', 'live', pdf.byteLength, version).run();
