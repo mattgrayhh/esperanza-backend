@@ -43,6 +43,7 @@ import {
   type QmiOverridableField,
 } from '@esperanza/db/override';
 import type { PromoTargetType } from '@esperanza/db/promo';
+import { affectedRenderKeys } from '@esperanza/db/pdf-invalidate';
 import { getDb, idColumn, type Db } from './db';
 import { getCurrentUser, isAdmin } from './auth';
 import { getEntity, isQmiOverrideField, type EntityKey } from './entities';
@@ -100,6 +101,22 @@ async function postWrite(
 
   const env = getCloudflareContext().env;
   await env.FRAMER_QUEUE.send({ collection, action: 'upsert', id });
+
+  // Mark affected PDF brochures stale so they regenerate on next download (best-effort).
+  try {
+    const d1 = env.DB as unknown as D1Database;
+    const q = async (sql: string, binds: unknown[]) => ((await d1.prepare(sql).bind(...(binds as any[])).all()).results ?? []) as any[];
+    const keys = await affectedRenderKeys(q, collection, id);
+    for (const k of keys) {
+      if (k.type === 'list') {
+        await d1.prepare(`UPDATE pdf_renders SET status='stale' WHERE type='list' AND city_slug=? AND status<>'rendering'`).bind(k.citySlug).run();
+      } else {
+        await d1.prepare(`UPDATE pdf_renders SET status='stale' WHERE type=? AND entity_id=? AND status<>'rendering'`).bind(k.type, k.entityId).run();
+      }
+    }
+  } catch (e) {
+    console.error('[pdf-invalidate]', e);
+  }
 }
 
 const toStr = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));

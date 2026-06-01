@@ -9,7 +9,8 @@
   "exports": {
     ".": "./schema.ts",
     "./promo": "./lib/promo.ts",
-    "./override": "./lib/override.ts"
+    "./override": "./lib/override.ts",
+    "./pdf-invalidate": "./lib/pdf-invalidate.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",
