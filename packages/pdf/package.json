@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./token": "./src/token.ts"
+  },
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
