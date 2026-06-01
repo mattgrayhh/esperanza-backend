@@ -5,6 +5,14 @@ compatibility_flags = ["nodejs_compat"]
 
 browser = { binding = "BROWSER" }
 
+[[durable_objects.bindings]]
+name = "RENDERER"
+class_name = "BrowserRenderer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BrowserRenderer"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "esperanza"

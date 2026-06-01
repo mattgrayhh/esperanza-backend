@@ -5,6 +5,8 @@ import { preview } from './preview';
 import { verifyPreviewToken } from './token';
 import { processJob, enqueueStaleLists, enqueueAllStale } from './queue';
 
+export { BrowserRenderer } from './renderer-do';
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);

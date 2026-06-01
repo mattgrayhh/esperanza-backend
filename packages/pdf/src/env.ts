@@ -7,6 +7,7 @@ export interface RenderJob { type: PdfType; slug: string; reason: string }
 
 export interface Env {
   BROWSER: BrowserWorker;
+  RENDERER: DurableObjectNamespace;
   DB: D1Database;
   IMAGES: R2Bucket;
   RENDER_Q?: Queue<RenderJob>;
