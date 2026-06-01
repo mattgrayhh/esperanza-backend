@@ -18,7 +18,14 @@ export default {
     }
     const pdfMatch = url.pathname.match(/^\/pdf\/(community|qmi|floorplan|list)\/(.+)$/);
     if (request.method === 'GET' && pdfMatch) {
-      return serve(env, pdfMatch[1] as PdfType, decodeURIComponent(pdfMatch[2]!), {}, ctx);
+      // Edge Cache API: serve repeat reads without hitting the worker at all.
+      // Only 200 PDF responses are cached; 302 "building" redirects are not.
+      const cache = (caches as any).default;
+      const cached = await cache.match(request);
+      if (cached) return cached;
+      const res = await serve(env, pdfMatch[1] as PdfType, decodeURIComponent(pdfMatch[2]!), {}, ctx);
+      if (res.status === 200) ctx.waitUntil(cache.put(request, res.clone()));
+      return res;
     }
     const pvMatch = url.pathname.match(/^\/preview\/(community|qmi|floorplan|list)\/(.+)$/);
     if (request.method === 'GET' && pvMatch) {

@@ -1,5 +1,5 @@
 import type { Env, PdfType } from './env';
-import { getRender, acquireLease, markLive, markError, getObject as realGet, putObject as realPut } from './store';
+import { getRender, markLive, markError, getObject as realGet, putObject as realPut } from './store';
 import { decideFreshness } from './freshness';
 import { loadActiveTheme } from './theme';
 import { renderTemplate } from './templates';
@@ -17,6 +17,13 @@ export interface ServeDeps {
   getObject?: (key: string) => Promise<{ body: ReadableStream | Uint8Array; httpMetadata?: { contentType?: string } } | null>;
   activeVersion?: number;
 }
+
+// Edge cache headers: Cloudflare's edge serves repeat reads without hitting the worker;
+// stale-while-revalidate keeps serving while the queue re-renders in the background.
+const EDGE_CACHE_HEADERS = {
+  'content-type': 'application/pdf',
+  'cache-control': 'public, max-age=600, s-maxage=3600, stale-while-revalidate=86400',
+};
 
 async function loadData(env: Env, type: PdfType, entityId: string, theme: Awaited<ReturnType<typeof loadActiveTheme>>['theme']) {
   switch (type) {
@@ -40,55 +47,43 @@ async function enqueue(env: Env, type: PdfType, slug: string, reason: string): P
   try { await env.RENDER_Q?.send({ type, slug, reason }); } catch { /* best-effort */ }
 }
 
-export async function serve(env: Env, type: PdfType, slug: string, deps: ServeDeps = {}, ctx?: ExecutionContext): Promise<Response> {
-  const render = deps.render ?? realRender;
-  const putObject = deps.putObject ?? ((k: string, b: Uint8Array) => realPut(env, k, b));
+export async function serve(env: Env, type: PdfType, slug: string, deps: ServeDeps = {}, _ctx?: ExecutionContext): Promise<Response> {
   const getObject = deps.getObject ?? (async (k: string) => { const o = await realGet(env, k); return o ? { body: o.body, httpMetadata: o.httpMetadata } : null; });
 
   const row = await getRender(env.DB, type, slug);
   if (!row) return new Response('Not found', { status: 404 });
 
   const loaded = await loadActiveTheme(env.DB);
-  const theme = loaded.theme;
   const version = deps.activeVersion != null ? deps.activeVersion : loaded.version;
 
   const state = decideFreshness(row as any, version);
-  const stream = async (): Promise<Response | null> => {
+
+  const streamObject = async (): Promise<Response | null> => {
     const key = r2KeyFor(type, row.entity_id!);
     const o = await getObject(key);
     if (!o) return null;
-    return new Response(o.body as any, { headers: { 'content-type': 'application/pdf', 'x-cache': 'HIT' } });
+    return new Response(o.body as any, { headers: EDGE_CACHE_HEADERS });
   };
 
-  if (state === 'fresh') { const r = await stream(); if (r) return r; }
-
-  if (state === 'stale-present') {
-    const r = await stream();
-    const bg = (async () => {
-      if (await acquireLease(env.DB, type, slug)) {
-        try { await rebuild(env, type, slug, row.entity_id!, theme, version, render, putObject); }
-        catch (e) { await markError(env.DB, type, slug, String(e)); }
-      }
-    })();
-    if (ctx) ctx.waitUntil(bg); else await bg;
+  // fresh: stream the R2 object with edge cache headers — no render, no queue.
+  if (state === 'fresh') {
+    const r = await streamObject();
     if (r) return r;
+    // Object missing despite fresh status — treat as absent (fall through).
   }
 
-  if (!(await acquireLease(env.DB, type, slug))) {
-    const r = await stream(); if (r) return r;
-    await enqueue(env, type, slug, 'cold');
-    return buildingRedirect(env, type, slug);
+  // stale-present: serve last-good immediately AND enqueue a re-render out-of-band.
+  // No inline render, no waitUntil render — the queue owns rendering.
+  if (state === 'stale-present') {
+    const r = await streamObject();
+    await enqueue(env, type, slug, 'stale');
+    if (r) return r;
+    // Object missing despite stale status — fall through to absent handling.
   }
-  try {
-    await rebuild(env, type, slug, row.entity_id!, theme, version, render, putObject);
-    const r = await stream();
-    return r ?? new Response('Render produced no object', { status: 500 });
-  } catch (e) {
-    await markError(env.DB, type, slug, String(e));
-    const r = await stream(); if (r) return r;
-    await enqueue(env, type, slug, 'cold');
-    return buildingRedirect(env, type, slug);
-  }
+
+  // absent (or object missing): enqueue a cold render and redirect to the building-poll page.
+  await enqueue(env, type, slug, 'cold');
+  return buildingRedirect(env, type, slug);
 }
 
 // EXPORTED so the Phase-4 queue consumer reuses the identical render path.

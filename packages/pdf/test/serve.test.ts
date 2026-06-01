@@ -15,52 +15,71 @@ function mkDb(status: string, themeVer: number | null) {
   return d1FromSqlite(d);
 }
 
+// env helper includes RENDER_Q + PDF_PUBLIC_BASE_URL
+const send = vi.fn(async () => {});
+const env = (db: any) => ({ DB: db, RENDER_Q: { send }, PDF_PUBLIC_BASE_URL: 'https://pdf.test' });
+
 const objects = new Map<string, Uint8Array>();
+// render is kept in deps for ServeDeps compatibility; serve() no longer calls it
+const renderStub = vi.fn(async () => new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]));
 const deps = {
-  render: vi.fn(async () => new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d])),
+  render: renderStub,
   putObject: async (k: string, b: Uint8Array) => { objects.set(k, b); },
   getObject: async (k: string) => objects.has(k) ? { body: objects.get(k)!, httpMetadata: { contentType: 'application/pdf' } } : null,
   activeVersion: 5,
 };
 
-describe('serve', () => {
-  it('never-built → renders inline, stores, marks live, streams PDF', async () => {
-    objects.clear(); deps.render.mockClear();
-    const db = mkDb('not_built', null);
-    const res = await serve({ DB: db } as any, 'community', 'anaqua', deps as any);
-    expect(deps.render).toHaveBeenCalledTimes(1);
+describe('serve (never renders)', () => {
+  it('fresh → 200, content-type application/pdf, Cache-Control with stale-while-revalidate, send NOT called', async () => {
+    objects.clear(); send.mockClear(); renderStub.mockClear();
+    objects.set('pdf/community/recC.pdf', new Uint8Array([1]));
+    const db = mkDb('live', 5);
+    const res = await serve(env(db) as any, 'community', 'anaqua', deps as any);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('application/pdf');
-    expect(objects.has('pdf/community/recC.pdf')).toBe(true);
+    expect(res.headers.get('cache-control')).toContain('stale-while-revalidate');
+    expect(send).not.toHaveBeenCalled();
+    expect(renderStub).not.toHaveBeenCalled();
   });
-  it('fresh → streams from store WITHOUT rendering', async () => {
-    objects.clear(); objects.set('pdf/community/recC.pdf', new Uint8Array([1])); deps.render.mockClear();
-    const db = mkDb('live', 5);
-    const res = await serve({ DB: db } as any, 'community', 'anaqua', deps as any);
-    expect(deps.render).not.toHaveBeenCalled();
-    expect(res.status).toBe(200);
-  });
-  it('stale-present → streams last-good immediately and schedules bg regen', async () => {
-    objects.clear(); objects.set('pdf/community/recC.pdf', new Uint8Array([1])); deps.render.mockClear();
+
+  it('stale-present → 200 (last-good) AND send called with reason "stale"', async () => {
+    objects.clear(); send.mockClear(); renderStub.mockClear();
+    objects.set('pdf/community/recC.pdf', new Uint8Array([1]));
     const db = mkDb('stale', 5);
-    const waitUntil = vi.fn();
-    const res = await serve({ DB: db } as any, 'community', 'anaqua', deps as any, { waitUntil } as any);
+    const res = await serve(env(db) as any, 'community', 'anaqua', deps as any);
     expect(res.status).toBe(200);
-    expect(waitUntil).toHaveBeenCalled();
+    expect(res.headers.get('content-type')).toContain('application/pdf');
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'community', slug: 'anaqua', reason: 'stale' }));
+    expect(renderStub).not.toHaveBeenCalled();
   });
-  it('never-built render FAILURE → enqueues + 302 to /poll (not 502)', async () => {
-    const isolatedObjects = new Map<string, Uint8Array>();
-    const send = vi.fn(async () => {});
-    const failDeps = {
-      ...deps,
-      render: vi.fn(async () => { throw new Error('browser limit'); }),
-      getObject: async (k: string) => isolatedObjects.has(k) ? { body: isolatedObjects.get(k)!, httpMetadata: { contentType: 'application/pdf' } } : null,
-      putObject: async (k: string, b: Uint8Array) => { isolatedObjects.set(k, b); },
-    };
+
+  it('absent (not_built) → 302 to /poll, send called with reason "cold", render NOT called', async () => {
+    objects.clear(); send.mockClear(); renderStub.mockClear();
     const db = mkDb('not_built', null);
-    const res = await serve({ DB: db, RENDER_Q: { send }, PDF_PUBLIC_BASE_URL: 'https://pdf.test' } as any, 'community', 'anaqua', failDeps as any);
+    const res = await serve(env(db) as any, 'community', 'anaqua', deps as any);
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toContain('/poll/community/anaqua');
-    expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'community', slug: 'anaqua' }));
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'community', slug: 'anaqua', reason: 'cold' }));
+    expect(renderStub).not.toHaveBeenCalled();
+  });
+
+  it('stale-present with missing R2 object → 302 + enqueue cold (object gone edge case)', async () => {
+    objects.clear(); send.mockClear(); renderStub.mockClear();
+    // object NOT in map — stale row but no object in R2
+    const db = mkDb('stale', 5);
+    const res = await serve(env(db) as any, 'community', 'anaqua', deps as any);
+    // enqueue stale was called, object missing, falls through to absent → enqueue cold + 302
+    expect(res.status).toBe(302);
+    expect(renderStub).not.toHaveBeenCalled();
+  });
+
+  it('not found → 404', async () => {
+    const d = new Database(':memory:');
+    readdirSync(join(DB,'migrations')).filter(f=>f.endsWith('.sql')).sort().forEach(f=>d.exec(readFileSync(join(DB,'migrations',f),'utf8')));
+    d.exec(readFileSync(join(DB,'views.sql'),'utf8'));
+    const db = d1FromSqlite(d);
+    send.mockClear();
+    const res = await serve(env(db) as any, 'community', 'no-such-slug', deps as any);
+    expect(res.status).toBe(404);
   });
 });
