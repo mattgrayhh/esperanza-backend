@@ -18,7 +18,7 @@ Worker: **`esperanza-pdf`** at `https://esperanza-pdf.round-base-ed8c.workers.de
 - **Airtable → D1 re-sync** (`npm run -w @esperanza/db import -- --remote`): ran; the 8 non-QMI entities (cities/communities/floor_plans/promotions/collections/images/blogs/testimonials) fully refreshed, all 330 QMI rows present. Dry-run was clean (0 unresolved links, 0 diverged prices). A `--only=qmi --remote` re-run was kicked off to finish the QMI phase 100% (idempotent — safe to re-run anytime). The importer is SLOW (per-row `wrangler d1 execute --remote` cold-starts) — expect ~5–30 min.
 - **AFTER any import**, re-run **`PDF_PUBLIC_BASE_URL=https://esperanza-pdf.round-base-ed8c.workers.dev npm run -w @esperanza/db seed-renders -- --remote`** — the import resets `qmi.dynamic_pdf` / `communities.brochure_pdf_url` / `floor_plans.brochure_pdf_url` to Airtable values; seed-renders restores the worker URLs (internal only — no live-site effect pre-cutover).
 - **Airtable PAT** is in gitignored `packages/db/.dev.vars` (also pasted in this session's chat → **rotate it**).
-- **In-progress in the working tree** (uncommitted, NOT mine — likely the start of the spec-sheet work): `attachmentUrl` moved to `data/shared.ts`; `loadQmiData` now takes `imgProxyBase` (serve.ts passes it); `EqualHousingMark` exported. Verify typecheck before committing.
+- **Per-home QMI spec sheet redesigned** in commit `94ddb0a` (a parallel session) — `templates/qmi.tsx` rebuilt to match the brand one-pager; supporting refactors (`attachmentUrl`→`data/shared.ts`, `loadQmiData` takes `imgProxyBase`, `EqualHousingMark` exported). Typecheck + 52 tests green, merged to master. **Still TODO: visually verify it renders 1:1 vs `/Users/mgd/Downloads/6529_Anaqua_Loop_McAllen_TX_78504.pdf`** (render via `/debug/pdf?type=qmi&id=<recId>`) and re-render the 128 live `/pdf/qmi/*` (set `status='not_built'` + hit URLs, or publish theme).
 
 ## ▶ THE CUTOVER (deferred — do as its own session)
 
@@ -66,8 +66,8 @@ Reference: `/Users/mgd/Downloads/Quick-Move-Ins.pdf` (filled) + the empty templa
 ## Template redesign queue ("one by one")
 
 1. ✅ **QMI grid** (`list`/`qmis`) — DONE.
-2. ⏭ **Per-home QMI spec sheet** (`qmi` type, `templates/qmi.tsx`) — match `/Users/mgd/Downloads/6529_Anaqua_Loop_McAllen_TX_78504.pdf` **1:1**. (Currently appends floor-plan brochure pages; `theme.qmi.appendFloorPlanPages`.) These are the 128 `/pdf/qmi/<slug>` URLs linked from Airtable `qmi.dynamic_pdf`.
-3. ⏳ Then likely: **community** (`templates/community.tsx`), **floorplan** (`templates/floorplan.tsx`), and the **locations/plans** list variants (still use the old `CoverBand`/`FloorPlanCard` CSS chrome — restyle to the brand template like the QMI grid).
+2. ✅ **Per-home QMI spec sheet** (`qmi` type, `templates/qmi.tsx`) — redesigned in `94ddb0a` to match `/Users/mgd/Downloads/6529_Anaqua_Loop_McAllen_TX_78504.pdf`. **TODO: visual 1:1 verify + re-render the 128 live `/pdf/qmi/*`.** (Appends floor-plan brochure pages; `theme.qmi.appendFloorPlanPages`. 128 URLs linked from Airtable `qmi.dynamic_pdf`.)
+3. ⏭ NEXT: **community** (`templates/community.tsx`), **floorplan** (`templates/floorplan.tsx`), and the **locations/plans** list variants (still use the old `CoverBand`/`FloorPlanCard` CSS chrome — restyle to the brand template like the QMI grid).
 
 Pattern for matching a reference 1:1: get the artwork (upload to `esperanza-cms/pdf-templates/`), render full-bleed over it (set per-type margins in `templates/index.tsx`), lay data on top, iterate via `/debug/pdf` + `Read` the page.
 
