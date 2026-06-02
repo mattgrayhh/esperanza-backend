@@ -151,3 +151,19 @@ floor_plans+62, communities+32 = SUCCESS. testimonials+75 (data ok, page-loader 
 **NET STATE:** New CF stack is the authoritative live source. Crons swapped (ingest 4h, framer-push 5m). Data current via Snowflake→D1 ingest. framer-push pushes 8/9 collections cleanly. Admin = editorial layer (image rendering + tri-state status). Embed pages read the new API. Legacy caches (esperanza-qmi-cache/-communities-cache) now UNREFERENCED → decommission at final cleanup (kept for rollback).
 
 **REMAINING FOLLOW-UPS (non-blocking, documented):** qmi duplicate home (2004 S Lake Texoma St) blocks the qmi full-backfill (cron pushes the rest); 2 communities (Aquero/Los Arroyos) absent from D1; testimonials Framer page `ensureComponentsInLoader` error (Framer page, data landed); rotate the temp admin password; decommission legacy workers after a soak.
+
+---
+
+## POST-CUTOVER REFINEMENTS (2026-06-02) — master @ dec0318
+
+### #1 — Missing communities added
+- Both were in Airtable: **Aquero** (recg3csKjwsymd3IF, published=1/live — Laredo, $290,990, full fields, 3 R2 images) and **Los Arroyos** (rech87vjetLasYVZd, published=0/Draft — Coming Soon in Airtable, most fields blank AT SOURCE, only logo recoverable → marketing to complete). Imported via packages/db/scripts/import-communities-by-id.ts (reuses the bulk-import pipeline). Enqueued → pushed (sync_log communities:+2 deploy=a4b11d495).
+- Cleaned up **2 junk community rows** (adm* ids, NULL name/slug, published=0) created by a browser-QA "Create record" action. **communities now = 33 total / 31 published.**
+
+### #2 — Event-driven Framer sync (replaced the 5-min poll)
+- **D1 is the source of truth; changes push to Framer immediately, gated by `published`.** Two event producers on esperanza-framer-queue:
+  - **admin** — already enqueued on every write (postWrite → FRAMER_QUEUE.send {collection,'upsert',id}, actions.ts:103).
+  - **ingest** — NEW: enqueues a Framer push per successful synced D1 write (consumer.ts; qmi/communities). So Snowflake price/availability updates to PUBLISHED homes flow live immediately; new Draft homes push as draft:true (hidden) until published.
+- **framer-push `*/5` poll REMOVED** → nightly `0 9 * * *` reconcile backstop (lookback widened to 1500min/25h, env CRON_LOOKBACK_MINUTES). CF API confirms schedule = [0 9 * * *], the */5 is gone. The queue consumer + webhook/backfill routes are unchanged (the event engine).
+- Verified: event path proven end-to-end (single-record push test success deploy=dc66ef814); ingest enqueue unit-tested (8 tests); 20 ingest + 25 framer-push tests pass; both deployed (ingest 6d7c54f5, framer-push b20e1f11).
+- Publish gate confirmed: new housenumbers auto-flow Snowflake→D1 (ingest, 4h) but have ZERO live Framer effect until the tri-state Draft→Live/Coming-Soon toggle is flipped in the admin.
