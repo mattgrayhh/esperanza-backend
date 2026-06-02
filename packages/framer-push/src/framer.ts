@@ -12,8 +12,9 @@
 //
 // We hide that behind a narrow FramerClient interface so:
 //   (a) the consumer/backfill are unit-testable with a mock (no live WS), and
-//   (b) framer-api is imported LAZILY at runtime (optionalDependency) — tsc and
-//       vitest don't need the package installed to type-check / run the logic.
+//   (b) framer-api is imported LAZILY at runtime (literal `import('framer-api')`,
+//       so esbuild bundles it into the Worker) — but only inside connectFramer, so
+//       tsc/vitest/module-load never pull it in to type-check / run the logic.
 //
 // Upsert contract (framer-api d.ts:3180-3214): addItems performs an UPSERT keyed
 // by item `id`; items with a matching id are updated, new ids inserted. CAVEAT
@@ -89,10 +90,12 @@ type FramerApiModule = {
  * `import { connect } from "framer-api"` but deferred).
  */
 export const connectFramer: FramerConnect = async (env) => {
-  // Indirect dynamic import: keeps `framer-api` out of the static module graph so
-  // `tsc --noEmit` and vitest don't require it to be installed.
-  const modName = 'framer-api';
-  const mod = (await import(/* @vite-ignore */ modName)) as unknown as FramerApiModule;
+  // Literal lazy import: a STRING-LITERAL `import('framer-api')` is statically
+  // analyzable, so esbuild/wrangler bundles framer-api into the deployed Worker
+  // (a variable-indirected import did NOT bundle → runtime "No such module").
+  // It stays lazy (inside connectFramer) so module load / tsc / vitest never pull
+  // it in; we cast through `unknown` so tsc doesn't need framer-api's own types.
+  const mod = (await import('framer-api')) as unknown as FramerApiModule;
   const session = await mod.connect(env.FRAMER_PROJECT_URL, env.FRAMER_API_KEY);
 
   // Cache the collection list once per session (getManagedCollections is a round-trip).
@@ -105,7 +108,13 @@ export const connectFramer: FramerConnect = async (env) => {
   return {
     async getCollectionByName(name: string): Promise<FramerCollection | null> {
       const collections = await loadCollections();
-      const c = collections.find((x) => x.name === name);
+      // framer-api's headless plugin names managed collections "<Name> (Managed)"
+      // (e.g. our "Cities" lives as "Cities (Managed)"). Match the exact name
+      // first, then fall back to the "(Managed)" variant so the configured human
+      // names ("Cities", "Quick Move-Ins", ...) resolve against a live project.
+      const c =
+        collections.find((x) => x.name === name) ??
+        collections.find((x) => x.name === `${name} (Managed)`);
       if (!c) return null;
       return {
         name: c.name,
