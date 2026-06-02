@@ -229,11 +229,12 @@ function seedFloorPlan(db: Database.Database) {
 }
 
 function seedCommunity(db: Database.Database) {
+  // `draft` column dropped in migration 0005; published is the single gate.
   db.prepare(
-    `INSERT INTO communities (id, name, slug, town, published, draft, address,
+    `INSERT INTO communities (id, name, slug, town, published, address,
        map_coordinates, price_from, square_footage_range, bed_count, bath_count,
        description, amenities, coming_soon, featured_image_url, secondary_image_url, city_id)
-     VALUES (@id,@name,@slug,@town,1,0,@addr,@coords,@pf,@sqft,@beds,@baths,@desc,@amen,0,
+     VALUES (@id,@name,@slug,@town,1,@addr,@coords,@pf,@sqft,@beds,@baths,@desc,@amen,0,
        @img,@simg,@city)`
   ).run({
     id: 'recX6JFH2NKKWSVpE',
@@ -254,11 +255,13 @@ function seedCommunity(db: Database.Database) {
   });
 }
 
-// A DRAFT community -> filtered out of /communities (active = published && !draft).
+// An UNPUBLISHED community -> filtered out of /communities by the view's published
+// gate. (The `draft` column was dropped in migration 0005; published is the single
+// gate, so "hidden" is now published=0.)
 function seedCommunityDraft(db: Database.Database) {
   db.prepare(
-    `INSERT INTO communities (id, name, slug, town, published, draft, price_from)
-     VALUES ('recDRAFT000000000','Draft Town','draft-town','Nowhere',1,1,100000)`
+    `INSERT INTO communities (id, name, slug, town, published, price_from)
+     VALUES ('recDRAFT000000000','Draft Town','draft-town','Nowhere',0,100000)`
   ).run();
 }
 
@@ -267,7 +270,7 @@ function seedPromotions(db: Database.Database) {
   // sort_order should win the community flatten.
   const insP = db.prepare(
     `INSERT INTO promotions (id, title, banner_text, badge_text, cta_label, cta_url,
-       image_url, sort_order, start_date, end_date, active, applies_to)
+       image_url, sort_order, start_date, end_date, published, applies_to)
      VALUES (@id,@title,@banner,@badge,@cl,@cu,@img,@so,@sd,@ed,@active,@at)`
   );
   insP.run({
@@ -541,9 +544,10 @@ describe('/qmi — raw passthrough contract', () => {
 // =============================================================================
 describe('/communities — mapped dense contract', () => {
   it('has exactly the 20 contract keys, all present', () => {
+    // v_public_communities now bakes the published gate (draft column dropped in 0005).
     const rows = db.prepare('SELECT * FROM v_public_communities').all() as Row[];
     const ctx = buildPromoCtx(db);
-    const active = rows.filter((r) => r['published'] === 1 && r['draft'] !== 1);
+    const active = rows;
     const c = serializeCommunityRow(
       active.find((r) => r['id'] === 'recX6JFH2NKKWSVpE')!,
       resolvedFor(ctx, 'community', { communityId: 'recX6JFH2NKKWSVpE', cityId: 'recLfQGdbcgD8iTCi' })
@@ -563,10 +567,11 @@ describe('/communities — mapped dense contract', () => {
     }
   });
 
-  it('draft + unpublished communities are filtered out', () => {
+  it('unpublished communities are filtered out by the view gate', () => {
+    // The view gates published = 1 (draft column dropped in 0005), so the unpublished
+    // seed row never appears in v_public_communities.
     const rows = db.prepare('SELECT * FROM v_public_communities').all() as Row[];
-    const active = rows.filter((r) => r['published'] === 1 && r['draft'] !== 1);
-    const ids = active.map((r) => r['id']);
+    const ids = rows.map((r) => r['id']);
     expect(ids).toContain('recX6JFH2NKKWSVpE');
     expect(ids).not.toContain('recDRAFT000000000');
   });
@@ -580,8 +585,7 @@ describe('/communities — mapped dense contract', () => {
     expect(c.coordinates).toBe('26.331197,-98.167508');
   });
 
-  it('active is DERIVED published && !draft', () => {
-    const ctx = buildPromoCtx(db);
+  it('active is DERIVED from published (draft column dropped in 0005)', () => {
     const r = (db.prepare('SELECT * FROM v_public_communities').all() as Row[]).find(
       (x) => x['id'] === 'recX6JFH2NKKWSVpE'
     )!;
@@ -616,7 +620,8 @@ describe('/promotions — mapped dense + derived names + image fallback', () => 
       else byPromo.set(t.promotion_id, [t]);
     }
     const promotions = ctx.promos
-      .filter((p) => (p as Row)['active'] === 1)
+      // gate column renamed active→published in 0005 (view exposes `published`).
+      .filter((p) => (p as Row)['published'] === 1)
       .map((p) => serializePromotionRow(p as never, byPromo.get((p as Row)['id'] as string) ?? [], ctx.maps))
       .sort((a, b) => a.sortOrder - b.sortOrder);
     const payload = { promotions, ts: 0 };

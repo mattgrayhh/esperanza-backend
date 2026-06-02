@@ -1,8 +1,9 @@
 // =============================================================================
 // Communities mapper test. Asserts the full field set maps: markdown→HTML for the
 // *_rich formattedText blocks, HOA links JSON → hoa_link_title_N/hoa_link_N (x7),
-// lat/long parsed from map_coordinates, the BOTH-gates draft (published!==true ||
-// draft===true), and image fields read from the stable *_url columns.
+// lat/long parsed from map_coordinates, the SINGLE-gate draft (= !published — the
+// `draft` column was dropped in migration 0005), and image fields read from the
+// stable *_url columns.
 // =============================================================================
 
 import { describe, it, expect } from 'vitest';
@@ -28,7 +29,6 @@ describe('Communities mapper — rich text, HOA links, coords, gates', () => {
       slug: 'tres-lagos',
       town: 'Conroe',
       published: 1,
-      draft: 0,
       address: '123 Lake Dr',
       map_coordinates: '@30.3119,-95.4561,15z',
       price_from: 350000,
@@ -56,7 +56,7 @@ describe('Communities mapper — rich text, HOA links, coords, gates', () => {
     const item = mapOne(db, 'recCOM0001ABCDEF');
     expect(item.id).toBe('recCOM0001ABCDEF');
     expect(item.slug).toBe('tres-lagos');
-    expect(item.draft).toBe(false); // published && !draft
+    expect(item.draft).toBe(false); // !published (single gate)
 
     const f = item.fieldData;
     expect(sval(f['name'])).toBe('Tres Lagos');
@@ -99,28 +99,29 @@ describe('Communities mapper — rich text, HOA links, coords, gates', () => {
     expect(f['hoa_link_3']).toBeUndefined();
   });
 
-  it('draft:true when not published (gate 1)', () => {
+  it('draft:true when not published (single gate)', () => {
     const db = freshDb();
     insertRow(db, 'communities', {
       id: 'recCOM0002ABCDEF',
       name: 'Unpublished',
       published: 0,
-      draft: 0,
       updated_at: '2026-05-30T12:00:00.000Z',
     });
     expect(mapOne(db, 'recCOM0002ABCDEF').draft).toBe(true);
   });
 
-  it('draft:true when explicitly flagged draft even if published (gate 2)', () => {
+  it('draft:false when published (the explicit `draft` column was dropped in 0005)', () => {
+    // Pre-0005 a second gate existed (explicit draft=1 hid a published row); migration
+    // 0005 dropped communities.draft, so published is now the SINGLE gate: a published
+    // community is always live (draft:false).
     const db = freshDb();
     insertRow(db, 'communities', {
       id: 'recCOM0003ABCDEF',
-      name: 'Drafted',
+      name: 'Published',
       published: 1,
-      draft: 1,
       updated_at: '2026-05-30T12:00:00.000Z',
     });
-    expect(mapOne(db, 'recCOM0003ABCDEF').draft).toBe(true);
+    expect(mapOne(db, 'recCOM0003ABCDEF').draft).toBe(false);
   });
 
   it('drops empty formattedText (never overwrites with blank)', () => {
@@ -129,7 +130,6 @@ describe('Communities mapper — rich text, HOA links, coords, gates', () => {
       id: 'recCOM0004ABCDEF',
       name: 'No Copy',
       published: 1,
-      draft: 0,
       updated_at: '2026-05-30T12:00:00.000Z',
     });
     const f = mapOne(db, 'recCOM0004ABCDEF').fieldData;

@@ -93,7 +93,7 @@ interface DashboardData {
 // One read-your-writes session; a handful of small aggregate queries. We read
 // BASE tables (so unpublished/draft rows count toward totals) and derive the
 // "published/active" subset with a filtered COUNT — matching the publish gates
-// used by the public views (qmi.published, communities.published, promotions.active).
+// used by the public views (qmi.published, communities.published, promotions.published).
 async function loadDashboard(): Promise<DashboardData> {
   const db = getReadDb();
 
@@ -111,10 +111,11 @@ async function loadDashboard(): Promise<DashboardData> {
        FROM communities`
     )
   );
+  // promotions gate renamed active→published in migration 0005.
   const [promotions] = await db.all<{ total: number; active: number }>(
     sql.raw(
       `SELECT COUNT(*) AS total,
-              COALESCE(SUM(CASE WHEN active = 1 THEN 1 ELSE 0 END), 0) AS active
+              COALESCE(SUM(CASE WHEN published = 1 THEN 1 ELSE 0 END), 0) AS active
        FROM promotions`
     )
   );

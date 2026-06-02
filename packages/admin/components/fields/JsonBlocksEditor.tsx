@@ -31,7 +31,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { PlusIcon } from 'lucide-react';
+import { PlusIcon, ImageIcon, UploadIcon, RefreshCwIcon, XIcon } from 'lucide-react';
 
 type Blocks = Record<string, string>;
 
@@ -182,38 +182,64 @@ function BlockRow({
     <div className="grid grid-cols-[200px_1fr] items-start gap-3">
       <span className="self-center font-mono text-xs text-muted-foreground">{blockKey}</span>
       {isImage ? (
-        <div className="grid gap-1.5">
-          {value && !value.includes('airtableusercontent.com') ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={value} alt={blockKey} className="h-16 w-auto rounded-lg border border-border object-contain" />
-          ) : null}
-          <div className="flex items-center gap-2">
-            <Input
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              placeholder="stable image URL"
-              className="flex-1 font-mono text-xs"
-            />
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              disabled={pending}
-              onChange={(e) => onPick(e.target.files?.[0])}
-              className="hidden"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="xs"
-              disabled={pending}
-              onClick={() => fileRef.current?.click()}
-            >
-              {pending ? 'Uploading…' : 'Upload'}
-            </Button>
-          </div>
-          {err ? <span className="text-xs text-destructive">{err}</span> : null}
-        </div>
+        // Operator DAM rule: image blocks show the IMAGE (thumbnail) + an upload/replace
+        // affordance — NEVER an editable raw-URL field. The stable URL is held in state and
+        // saved by saveCityBlocks; it is never surfaced as text. A stale Airtable URL (and
+        // an empty value) fall back to a placeholder prompting a re-upload.
+        (() => {
+          const isStaleAirtable = value.includes('airtableusercontent.com');
+          const hasImage = value.trim() !== '' && !isStaleAirtable;
+          return (
+            <div className="grid gap-1.5">
+              <div className="relative flex h-20 w-28 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/30">
+                {hasImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={value} alt={blockKey} className="h-full w-full object-contain" />
+                ) : (
+                  <div className="flex flex-col items-center gap-1 px-1 text-center text-muted-foreground">
+                    <ImageIcon className="size-5" />
+                    <span className="text-[10px] leading-tight">
+                      {isStaleAirtable ? 'Stale — re-upload' : 'No image'}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                disabled={pending}
+                onChange={(e) => onPick(e.target.files?.[0])}
+                className="hidden"
+              />
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  disabled={pending}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  {hasImage ? <RefreshCwIcon /> : <UploadIcon />}
+                  {pending ? 'Uploading…' : hasImage ? 'Replace' : 'Upload'}
+                </Button>
+                {hasImage || isStaleAirtable ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    disabled={pending}
+                    onClick={() => onChange('')}
+                  >
+                    <XIcon />
+                    Remove
+                  </Button>
+                ) : null}
+              </div>
+              {err ? <span className="text-xs text-destructive">{err}</span> : null}
+            </div>
+          );
+        })()
       ) : isMarkdown ? (
         <Textarea value={value} onChange={(e) => onChange(e.target.value)} rows={3} placeholder="markdown" />
       ) : (

@@ -16,7 +16,8 @@ import { freshDb } from './helpers.js';
 const NOW = '2026-05-30';
 
 function promo(id: string, extra: Partial<PromoLike> = {}): PromoLike {
-  return { id, active: 1, sort_order: 0, start_date: null, end_date: null, banner_text: `banner-${id}`, ...extra };
+  // gate column renamed active→published in migration 0005 (PromoLike.published).
+  return { id, published: 1, sort_order: 0, start_date: null, end_date: null, banner_text: `banner-${id}`, ...extra };
 }
 
 const ctx = { qmiId: 'recQMI1', communityId: 'recComm1', cityId: 'recCity1' };
@@ -116,7 +117,7 @@ describe('resolveEffectivePromo — tie-break by lowest sort_order', () => {
 
 describe('resolveEffectivePromo — active + date-window filtering', () => {
   it('skips inactive promos', () => {
-    const promos = [promo('pQmi', { active: 0 }), promo('pComm')];
+    const promos = [promo('pQmi', { published: 0 }), promo('pComm')];
     const targets: PromoTargetLike[] = [
       { promotion_id: 'pQmi', target_type: 'qmi', target_id: 'recQMI1' },
       { promotion_id: 'pComm', target_type: 'community', target_id: 'recComm1' },
@@ -162,7 +163,7 @@ describe('promo resolution backed by the real schema (end-to-end against D1 SQL)
     const db = freshDb();
     // seed promos
     const insP = db.prepare(
-      `INSERT INTO promotions (id, title, banner_text, sort_order, start_date, end_date, active)
+      `INSERT INTO promotions (id, title, banner_text, sort_order, start_date, end_date, published)
        VALUES (@id, @title, @banner, @sort, @start, @end, @active)`
     );
     insP.run({ id: 'pGlobal', title: 'G', banner: 'g', sort: 0, start: null, end: null, active: 1 });
@@ -183,7 +184,7 @@ describe('promo resolution backed by the real schema (end-to-end against D1 SQL)
       SELECT p.id
       FROM promotions p
       JOIN promotion_targets t ON t.promotion_id = p.id
-      WHERE p.active = 1
+      WHERE p.published = 1
         AND (p.start_date IS NULL OR p.start_date = '' OR p.start_date <= @now)
         AND (p.end_date   IS NULL OR p.end_date   = '' OR p.end_date   >= @now)
         AND (

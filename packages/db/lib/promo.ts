@@ -5,7 +5,7 @@
 //   specificity  qmi > community > city > global
 //   then         lowest sort_order
 //   then         lowest id (deterministic final tie-break)
-//   filtered by  active === true AND date window [start_date, end_date] contains `now`
+//   filtered by  published === true AND date window [start_date, end_date] contains `now`
 //
 // Pure + dependency-free so it's trivially unit-testable and reusable by the api
 // Worker (which fetches the candidate promos + targets from D1 and calls this).
@@ -17,8 +17,8 @@ export type PromoTargetType = 'global' | 'city' | 'community' | 'qmi';
 /** Minimal promotion shape the resolver needs (the api Worker passes full rows). */
 export interface PromoLike {
   id: string;
-  /** integer 0/1 or boolean — coerced to boolean. */
-  active: number | boolean;
+  /** publish gate (renamed from `active` in migration 0005). integer 0/1 or boolean. */
+  published: number | boolean;
   /** YYYY-MM-DD (lexicographically comparable). null/'' = open-ended. */
   start_date?: string | null;
   end_date?: string | null;
@@ -50,7 +50,7 @@ const SPECIFICITY: Record<PromoTargetType, number> = {
 };
 
 function isActive(p: PromoLike): boolean {
-  return p.active === true || p.active === 1;
+  return p.published === true || p.published === 1;
 }
 
 /**

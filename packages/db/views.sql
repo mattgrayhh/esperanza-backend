@@ -78,7 +78,8 @@ SELECT
   fp.collection             AS fp_collection,
   fp.master_bed_location    AS fp_master_bed_location,
 
-  q.published
+  q.published,
+  q.coming_soon            -- on-site-but-not-yet-live flag (surfaced; gate stays published)
 FROM qmi q
 LEFT JOIN floor_plans fp
   ON fp.id = COALESCE(q.override_floor_plan_id, q.synced_floor_plan_id)
@@ -86,15 +87,17 @@ WHERE q.published = 1;   -- live publish gate
 
 -- =============================================================================
 -- v_public_communities — square_footage_range is the only synced field and has
--- NO override counterpart, so it is a plain column (no COALESCE). publish gate is
--- left to the api Worker (active = published && !draft) so admin reads can see drafts.
+-- NO override counterpart, so it is a plain column (no COALESCE). The `draft` column
+-- was DROPPED in migration 0005 (all rows 0); the publish gate is now baked here
+-- (WHERE published = 1), uniform with every other v_public_ view. coming_soon is the
+-- additive on-site-but-not-yet-live flag.
 -- =============================================================================
 DROP VIEW IF EXISTS v_public_communities;
 CREATE VIEW v_public_communities AS
 SELECT
   c.id,
   c.square_footage_range,           -- synced, no pair → plain
-  c.name, c.slug, c.town, c.published, c.draft, c.address,
+  c.name, c.slug, c.town, c.published, c.address,
   c.map_coordinates, c.latitude, c.longitude, c.lat_long,
   c.master_planned, c.coming_soon,
   c.price_from, c.bed_count, c.bath_count,
@@ -116,10 +119,13 @@ SELECT
   c.office_phone, c.office_hours, c.schedule_visit, c.lending,
   c.mine_link, c.community_map_embed, c.incentive, c.floor_plan_plaintext,
   c.hoa_links_json, c.city_id
-FROM communities c;
+FROM communities c
+WHERE c.published = 1;   -- live publish gate (draft column dropped in 0005)
 
 -- =============================================================================
--- v_public_cities — synced counts have no override pair → plain columns.
+-- v_public_cities — synced counts have no override pair → plain columns. Migration
+-- 0005 added a `published` gate (baked here) + a `coming_soon` flag (surfaced);
+-- `status` is now informational only.
 -- =============================================================================
 DROP VIEW IF EXISTS v_public_cities;
 CREATE VIEW v_public_cities AS
@@ -127,10 +133,12 @@ SELECT
   ci.id,
   ci.community_count, ci.move_in_homes_count, ci.floor_plans_count,  -- synced, no pair → plain
   ci.city_name, ci.slug, ci.state, ci.status,
+  ci.published, ci.coming_soon,
   ci.map_latitude, ci.map_longitude,
   ci.hero_image_url, ci.hero_description, ci.national_recognition, ci.incentive,
   ci.city_copy_blocks_json, ci.city_venue_blocks_json
-FROM cities ci;
+FROM cities ci
+WHERE ci.published = 1;   -- live publish gate (added in 0005)
 
 -- =============================================================================
 -- v_public_floor_plans — synced_image_url (external) has no override pair → plain.
@@ -141,7 +149,7 @@ CREATE VIEW v_public_floor_plans AS
 SELECT
   fp.id,
   fp.synced_image_url,              -- external-synced, no pair → plain
-  fp.name, fp.slug, fp.published, fp.collection, fp.starting_price,
+  fp.name, fp.slug, fp.published, fp.coming_soon, fp.collection, fp.starting_price,
   fp.bedroom_min, fp.bedroom_max, fp.bathroom_min, fp.bathroom_max,
   fp.car_garage_count, fp.stories_count,
   fp.living_square_footage, fp.total_square_footage,
@@ -158,7 +166,8 @@ FROM floor_plans fp
 WHERE fp.published = 1;
 
 -- =============================================================================
--- v_public_promotions — straight passthrough of active promos. RESOLUTION (which
+-- v_public_promotions — straight passthrough of published promos. The `active` gate
+-- was RENAMED to `published` in migration 0005 (uniform gate name). RESOLUTION (which
 -- promo applies to a given QMI/community/city) is NOT baked here — see below.
 -- =============================================================================
 DROP VIEW IF EXISTS v_public_promotions;
@@ -166,25 +175,29 @@ CREATE VIEW v_public_promotions AS
 SELECT
   p.id, p.title, p.banner_text, p.badge_text, p.copy,
   p.cta_label, p.cta_url, p.image_url,
-  p.sort_order, p.start_date, p.end_date, p.active, p.applies_to
+  p.sort_order, p.start_date, p.end_date, p.published, p.applies_to
 FROM promotions p
-WHERE p.active = 1;
+WHERE p.published = 1;
 
 -- =============================================================================
 -- v_public_collections / v_public_images / v_public_blogs / v_public_testimonials
 -- — fully admin-owned passthroughs (no synced/override pairs anywhere).
 -- =============================================================================
+-- collections + images gained a `published` gate in migration 0005 (backfilled =1),
+-- so they now filter published = 1 like every other v_public_ view.
 DROP VIEW IF EXISTS v_public_collections;
 CREATE VIEW v_public_collections AS
 SELECT id, title, slug, content, header_image, header_image_alt,
-       starting_at, ending_at, incentive
-FROM collections;
+       starting_at, ending_at, incentive, published
+FROM collections
+WHERE published = 1;
 
 DROP VIEW IF EXISTS v_public_images;
 CREATE VIEW v_public_images AS
 SELECT id, slug, plan_name, caption, caption_clean,
-       elevation_style, elevation_material, elevation_parsed, file_url
-FROM images;
+       elevation_style, elevation_material, elevation_parsed, file_url, published
+FROM images
+WHERE published = 1;
 
 DROP VIEW IF EXISTS v_public_blogs;
 CREATE VIEW v_public_blogs AS
@@ -193,13 +206,16 @@ SELECT id, title, slug, category, excerpt, content, publish_date,
 FROM blogs
 WHERE published = 1;
 
+-- testimonials gained a `published` gate in migration 0005 (default 1, backfilled =0
+-- where status='Draft'), so the gate is now `published = 1` — equivalent to the old
+-- status<>'Draft' rule but uniform with every other entity. `status` is informational.
 DROP VIEW IF EXISTS v_public_testimonials;
 CREATE VIEW v_public_testimonials AS
 SELECT id, person_name, slug, date_posted, testimonial_text, move_in_year,
-       status, image_url, floor_plan_id, floor_plan_name, floor_plan_image,
+       status, published, image_url, floor_plan_id, floor_plan_name, floor_plan_image,
        community_id, community_name, town
 FROM testimonials
-WHERE status IS NULL OR status <> 'Draft';   -- draft = Status==='Draft'; unset defaults LIVE
+WHERE published = 1;   -- live publish gate (equivalent to old status<>'Draft')
 
 -- =============================================================================
 -- PROMO RESOLUTION — DOCUMENTED, NOT a view. The api Worker resolves the
@@ -211,7 +227,7 @@ WHERE status IS NULL OR status <> 'Draft';   -- draft = Status==='Draft'; unset 
 --   SELECT p.*
 --   FROM promotions p
 --   JOIN promotion_targets t ON t.promotion_id = p.id
---   WHERE p.active = 1
+--   WHERE p.published = 1
 --     AND (p.start_date IS NULL OR p.start_date = '' OR p.start_date <= :now)
 --     AND (p.end_date   IS NULL OR p.end_date   = '' OR p.end_date   >= :now)
 --     AND (

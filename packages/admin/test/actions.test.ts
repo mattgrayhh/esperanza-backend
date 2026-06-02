@@ -259,7 +259,7 @@ describe('togglePublished — the only path that sets published=1', () => {
 describe('savePromotionTargets — replace-all promotion_targets honoring the CHECK', () => {
   beforeEach(() => {
     H.sqlite
-      .prepare(`INSERT INTO promotions (id, title, active) VALUES ('p1', 'Spring', 1)`)
+      .prepare(`INSERT INTO promotions (id, title, published) VALUES ('p1', 'Spring', 1)`)
       .run();
     // a couple of communities to target
     H.sqlite.prepare(`INSERT INTO communities (id, name) VALUES ('recCommA', 'A')`).run();

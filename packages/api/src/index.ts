@@ -145,7 +145,9 @@ type Row = Record<string, unknown>;
 /**
  * A v_public_promotions row. Shaped to satisfy `PromoLike` (so resolveEffectivePromo
  * accepts it directly) while carrying the extra columns the /promotions serializer
- * reads. `active`/`sort_order`/dates are the fields the resolver inspects.
+ * reads. `published`/`sort_order`/dates are the fields the resolver inspects.
+ * (`published` is the gate column, renamed from `active` in migration 0005; the PUBLIC
+ * JSON output key stays `active` — see serializePromotionRow.)
  */
 interface PromoRow {
   id: string;
@@ -159,7 +161,7 @@ interface PromoRow {
   sort_order: number | null;
   start_date: string | null;
   end_date: string | null;
-  active: number | boolean;
+  published: number | boolean;
   applies_to: unknown;
   [k: string]: unknown;
 }
@@ -183,6 +185,7 @@ type FieldSpec = [string, string, (v: unknown) => Json];
 /** Plain (non-FP, non-link) columns: emitted only when the column value is non-null. */
 const QMI_PLAIN: FieldSpec[] = [
   ['published', 'Published', (v) => asBool(v)],
+  ['coming_soon', 'Coming Soon', (v) => asBool(v)],
   ['housenumber', 'housenumber', (v) => asStr(v)],
   ['posted', 'Posted', (v) => asStr(v)],
   ['community', 'Community', (v) => asStr(v)],
@@ -365,7 +368,9 @@ export function serializeCommunityRow(row: Row, resolved: ResolvedPromo | null):
     slug: asStr(row['slug']),
     town: asStr(row['town']),
     coordinates: coords,
-    active: asBool(row['published']) && !asBool(row['draft']),
+    // `draft` column dropped in migration 0005; the view now gates published, so the
+    // public `active` flag is simply `published` (every served community is live).
+    active: asBool(row['published']),
     address: asStr(row['address']),
     image: asStr(row['featured_image_url']),
     secondaryImage: asStr(row['secondary_image_url']),
@@ -470,7 +475,8 @@ export function serializePromotionRow(
     cardBadgeText: asStr(promo.badge_text),
     ctaLabel: asStr(promo.cta_label),
     ctaLink: asStr(promo.cta_url),
-    active: asBool(promo.active),
+    // PUBLIC contract output key stays `active`; read it from the renamed gate column.
+    active: asBool(promo.published),
     appliesTo: asStr(promo.applies_to),
     sortOrder: asIntOrNull(promo.sort_order) ?? 0,
     image,
@@ -491,6 +497,7 @@ export function serializeFloorPlanRow(row: Row): Record<string, Json> {
     id: String(row['id']),
     name: asStr(row['name']),
     slug: asStr(row['slug']),
+    comingSoon: asBool(row['coming_soon']),
     collection: asStr(row['collection']),
     startingPrice: asNumOrNull(row['starting_price']),
     bedroomMin: asIntOrNull(row['bedroom_min']),
@@ -518,6 +525,7 @@ export function serializeCityRow(row: Row): Record<string, Json> {
     slug: asStr(row['slug']),
     state: asStr(row['state']),
     status: asStr(row['status']),
+    comingSoon: asBool(row['coming_soon']),
     coordinates:
       row['map_latitude'] != null && row['map_longitude'] != null
         ? normalizeLatLng(`${row['map_latitude']},${row['map_longitude']}`)
@@ -698,8 +706,8 @@ async function buildPayload(
       const ctx = await loadPromoContext(session);
       const res = await session.prepare('SELECT * FROM v_public_communities').all();
       const rows = (res.results ?? []) as unknown as Row[];
+      // The view already gates published (draft column dropped in 0005) — map directly.
       const communities = rows
-        .filter((row) => asBool(row['published']) && !asBool(row['draft'])) // active only
         .map((row) => {
           const resolved = resolveFor(
             ctx,
@@ -722,7 +730,7 @@ async function buildPayload(
         else byPromo.set(t.promotion_id, [t]);
       }
       const promotions = ctx.promos
-        .filter((p) => asBool(p.active))
+        .filter((p) => asBool(p.published))
         .map((p) => serializePromotionRow(p, byPromo.get(p.id) ?? [], ctx.maps))
         .sort((a, b) => a.sortOrder - b.sortOrder);
       return { promotions, ts };

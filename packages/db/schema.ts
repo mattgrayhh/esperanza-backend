@@ -201,7 +201,6 @@ export const communities = sqliteTable(
     slug: text('slug'),
     town: text('town'),
     published: integer('published', { mode: 'boolean' }).notNull().default(false),
-    draft: integer('draft', { mode: 'boolean' }).notNull().default(false),
     address: text('address'),
     mapCoordinates: text('map_coordinates'),
     latitude: real('latitude'),
@@ -287,7 +286,11 @@ export const cities = sqliteTable(
     cityName: text('city_name'),
     slug: text('slug'),
     state: text('state'),
+    // `status` is KEPT but informational only (migration 0005): `published` is the gate.
     status: text('status'),
+    // publish gate + coming-soon flag added in migration 0005 (gate-all standardization).
+    published: integer('published', { mode: 'boolean' }).notNull().default(false),
+    comingSoon: integer('coming_soon', { mode: 'boolean' }).notNull().default(false),
     mapLatitude: real('map_latitude'),
     mapLongitude: real('map_longitude'),
 
@@ -305,7 +308,7 @@ export const cities = sqliteTable(
     createdAt: text('created_at').notNull().default(nowIso),
     updatedAt: text('updated_at').notNull().default(nowIso),
   },
-  (t) => [index('idx_cities_name').on(t.cityName)]
+  (t) => [index('idx_cities_name').on(t.cityName), index('idx_cities_published').on(t.published)]
 );
 
 // =============================================================================
@@ -399,7 +402,9 @@ export const promotions = sqliteTable(
     sortOrder: integer('sort_order').notNull().default(0),
     startDate: text('start_date'),
     endDate: text('end_date'),
-    active: integer('active', { mode: 'boolean' }).notNull().default(true),
+    // RENAMED from `active` in migration 0005 (gate-all standardization): the single
+    // publish gate, now uniformly named `published` like every other entity.
+    published: integer('published', { mode: 'boolean' }).notNull().default(true),
     appliesTo: text('applies_to'), // legacy descriptive label, informational only
 
     // Field Builder (0002): JSON values of user-defined fields. Additive, nullable.
@@ -408,7 +413,7 @@ export const promotions = sqliteTable(
     createdAt: text('created_at').notNull().default(nowIso),
     updatedAt: text('updated_at').notNull().default(nowIso),
   },
-  (t) => [index('idx_promotions_active').on(t.active, t.sortOrder)]
+  (t) => [index('idx_promotions_published').on(t.published, t.sortOrder)]
 );
 
 export const promotionTargets = sqliteTable(
@@ -444,6 +449,8 @@ export const collections = sqliteTable('collections', {
   startingAt: real('starting_at'),
   endingAt: real('ending_at'),
   incentive: text('incentive'),
+  // publish gate added in migration 0005 (gate-all standardization; backfilled =1).
+  published: integer('published', { mode: 'boolean' }).notNull().default(false),
   // Field Builder (0002): JSON values of user-defined fields. Additive, nullable.
   customFields: text('custom_fields'),
   createdAt: text('created_at').notNull().default(nowIso),
@@ -460,6 +467,8 @@ export const images = sqliteTable('images', {
   elevationMaterial: text('elevation_material'),
   elevationParsed: text('elevation_parsed'),
   fileUrl: text('file_url'),
+  // publish gate added in migration 0005 (gate-all standardization; backfilled =1).
+  published: integer('published', { mode: 'boolean' }).notNull().default(false),
   // Field Builder (0002): JSON values of user-defined fields. Additive, nullable.
   customFields: text('custom_fields'),
   createdAt: text('created_at').notNull().default(nowIso),
@@ -491,7 +500,10 @@ export const testimonials = sqliteTable('testimonials', {
   datePosted: text('date_posted'),
   testimonialText: text('testimonial_text'),
   moveInYear: text('move_in_year'),
+  // `status` is KEPT but informational only (migration 0005): `published` is the gate.
   status: text('status'),
+  // publish gate added in migration 0005 (default 1; backfilled =0 where status='Draft').
+  published: integer('published', { mode: 'boolean' }).notNull().default(true),
   imageUrl: text('image_url'),
   floorPlanId: text('floor_plan_id'),
   floorPlanName: text('floor_plan_name'),

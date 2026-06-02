@@ -34,6 +34,7 @@ import {
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
+  ImageIcon,
   Plus,
   Search,
   SlidersHorizontal,
@@ -41,6 +42,7 @@ import {
 
 import { cn } from "@/lib/utils"
 import { statusTone } from "@/lib/status"
+import { isImageField } from "@/lib/image-fields"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -64,7 +66,7 @@ import {
 
 // ── serializable shapes (mirror lib/build-list-view.ts ListView, kept local so
 //    this client component imports no server-only modules) ────────────────────
-export type ListCellKind = "text" | "number" | "boolean" | "publish" | "currency"
+export type ListCellKind = "text" | "number" | "boolean" | "publish" | "currency" | "image"
 
 export interface DataTableColumn {
   field: string
@@ -123,6 +125,34 @@ function StatusBadge({ tone, text }: { tone: StatusTone; text: string }) {
   )
 }
 
+// =============================================================================
+// Image cell — operator requirement: an image column in ANY list/table renders a small
+// THUMBNAIL, never the raw URL/text. A stale Airtable URL (expired/rejected) and an empty
+// value both fall back to a muted placeholder tile (same contract as ImageUploader).
+// =============================================================================
+function ImageThumb({ url, alt }: { url: string; alt: string }) {
+  const ok = url.trim() !== "" && !url.includes("airtableusercontent.com")
+  if (!ok) {
+    return (
+      <div
+        className="flex size-10 items-center justify-center rounded-md border border-dashed border-border bg-muted/40 text-muted-foreground"
+        aria-label="No image"
+      >
+        <ImageIcon className="size-4 opacity-60" />
+      </div>
+    )
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={url}
+      alt={alt}
+      loading="lazy"
+      className="size-10 shrink-0 rounded-md border border-border object-cover"
+    />
+  )
+}
+
 /** The synthetic "Status" column — tri-state badge from the derived status string.
  *  Live/Published = filled green; Coming Soon/Scheduled = outline green (on-site, not
  *  fully live); Draft = muted. */
@@ -153,22 +183,41 @@ function buildColumns(
   // below renders the single tri-state badge instead (feedback [16][41]).
   const defs: ColumnDef<DataTableRow>[] = cols
     .filter((c) => c.kind !== "publish")
-    .map((c, index) => ({
+    .map((c, index) => {
+    // Image columns render a thumbnail (operator DAM rule), not raw URL text.
+    const isImage = c.kind === "image" || isImageField(c.field)
+    return {
     id: c.field,
     accessorFn: (row) => row.values[c.field] ?? "",
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        size="sm"
-        className="-ml-2 h-7 px-2 text-muted-foreground hover:text-foreground"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-      >
-        {c.label}
-        <ArrowUpDown className="size-3 opacity-60" />
-      </Button>
-    ),
+    header: ({ column }) =>
+      isImage ? (
+        // No sort on an image thumbnail column — just a static label.
+        <span className="px-2">{c.label}</span>
+      ) : (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="-ml-2 h-7 px-2 text-muted-foreground hover:text-foreground"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          {c.label}
+          <ArrowUpDown className="size-3 opacity-60" />
+        </Button>
+      ),
     cell: ({ row }) => {
       const value = row.original.values[c.field] ?? ""
+      // Image column → thumbnail. If it happens to be the first (link) column, wrap the
+      // thumbnail in the editor link so the row is still navigable.
+      if (isImage) {
+        const thumb = <ImageThumb url={value} alt={c.label} />
+        return index === 0 ? (
+          <Link href={`/${segment}/${row.original.id}`} aria-label={`Edit ${row.original.id}`}>
+            {thumb}
+          </Link>
+        ) : (
+          thumb
+        )
+      }
       // First column → link to the editor.
       if (index === 0) {
         return (
@@ -189,8 +238,10 @@ function buildColumns(
     },
     // Numeric + currency columns sort by value (numericSort strips $ and commas).
     sortingFn: c.kind === "number" || c.kind === "currency" ? numericSort : "alphanumeric",
+    enableSorting: !isImage,
     enableHiding: index !== 0, // keep the title column always visible
-  }))
+    }
+  })
 
   // Synthetic "Status" column (the single publish indicator) for gated entities.
   if (gateColumn != null) {

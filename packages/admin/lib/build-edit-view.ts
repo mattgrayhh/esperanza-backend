@@ -20,6 +20,7 @@ import {
   type SelectSource,
 } from './field-config';
 import { statusGate, deriveStatus, statusOptions } from './status';
+import { isImageField } from './image-fields';
 import { resolveFieldConfig } from './field-config-source';
 import { loadOptionSets, loadPromoScopeOptions, type SelectOption } from './select-options';
 import { promotionTargets } from '@esperanza/db';
@@ -235,7 +236,6 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
     const status = deriveStatus(gate, {
       published: Boolean(col(row, 'published')),
       comingSoon: Boolean(col(row, 'coming_soon')),
-      active: Boolean(col(row, 'active')),
       status: s(col(row, 'status')),
       publishDate: s(col(row, 'publish_date')) || null,
       now: new Date().toISOString(),
@@ -307,7 +307,22 @@ function buildFieldView(
 
   // admin: image widget → ImageUploader; else GenericField. (fieldValue resolves the
   // custom_fields value for a builder-added image field, the column otherwise.)
-  if (f.widget === 'image') {
+  //
+  // Operator requirement (DAM): EVERY image field must render as the IMAGE (uploader +
+  // inline preview), never a raw URL text input. The config tags most image columns
+  // `widget: 'image'`, but we don't depend on that being perfect — a documented image
+  // column tagged `text`/`url` (or a Field-Builder `*_image`) is FORCED to the image
+  // widget here. We only force it for plain admin fields (synced/override/publish buckets
+  // and bespoke composed widgets keep their own paths) so write-routing is unaffected.
+  const forceImage =
+    f.bucket === 'admin' &&
+    f.widget !== 'image' &&
+    f.widget !== 'jsonBlocks' &&
+    f.widget !== 'hoaLinks' &&
+    f.widget !== 'promoScopeTag' &&
+    f.widget !== 'syncedOverride' &&
+    isImageField(f.field);
+  if (f.widget === 'image' || forceImage) {
     return { kind: 'image', field: f.field, label: f.label, value: fieldValue, help: f.help, group: f.group };
   }
 

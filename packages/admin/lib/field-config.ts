@@ -132,6 +132,8 @@ const qmi: EntityFieldConfig = {
   fields: [
     // ── publish ──
     { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish' },
+    // coming-soon flag (migration 0005 wiring): on-site-but-not-yet-live state.
+    { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin', halfWidth: true },
 
     // ── override (synced_/override_ pairs) ──
     {
@@ -275,7 +277,6 @@ const communities: EntityFieldConfig = {
     { field: 'name', label: 'Name' },
     { field: 'town', label: 'Town' },
     { field: 'published', label: 'Published', kind: 'publish' },
-    { field: 'draft', label: 'Draft', kind: 'boolean' },
     { field: 'coming_soon', label: 'Coming Soon', kind: 'boolean' },
     { field: 'price_from', label: 'Price From', kind: 'currency' },
     { field: 'city_id', label: 'City' },
@@ -283,7 +284,7 @@ const communities: EntityFieldConfig = {
   fields: [
     { field: 'square_footage_range', label: 'Sq Ft Range (synced)', widget: 'text', bucket: 'synced', help: 'Read-only synced value.' },
     { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish' },
-    { field: 'draft', label: 'Draft (hide)', widget: 'boolean', bucket: 'admin' },
+    // `draft` column removed in migration 0005 (published is the single gate).
     { field: 'name', label: 'Name', widget: 'text', bucket: 'admin' },
     { field: 'slug', label: 'Slug', widget: 'text', bucket: 'admin' },
     { field: 'town', label: 'Town', widget: 'text', bucket: 'admin' },
@@ -349,18 +350,23 @@ const cities: EntityFieldConfig = {
   listColumns: [
     { field: 'city_name', label: 'City' },
     { field: 'state', label: 'State' },
-    { field: 'status', label: 'Status' },
+    { field: 'published', label: 'Published', kind: 'publish' },
+    { field: 'coming_soon', label: 'Coming Soon', kind: 'boolean' },
     { field: 'community_count', label: 'Communities', kind: 'number' },
     { field: 'move_in_homes_count', label: 'Move-In Homes', kind: 'number' },
   ],
   fields: [
+    // publish gate + coming-soon flag added in migration 0005 (gate-all standardization).
+    { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish' },
+    { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin', halfWidth: true },
     { field: 'community_count', label: 'Community Count (synced)', widget: 'number', bucket: 'synced', halfWidth: true },
     { field: 'move_in_homes_count', label: 'Move-In Homes (synced)', widget: 'number', bucket: 'synced', halfWidth: true },
     { field: 'floor_plans_count', label: 'Floor Plans Count (synced)', widget: 'number', bucket: 'synced', halfWidth: true },
     { field: 'city_name', label: 'City Name', widget: 'text', bucket: 'admin', halfWidth: true },
     { field: 'slug', label: 'Slug', widget: 'text', bucket: 'admin', halfWidth: true },
     { field: 'state', label: 'State', widget: 'text', bucket: 'admin', halfWidth: true },
-    { field: 'status', label: 'Status', widget: 'text', bucket: 'admin', halfWidth: true },
+    // `status` demoted to informational in migration 0005 (no longer a gate).
+    { field: 'status', label: 'Status (informational)', widget: 'text', bucket: 'admin', halfWidth: true },
     { field: 'map_latitude', label: 'Map Latitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
     { field: 'map_longitude', label: 'Map Longitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
     { field: 'hero_image_url', label: 'Hero Image', widget: 'image', bucket: 'admin' },
@@ -440,6 +446,8 @@ const floor_plans: EntityFieldConfig = {
     // source of truth. (D1 column + sync unchanged; just hidden here.)
     { field: 'force_replace_renderings', label: 'Force Replace Renderings', widget: 'boolean', bucket: 'admin' },
     { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish' },
+    // coming-soon flag (migration 0005 wiring): on-site-but-not-yet-live state.
+    { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin', halfWidth: true },
     { field: 'name', label: 'Name', widget: 'text', bucket: 'admin' },
     { field: 'slug', label: 'Slug', widget: 'text', bucket: 'admin' },
     { field: 'collection', label: 'Collection', widget: 'text', bucket: 'admin' },
@@ -475,13 +483,14 @@ const floor_plans: EntityFieldConfig = {
 const promotions: EntityFieldConfig = {
   listColumns: [
     { field: 'title', label: 'Title' },
-    { field: 'active', label: 'Active', kind: 'publish' },
+    { field: 'published', label: 'Published', kind: 'publish' },
     { field: 'sort_order', label: 'Sort', kind: 'number' },
     { field: 'start_date', label: 'Start' },
     { field: 'end_date', label: 'End' },
   ],
   fields: [
-    { field: 'active', label: 'Active', widget: 'boolean', bucket: 'publish', help: 'The single gate; active=false → framer draft:true.' },
+    // gate column renamed from `active` to `published` in migration 0005.
+    { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish', help: 'The single gate; published=false → framer draft:true.' },
     { field: 'title', label: 'Title', widget: 'text', bucket: 'admin' },
     { field: 'banner_text', label: 'Banner Text', widget: 'text', bucket: 'admin' },
     { field: 'badge_text', label: 'Badge Text', widget: 'text', bucket: 'admin' },
@@ -503,11 +512,14 @@ const promotions: EntityFieldConfig = {
 const collections: EntityFieldConfig = {
   listColumns: [
     { field: 'title', label: 'Title' },
+    { field: 'published', label: 'Published', kind: 'publish' },
     { field: 'slug', label: 'Slug' },
     { field: 'starting_at', label: 'Starting At', kind: 'currency' },
     { field: 'ending_at', label: 'Ending At', kind: 'currency' },
   ],
   fields: [
+    // publish gate added in migration 0005 (gate-all standardization; backfilled =1).
+    { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish' },
     { field: 'title', label: 'Title', widget: 'text', bucket: 'admin' },
     { field: 'slug', label: 'Slug', widget: 'text', bucket: 'admin' },
     { field: 'content', label: 'Content (md)', widget: 'richtext', bucket: 'admin' },
@@ -525,11 +537,14 @@ const collections: EntityFieldConfig = {
 const images: EntityFieldConfig = {
   listColumns: [
     { field: 'slug', label: 'Slug' },
+    { field: 'published', label: 'Published', kind: 'publish' },
     { field: 'plan_name', label: 'Plan' },
     { field: 'caption_clean', label: 'Caption' },
     { field: 'elevation_style', label: 'Elevation' },
   ],
   fields: [
+    // publish gate added in migration 0005 (gate-all standardization; backfilled =1).
+    { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish' },
     { field: 'slug', label: 'Slug', widget: 'text', bucket: 'admin' },
     { field: 'plan_name', label: 'Plan Name', widget: 'text', bucket: 'admin' },
     { field: 'caption', label: 'Caption', widget: 'textarea', bucket: 'admin' },
@@ -572,13 +587,17 @@ const blogs: EntityFieldConfig = {
 const testimonials: EntityFieldConfig = {
   listColumns: [
     { field: 'person_name', label: 'Person' },
-    { field: 'status', label: 'Status', kind: 'publish' },
+    { field: 'published', label: 'Published', kind: 'publish' },
     { field: 'move_in_year', label: 'Move-In Year' },
     { field: 'community_name', label: 'Community' },
     { field: 'floor_plan_name', label: 'Floor Plan' },
   ],
   fields: [
-    { field: 'status', label: 'Status', widget: 'select', bucket: 'publish', options: ['', 'Live', 'Draft'], help: "'Draft' hides; anything else is live." },
+    // publish gate added in migration 0005 (default 1; backfilled =0 where status='Draft').
+    { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish' },
+    // `status` demoted to informational in migration 0005 (no longer the gate); kept as a
+    // free-pick label so legacy 'Live'/'Draft' values remain visible/editable.
+    { field: 'status', label: 'Status (informational)', widget: 'select', bucket: 'admin', options: ['', 'Live', 'Draft'], help: 'Informational label only; `published` is the gate.' },
     { field: 'person_name', label: 'Person Name', widget: 'text', bucket: 'admin' },
     { field: 'slug', label: 'Slug', widget: 'text', bucket: 'admin' },
     { field: 'date_posted', label: 'Date Posted', widget: 'date', bucket: 'admin', halfWidth: true },
@@ -612,19 +631,23 @@ export function fieldConfigFor(key: EntityKey): EntityFieldConfig {
   return FIELD_CONFIG[key];
 }
 
-/** The publish-gate column for an entity (drives the publish indicator + toggle). */
+/** The publish-gate column for an entity (drives the publish indicator + toggle).
+ *  Migration 0005 standardized EVERY public entity onto a single `published` gate
+ *  (promotions.active was renamed; cities/collections/images gained `published`;
+ *  testimonials.status was demoted to informational with a new `published` gate). */
 export function publishGateColumn(key: EntityKey): string | null {
   switch (key) {
     case 'qmi':
     case 'communities':
     case 'floor_plans':
     case 'blogs':
-      return 'published';
     case 'promotions':
-      return 'active';
     case 'testimonials':
-      return 'status';
+    case 'cities':
+    case 'collections':
+    case 'images':
+      return 'published';
     default:
-      return null; // cities, collections, images — no gate
+      return null;
   }
 }

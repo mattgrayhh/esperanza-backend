@@ -269,7 +269,8 @@ const QMI_PROJECTION = `
   fp.plan_viewer_url        AS fp_plan_viewer,
   fp.collection             AS fp_collection,
   fp.master_bed_location    AS fp_master_bed_location,
-  q.published
+  q.published,
+  q.coming_soon
 FROM qmi q
 LEFT JOIN floor_plans fp
   ON fp.id = COALESCE(q.override_floor_plan_id, q.synced_floor_plan_id)`;
@@ -335,6 +336,7 @@ const floorPlans: CollectionDef = {
       virtual_tour_url: sIf(row['virtual_tour_url']),
       master_bed_location: sIf(row['master_bed_location']),
       incentive: sIf(row['incentive']),
+      coming_soon: bool(asBool(row['coming_soon'])),
       // brochure_pdf_url MUST stay "string" (link type breaks live binding & aborts batch)
       brochure_pdf_url: sIf(row['brochure_pdf_url']),
       brochure_pdf: sIf(row['brochure_pdf']),
@@ -433,6 +435,7 @@ const qmi: CollectionDef = {
       move_in_date: sIf(row['move_in_date']),
       estimated_monthly_payment: nIf(row['estimated_monthly_payment']),
       published: bool(asBool(row['published'])),
+      coming_soon: bool(asBool(row['coming_soon'])),
       // FP:* flattened
       fp_description: sIf(fpScalar(row['fp_description'])),
       fp_virtual_tour: sIf(fpScalar(row['fp_virtual_tour'])),
@@ -450,7 +453,8 @@ const qmi: CollectionDef = {
 };
 
 // =============================================================================
-// 3. COMMUNITIES  (draft = published !== true || draft === true — both gates)
+// 3. COMMUNITIES  (draft = !published — the `draft` column was DROPPED in
+//    migration 0005; published is now the single gate, like every other entity)
 // =============================================================================
 const communities: CollectionDef = {
   key: 'communities',
@@ -462,8 +466,8 @@ const communities: CollectionDef = {
     const id = String(row['id']);
     const slug =
       asString(row['slug']) ?? (asString(row['name']) ? kebab(String(row['name'])) : id);
-    // both gates: not published OR explicitly draft
-    const draft = !asBool(row['published']) || asBool(row['draft']);
+    // single gate: not published (the `draft` column was dropped in migration 0005)
+    const draft = !asBool(row['published']);
 
     // lat/long: parse from map_coordinates "lat,long" if the numeric cols are null
     let latitude = numField(row['latitude']);
@@ -556,7 +560,8 @@ const communities: CollectionDef = {
 };
 
 // =============================================================================
-// 4. COLLECTIONS  (draft = false — always live)
+// 4. COLLECTIONS  (draft = !published — collections gained a `published` gate in
+//    migration 0005; backfilled =1 so previously-always-live items stay live)
 // =============================================================================
 const collections: CollectionDef = {
   key: 'collections',
@@ -578,12 +583,13 @@ const collections: CollectionDef = {
       ending_at: nIf(row['ending_at']),
       incentive: sIf(row['incentive']),
     });
-    return { id, slug, draft: false, fieldData };
+    return { id, slug, draft: !asBool(row['published']), fieldData };
   },
 };
 
 // =============================================================================
-// 5. IMAGES  (draft = false)
+// 5. IMAGES  (draft = !published — images gained a `published` gate in migration
+//    0005; backfilled =1 so previously-always-live items stay live)
 // =============================================================================
 const images: CollectionDef = {
   key: 'images',
@@ -604,7 +610,7 @@ const images: CollectionDef = {
       elevation_parsed: sIf(row['elevation_parsed']),
       file: imgIf(row['file_url']),
     });
-    return { id, slug, draft: false, fieldData };
+    return { id, slug, draft: !asBool(row['published']), fieldData };
   },
 };
 
@@ -637,8 +643,8 @@ const blogs: CollectionDef = {
 };
 
 // =============================================================================
-// 7. PROMOTIONS  (draft = active === false. D1 has no separate Published col —
-//    `active` is the single gate; legacy Active=false hard-hides.)
+// 7. PROMOTIONS  (draft = published === false. The gate column was RENAMED from
+//    `active` to `published` in migration 0005; published=false hard-hides.)
 //    NOTE: image fallback (own → linked community → linked FP) is resolved by the
 //    consumer (it needs the promotion_targets join + linked images); the map() here
 //    takes a pre-resolved `image_url` on the row.
@@ -670,8 +676,9 @@ const promotions: CollectionDef = {
     const id = String(row['id']);
     const slug =
       asString(row['slug']) ?? (asString(row['title']) ? kebab(String(row['title'])) : id);
-    // canonical gate in D1: `active` (1/0). active=false → hard-hide (draft:true).
-    const draft = !asBool(row['active']);
+    // canonical gate in D1: `published` (1/0), renamed from `active` in migration 0005.
+    // published=false → hard-hide (draft:true).
+    const draft = !asBool(row['published']);
     const fieldData = compactFields({
       title: sIf(row['title']),
       banner_text: sIf(row['banner_text']),
@@ -681,7 +688,7 @@ const promotions: CollectionDef = {
       cta_link: linkIf(row['cta_url']),
       applies_to: sIf(row['applies_to']),
       sort_order: nIf(row['sort_order']),
-      published: bool(asBool(row['active'])),
+      published: bool(asBool(row['published'])),
       expiration_date: sIf(row['end_date']),
       // image: consumer pre-resolves the fallback chain onto row['image_url'].
       image: imgIf(row['image_url']),
@@ -694,7 +701,8 @@ const promotions: CollectionDef = {
 };
 
 // =============================================================================
-// 8. CITIES  (draft = false)
+// 8. CITIES  (draft = !published — cities gained a `published` gate + `coming_soon`
+//    flag in migration 0005)
 //    City "section_*" / venue blocks are stored as two JSON columns:
 //      city_copy_blocks_json  — { hero_description, national_recognition,
 //                                 homes_heading, homes_description, live_in_heading,
@@ -767,10 +775,13 @@ const cities: CollectionDef = {
       floor_plans_count: nIf(row['floor_plans_count']),
       move_in_homes_count: nIf(row['move_in_homes_count']),
       incentive: sIf(row['incentive']),
+      coming_soon: bool(asBool(row['coming_soon'])),
       ...copyFields,
       ...venueFields,
     });
-    return { id, slug, draft: false, fieldData };
+    // cities gained a published gate in 0005; draft = !published (single gate).
+    const draft = !asBool(row['published']);
+    return { id, slug, draft, fieldData };
   },
 };
 

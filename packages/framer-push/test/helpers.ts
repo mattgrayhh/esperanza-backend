@@ -7,7 +7,7 @@
 // =============================================================================
 
 import Database from 'better-sqlite3';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import type { D1Like } from '../src/types.js';
@@ -15,8 +15,17 @@ import type { D1Like } from '../src/types.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // packages/framer-push/test → packages/db
 const DB_DIR = join(__dirname, '..', '..', 'db');
+const MIGRATIONS_DIR = join(DB_DIR, 'migrations');
 
-export const INIT_SQL = readFileSync(join(DB_DIR, 'migrations', '0000_init.sql'), 'utf8');
+// Load the FULL migration chain (0000 → 0005…) in lexical order — the same SQL
+// `wrangler d1 migrations apply` runs against D1 — so views referencing columns
+// added/renamed by later migrations (e.g. 0005's published/coming_soon, the
+// promotions active→published rename) load faithfully.
+export const INIT_SQL = readdirSync(MIGRATIONS_DIR)
+  .filter((f) => f.endsWith('.sql'))
+  .sort()
+  .map((f) => readFileSync(join(MIGRATIONS_DIR, f), 'utf8'))
+  .join('\n');
 export const VIEWS_SQL = readFileSync(join(DB_DIR, 'views.sql'), 'utf8');
 
 export function freshDb(): Database.Database {

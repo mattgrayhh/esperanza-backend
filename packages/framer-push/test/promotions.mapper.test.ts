@@ -2,7 +2,8 @@
 // Promotions mapper test. Asserts the full field set maps: target-id csv lists
 // from promotion_targets, the image FALLBACK chain (own → first linked community
 // → first linked Floor Plan render — resolved in the consumer's enrichRow), the
-// active gate (active=false → draft:true), and link-typed cta_link.
+// publish gate (published=false → draft:true; gate renamed from `active` in 0005),
+// and link-typed cta_link.
 // =============================================================================
 
 import { describe, it, expect } from 'vitest';
@@ -43,7 +44,7 @@ describe('Promotions mapper — targets, image fallback, gate', () => {
       image_url: 'https://media.esperanzahomes.com/promo/spring.jpg',
       sort_order: 5,
       end_date: '2026-06-30',
-      active: 1,
+      published: 1,
       applies_to: 'Select communities',
       updated_at: '2026-05-30T12:00:00.000Z',
     });
@@ -94,7 +95,7 @@ describe('Promotions mapper — targets, image fallback, gate', () => {
     insertRow(db, 'promotions', {
       id: 'recPROMO0002ABC',
       title: 'Borrowed Image',
-      active: 1,
+      published: 1,
       // no image_url
       updated_at: '2026-05-30T12:00:00.000Z',
     });
@@ -121,7 +122,7 @@ describe('Promotions mapper — targets, image fallback, gate', () => {
     insertRow(db, 'promotions', {
       id: 'recPROMO0003ABC',
       title: 'FP Image',
-      active: 1,
+      published: 1,
       updated_at: '2026-05-30T12:00:00.000Z',
     });
     // FP targets aren't a target_type in the schema; the consumer reads
@@ -133,12 +134,12 @@ describe('Promotions mapper — targets, image fallback, gate', () => {
     expect(item.fieldData['image']).toBeUndefined();
   });
 
-  it('draft:true when active=false (hard-hide)', () => {
+  it('draft:true when published=false (hard-hide; gate renamed from active in 0005)', () => {
     const db = freshDb();
     insertRow(db, 'promotions', {
       id: 'recPROMO0004ABC',
       title: 'Expired Promo',
-      active: 0,
+      published: 0,
       updated_at: '2026-05-30T12:00:00.000Z',
     });
     const row = db.prepare(def.selectByIdSql).get('recPROMO0004ABC') as Record<string, unknown>;

@@ -458,10 +458,11 @@ export async function togglePublished(
 }
 
 // =============================================================================
-// toggleActive — promotions' publish gate. `active` is the single gate (no separate
-// published column); active=false → framer draft:true. Same audit contract as
-// togglePublished but on the `active` column. Promotions are not in `publishable`
-// (that flag is for the `published` column), so we accept the promotions entity here.
+// toggleActive — promotions' publish gate. Migration 0005 RENAMED the gate column
+// `active` → `published` (uniform with every other entity); this writes that column.
+// Kept as a distinct entry point for backward compatibility with the promotions
+// toggle wiring; published=false → framer draft:true. Same audit contract as
+// togglePublished.
 // =============================================================================
 
 export async function toggleActive(
@@ -480,15 +481,15 @@ export async function toggleActive(
   const at = new Date().toISOString();
   const current = await db.select().from(promotions).where(eq(promotions.id, id)).limit(1);
   if (current.length === 0) return { ok: false, error: `Promotion ${id} not found` };
-  const wasActive = Boolean((current[0]! as Record<string, unknown>)['active']);
+  const wasActive = Boolean((current[0]! as Record<string, unknown>)['published']);
 
-  await db.update(promotions).set({ active: value, updatedAt: at }).where(eq(promotions.id, id));
+  await db.update(promotions).set({ published: value, updatedAt: at }).where(eq(promotions.id, id));
 
   await postWrite(db, 'promotions', id, [
     {
       entity: 'promotions',
       entityId: id,
-      field: 'active',
+      field: 'published',
       action: value ? 'publish' : 'unpublish',
       oldValue: wasActive ? '1' : '0',
       newValue: value ? '1' : '0',
@@ -538,7 +539,6 @@ export async function setStatus(
   const oldStatus = deriveStatus(gate, {
     published: Boolean(row['published']),
     comingSoon: Boolean(row['comingSoon']),
-    active: Boolean(row['active']),
     status: toStr(row['status']),
     publishDate: toStr(row['publishDate']) || null,
     now: at,

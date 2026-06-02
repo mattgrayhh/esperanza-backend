@@ -63,6 +63,25 @@ interface Props {
   userEmail: string;
 }
 
+/** Inline logo preview — renders the IMAGE itself (operator DAM rule: never a bare URL).
+ *  Empty or stale-Airtable URLs fall back to a muted placeholder tile. Checkerboard-ish
+ *  muted background reads transparent PNGs (logos are usually transparent). */
+function LogoPreview({ url, alt }: { url: string; alt: string }) {
+  const ok = url.trim() !== '' && !url.includes('airtableusercontent.com');
+  return (
+    <div className="flex h-16 w-full items-center justify-center overflow-hidden rounded-md border border-border bg-muted/30">
+      {ok ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt={alt} className="max-h-full max-w-full object-contain" />
+      ) : (
+        <span className="text-xs text-muted-foreground">
+          {url.trim() === '' ? 'No logo set' : 'Stale image — replace URL'}
+        </span>
+      )}
+    </div>
+  );
+}
+
 const PREVIEW_TYPES = ['community', 'qmi', 'floorplan'] as const;
 type PreviewType = (typeof PREVIEW_TYPES)[number];
 
@@ -290,7 +309,9 @@ export function PdfThemeEditor({
             </CardContent>
           </Card>
 
-          {/* Logos — V1: plain URL inputs. TODO Phase C: R2 ImageUploader widget. */}
+          {/* Logos — each shows the IMAGE (live preview) above its URL input so the
+              operator never works from a bare URL. The URL field stays (this settings
+              form stores an external URL; the DAM upload widget is a Phase-C follow-up). */}
           <Card>
             <CardHeader className="border-b">
               <CardTitle>Logos</CardTitle>
@@ -298,9 +319,9 @@ export function PdfThemeEditor({
             <CardContent className="grid gap-3 pt-4">
               <div className="grid gap-1">
                 <Label htmlFor="logo-wordmark" className="text-xs text-muted-foreground">
-                  Wordmark URL
-                  {/* TODO Phase C: replace with R2 ImageUploader */}
+                  Wordmark
                 </Label>
+                <LogoPreview url={theme.brand.logoWordmarkUrl ?? ''} alt="Wordmark logo" />
                 <Input
                   id="logo-wordmark"
                   value={theme.brand.logoWordmarkUrl ?? ''}
@@ -310,9 +331,9 @@ export function PdfThemeEditor({
               </div>
               <div className="grid gap-1">
                 <Label htmlFor="logo-monogram" className="text-xs text-muted-foreground">
-                  Monogram URL
-                  {/* TODO Phase C: replace with R2 ImageUploader */}
+                  Monogram
                 </Label>
+                <LogoPreview url={theme.brand.logoMonogramUrl ?? ''} alt="Monogram logo" />
                 <Input
                   id="logo-monogram"
                   value={theme.brand.logoMonogramUrl ?? ''}

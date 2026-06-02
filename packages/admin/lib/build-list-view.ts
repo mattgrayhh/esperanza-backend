@@ -150,7 +150,6 @@ export async function buildListView(key: EntityKey): Promise<ListView> {
       ? deriveStatus(sg, {
           published: Boolean(r['published']),
           comingSoon: Boolean(r['coming_soon']),
-          active: Boolean(r['active']),
           status: r['status'] != null ? String(r['status']) : null,
           publishDate: r['publish_date'] != null ? String(r['publish_date']) : null,
           now,

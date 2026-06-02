@@ -1,12 +1,13 @@
 // =============================================================================
-// Status model (feedback [16][17][27][41][45]). Two tracks, both DERIVED from the
-// existing publish columns (no read-contract change):
+// Status model (feedback [16][17][27][41][45]). DERIVED from the publish columns.
+// Migration 0005 standardized every gate onto `published`:
 //   * location entities (qmi/communities/floor_plans): published + coming_soon
 //       → Draft / Coming Soon / Live  ("Coming Soon" = on the site, coming-soon state)
 //   * blogs: published + publish_date → Draft / Scheduled / Published
 //       ("Scheduled" is derived from a future publish_date; not directly settable)
-//   * promotions: active → Draft / Live
-//   * testimonials: the existing `status` text column (Live / Draft)
+//   * promotions: published → Draft / Live  (gate renamed from `active` in 0005)
+//   * testimonials: published → Draft / Live (gate moved from the `status` text column
+//       to a real `published` boolean in 0005; `status` is now informational)
 // One generic setStatus() server action writes the right columns per gate.
 // =============================================================================
 
@@ -56,7 +57,6 @@ export function statusOptions(gate: StatusGate): string[] {
 export interface StatusInputs {
   published?: boolean;
   comingSoon?: boolean;
-  active?: boolean;
   status?: string | null;
   publishDate?: string | null;
   /** ISO 'now' for the blog Scheduled check (pass once per request). */
@@ -74,9 +74,11 @@ export function deriveStatus(gate: StatusGate, v: StatusInputs): string {
       if (v.publishDate && v.now && v.publishDate > v.now) return 'Scheduled';
       return 'Published';
     case 'promotion':
-      return v.active ? 'Live' : 'Draft';
+      // gate renamed active→published in 0005; promotions read the published column.
+      return v.published ? 'Live' : 'Draft';
     case 'testimonial':
-      return v.status && v.status !== '' ? v.status : 'Live'; // unset → live (legacy)
+      // gate moved from `status` text to the `published` boolean in 0005.
+      return v.published ? 'Live' : 'Draft';
     default:
       return '';
   }
@@ -92,9 +94,10 @@ export function statusPatch(gate: StatusGate, status: string): Record<string, un
     case 'blog':
       return { published: status === 'Published' };
     case 'promotion':
-      return { active: status === 'Live' };
+      return { published: status === 'Live' };
     case 'testimonial':
-      return { status };
+      // write the real gate; `status` text is informational and left untouched here.
+      return { published: status === 'Live' };
     default:
       return {};
   }
