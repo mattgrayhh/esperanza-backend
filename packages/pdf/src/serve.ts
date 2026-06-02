@@ -28,7 +28,7 @@ const EDGE_CACHE_HEADERS = {
 export async function loadData(env: Env, type: PdfType, entityId: string, theme: Awaited<ReturnType<typeof loadActiveTheme>>['theme']) {
   switch (type) {
     case 'community': return loadCommunityData(env.DB, entityId, theme.copy.collectionIntros);
-    case 'qmi': return loadQmiData(env.DB, entityId, { appendFloorPlanPages: theme.qmi.appendFloorPlanPages });
+    case 'qmi': return loadQmiData(env.DB, entityId, { appendFloorPlanPages: theme.qmi.appendFloorPlanPages, imgProxyBase: env.PDF_PUBLIC_BASE_URL });
     case 'floorplan': return loadFloorPlanData(env.DB, entityId);
     case 'list': {
       const [, citySlug, kind] = entityId.split(':'); // "list:<citySlug>:<kind>"

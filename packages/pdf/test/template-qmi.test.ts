@@ -4,7 +4,8 @@ import { defaultTheme } from '../src/theme';
 import type { QmiData } from '../src/data/qmi';
 
 const data: QmiData = {
-  id: 'q1', address: '6529 Anaqua Loop', community: 'Anaqua at Tres Lagos', price: 379990, estMonthly: 3110,
+  id: 'q1', address: '6529 Anaqua Loop', community: 'Anaqua at Tres Lagos', city: 'McAllen', lot: '008',
+  price: 379990, estMonthly: 3110, statusHeadline: 'Available Now!',
   completion: 'Available now!', heroImageUrl: 'https://x/elm-w2000.jpg',
   totalSqft: 3057, livingSqft: 2432, beds: 4, baths: 2.5, garage: 2, stories: 2,
   description: 'The Elm is a two-story home…', features: ['Quartz Countertops', 'Covered Patio'], floorPlanId: null,

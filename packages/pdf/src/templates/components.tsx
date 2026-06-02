@@ -86,7 +86,7 @@ export function CoverBand({ theme, title, subtitle }: { theme: Theme; title: str
 const DEFAULT_LIST_DISCLAIMER =
   '* Offer void where prohibited or otherwise restricted by law. All information (including, but not limited to prices, views, availability, school assignments and ratings, incentives, floor plans, site plans, features, standards and options, assessments, and fees, planned amenities, programs, conceptual artist renderings and community development plans) is not guaranteed and remains subject to change or delay without notice. Maps and plans are not to scale, and all dimensions are approximate. Please see an Esperanza Homes sales associate for details and visit esperanzahomes.com for additional disclaimers.';
 
-function EqualHousingMark() {
+export function EqualHousingMark() {
   return (
     <svg width="32" height="32" viewBox="0 0 64 64" fill="none" stroke="#444" strokeWidth="3" strokeLinejoin="round" aria-label="Equal Housing Opportunity">
       <path d="M32 9 L59 31 H50 V55 H14 V31 H5 Z" />

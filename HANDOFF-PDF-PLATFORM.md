@@ -13,6 +13,24 @@ Esperanza's real marketing artwork. The **QMI grid ("Quick Move-In Homes") is do
 Everything runs on Cloudflare (D1 + R2 + Workers + Queues + a browser-reuse Durable Object).
 Worker: **`esperanza-pdf`** at `https://esperanza-pdf.round-base-ed8c.workers.dev`.
 
+## Session status (2026-06-02)
+
+- **Airtable → D1 re-sync** (`npm run -w @esperanza/db import -- --remote`): ran; the 8 non-QMI entities (cities/communities/floor_plans/promotions/collections/images/blogs/testimonials) fully refreshed, all 330 QMI rows present. Dry-run was clean (0 unresolved links, 0 diverged prices). A `--only=qmi --remote` re-run was kicked off to finish the QMI phase 100% (idempotent — safe to re-run anytime). The importer is SLOW (per-row `wrangler d1 execute --remote` cold-starts) — expect ~5–30 min.
+- **AFTER any import**, re-run **`PDF_PUBLIC_BASE_URL=https://esperanza-pdf.round-base-ed8c.workers.dev npm run -w @esperanza/db seed-renders -- --remote`** — the import resets `qmi.dynamic_pdf` / `communities.brochure_pdf_url` / `floor_plans.brochure_pdf_url` to Airtable values; seed-renders restores the worker URLs (internal only — no live-site effect pre-cutover).
+- **Airtable PAT** is in gitignored `packages/db/.dev.vars` (also pasted in this session's chat → **rotate it**).
+- **In-progress in the working tree** (uncommitted, NOT mine — likely the start of the spec-sheet work): `attachmentUrl` moved to `data/shared.ts`; `loadQmiData` now takes `imgProxyBase` (serve.ts passes it); `EqualHousingMark` exported. Verify typecheck before committing.
+
+## ▶ THE CUTOVER (deferred — do as its own session)
+
+Swapping the LIVE site from Airtable to D1 is the documented go-live procedure — **README §7–§9 / HANDOFF.md §47**. NOT a toggle. Steps, gated:
+1. D1 fully re-synced (above).
+2. **`/audit-sync-fields`** (read-only) — confirm every Framer collection's field IDs match D1 BEFORE any push. Skipping corrupts the live Framer CMS.
+3. Deploy **`framer-push`** + run its **backfill** (`packages/framer-push/src/backfill.ts`) — pushes all 9 collections D1→Framer. **Mutates the live Framer CMS.**
+4. Repoint the **5 Framer code components + the XML feed** from legacy cache endpoints to **`esperanza-api`** — MANUAL, inside Framer (use the `framer-esperanza` MCP or the Framer editor).
+5. Free 2 cron slots (disable legacy `esperanza-data-sync` + `esperanza-framer-sync`); keep them **disabled-not-deleted** as rollback. Then enable `ingest` + `framer-push` crons.
+6. Decommission Airtable.
+The PDF platform's nightly cron is also gated on freeing a cron slot here.
+
 ## CRITICAL: account / plan
 
 - The whole stack is on Cloudflare account **"Hello@hazard.house's Account" (`c76a6d99ed7d6d45449990974f5c40b3`)** — the account `wrangler whoami` resolves to. The owner's personal email (matt@hazard.house) is a DIFFERENT account.

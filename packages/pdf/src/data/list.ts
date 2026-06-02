@@ -1,5 +1,5 @@
 import type { PlanCardData } from '../templates/components';
-import { renditionUrl } from './shared';
+import { renditionUrl, attachmentUrl } from './shared';
 import { loadPromoResolver, type ResolvedPromo } from './promotions';
 
 export type ListKind = 'locations' | 'qmis' | 'plans';
@@ -37,20 +37,6 @@ const QMI_TEMPLATE_PNG = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/pd
 
 const num = (v: unknown): number | null => (v == null || v === '' ? null : Number(v));
 const str = (v: unknown): string => (v == null ? '' : String(v));
-
-/** Airtable attachment fields arrive as a JSON array `[{url,filename}]`; pull the first url. */
-function attachmentUrl(v: unknown): string {
-  const s = str(v);
-  if (!s) return '';
-  if (s.startsWith('[') || s.startsWith('{')) {
-    try {
-      const j = JSON.parse(s);
-      const first = Array.isArray(j) ? j[0] : j;
-      return str(first?.url);
-    } catch { return ''; }
-  }
-  return s; // already a plain URL
-}
 
 export async function loadListData(db: D1Database, citySlug: string, kind: ListKind, imgProxyBase?: string): Promise<ListData | null> {
   // Card images go through the worker's /img resizer (Cloudflare Image Resizing) on the
