@@ -6,7 +6,12 @@
 
 import { describe, it, expect } from 'vitest';
 import { freshDb, d1, insertRow } from './helpers.js';
-import { lookbackCutoffIso, CRON_LOOKBACK_MINUTES, changedIdsSql } from '../src/lookback.js';
+import {
+  lookbackCutoffIso,
+  CRON_LOOKBACK_MINUTES,
+  resolveLookbackMinutes,
+  changedIdsSql,
+} from '../src/lookback.js';
 import { collectChangedMessages } from '../src/index.js';
 import type { Env } from '../src/index.js';
 import type { FramerSyncMessage } from '../src/types.js';
@@ -24,8 +29,29 @@ describe('lookbackCutoffIso', () => {
   it('computes now - minutes as an ISO string', () => {
     expect(lookbackCutoffIso(NOW, 30)).toBe('2026-05-30T11:30:00.000Z');
   });
-  it('uses a 30-minute default window', () => {
-    expect(CRON_LOOKBACK_MINUTES).toBe(30);
+  it('defaults to a 25h (1500-minute) nightly-backstop window', () => {
+    expect(CRON_LOOKBACK_MINUTES).toBe(1500);
+  });
+  it('a 1500-minute window reaches >24h back', () => {
+    // 1500 min = 25h → cutoff is the prior day, ensuring a full 24h is re-scanned.
+    expect(lookbackCutoffIso(NOW, CRON_LOOKBACK_MINUTES)).toBe('2026-05-29T11:00:00.000Z');
+  });
+});
+
+describe('resolveLookbackMinutes (env override → default)', () => {
+  it('falls back to the 1500-min default when unset/blank', () => {
+    expect(resolveLookbackMinutes(undefined)).toBe(1500);
+    expect(resolveLookbackMinutes(null)).toBe(1500);
+    expect(resolveLookbackMinutes('')).toBe(1500);
+  });
+  it('falls back when non-positive or non-numeric', () => {
+    expect(resolveLookbackMinutes('0')).toBe(1500);
+    expect(resolveLookbackMinutes('-10')).toBe(1500);
+    expect(resolveLookbackMinutes('abc')).toBe(1500);
+  });
+  it('honors a positive override (wrangler vars are strings)', () => {
+    expect(resolveLookbackMinutes('2880')).toBe(2880); // 48h
+    expect(resolveLookbackMinutes(45)).toBe(45);
   });
 });
 
@@ -86,5 +112,33 @@ describe('cron lookback selector (collectChangedMessages)', () => {
     insertRow(db, 'qmi', { id: 'recOLD', published: 1, updated_at: iso(NOW - 120 * MIN) });
     const messages = await collectChangedMessages(envFor(db), NOW, 30);
     expect(messages).toEqual([]);
+  });
+
+  it('nightly default window (env-resolved, 25h) catches a full day and excludes >25h', async () => {
+    const db = freshDb();
+    const HR = 60 * MIN;
+    // Within the 25h window: 20h ago + 24h ago.
+    insertRow(db, 'qmi', { id: 'recQMI20h', published: 1, updated_at: iso(NOW - 20 * HR) });
+    insertRow(db, 'communities', { id: 'recCOM24h', name: 'Lagos', updated_at: iso(NOW - 24 * HR) });
+    // Just past the 25h window: 26h ago — must be excluded.
+    insertRow(db, 'blogs', { id: 'recBLOG26h', title: 'Old', updated_at: iso(NOW - 26 * HR) });
+
+    // No explicit minutes → resolves from env.CRON_LOOKBACK_MINUTES (unset → 1500 = 25h default).
+    const env = { DB: d1(db) } as unknown as Env;
+    const messages = await collectChangedMessages(env, NOW);
+    const ids = messages.map((m) => m.id).sort();
+    expect(ids).toEqual(['recCOM24h', 'recQMI20h']);
+    expect(ids).not.toContain('recBLOG26h');
+  });
+
+  it('respects a CRON_LOOKBACK_MINUTES env override', async () => {
+    const db = freshDb();
+    const HR = 60 * MIN;
+    insertRow(db, 'qmi', { id: 'recQMI20h', published: 1, updated_at: iso(NOW - 20 * HR) });
+    insertRow(db, 'qmi', { id: 'recQMI2h', published: 1, updated_at: iso(NOW - 2 * HR) });
+    // Narrow the window to 3h via the env var: only the 2h row qualifies.
+    const env = { DB: d1(db), CRON_LOOKBACK_MINUTES: '180' } as unknown as Env;
+    const messages = await collectChangedMessages(env, NOW);
+    expect(messages.map((m) => m.id)).toEqual(['recQMI2h']);
   });
 });

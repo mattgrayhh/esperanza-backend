@@ -1,9 +1,10 @@
 # packages/framer-push — D1 -> Framer Managed CMS push Worker. Migration Plan v2, Phase 6.
 #
 # THREE roles in one Worker:
-#   scheduled() (cron */5)  PRODUCER  — 30-min lookback on updated_at across the 9
-#                                       tables; enqueues {collection,action,id} onto
-#                                       esperanza-framer-queue.
+#   scheduled() (cron 0 9)  PRODUCER  — NIGHTLY BACKSTOP. 25h (1500-min) lookback on
+#                                       updated_at across the 9 tables; enqueues
+#                                       {collection,action,id} onto esperanza-framer-queue
+#                                       for anything an event-driven send missed.
 #   queue()                 CONSUMER  — drains the queue, re-reads the FULL field set
 #                                       per id from D1, upserts into the matching Framer
 #                                       Managed collection (record-id upsert key,
@@ -11,15 +12,23 @@
 #   fetch()                 WEBHOOK   — POST /<collection> (Bearer WEBHOOK_TOKEN) enqueue
 #                                       or ?sync=true push; POST /cron manual lookback;
 #                                       POST /backfill?keys=... server-side full backfill.
+#
+# EVENT-DRIVEN: the primary D1 -> Framer path is now event-driven. The admin worker
+# (every record mutation) AND the ingest queue consumer (every applied synced write)
+# each enqueue { collection, action:'upsert', id } the instant a row changes. The
+# cron below is no longer the every-5-min primary — it's a once-nightly safety net.
 name = "esperanza-framer-push"
 main = "src/index.ts"
 compatibility_date = "2025-05-20"
 compatibility_flags = ["nodejs_compat"]
 
-# Lookback cron — every 5 minutes. 5-min cron + 30-min window ⇒ each edit covered by
-# ~6 ticks; addItems is upsert-by-id so re-pushing is idempotent/harmless.
+# Nightly backstop cron — 09:00 UTC. Chosen because it's free in the account's
+# schedule (bhh-marks-sync 0 8, qmi-brochure 0 6, ingest 0 */4, rhodes every-15-min).
+# The 25h (1500-min) lookback window (CRON_LOOKBACK_MINUTES) catches a full day in
+# one run; addItems is upsert-by-id so re-pushing rows already sent event-driven is
+# idempotent/harmless. Still enqueues ONLY changed rows — never a full backfill.
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["0 9 * * *"]
 
 # Shared D1 binding. database_id placeholder — fill after `wrangler d1 create esperanza`.
 [[d1_databases]]
@@ -59,6 +68,9 @@ dead_letter_queue = "esperanza-framer-queue-dlq"
 # ("Floor Plans", "Quick Move-Ins", ...) and are matched by NAME; override any of
 # them here if the live project renamed a collection.
 [vars]
+# Nightly-backstop lookback window in minutes. Default (unset) = 1500 (25h), which
+# catches a full day per the 0 9 nightly cron. Override only to widen/narrow the net.
+# CRON_LOOKBACK_MINUTES = "1500"
 # FRAMER_COLLECTION_FLOOR_PLANS = "Floor Plans"
 # FRAMER_COLLECTION_QMI         = "Quick Move-Ins"
 # FRAMER_COLLECTION_COMMUNITIES = "Communities"

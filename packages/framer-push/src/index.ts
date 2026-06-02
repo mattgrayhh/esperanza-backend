@@ -4,11 +4,12 @@
 // TWO roles in one Worker (per wrangler.toml: producer + consumer of the same
 // esperanza-framer-queue):
 //
-//   scheduled() (cron "*/5 * * * *")  — PRODUCER
-//     Lookback: for each of the 9 tables, SELECT ids whose updated_at is within
-//     the last 30 minutes (CRON_LOOKBACK_MINUTES) and enqueue one
-//     { collection, action:'upsert', id } message per id. The consumer re-reads
-//     the FULL field set per id (so the message stays tiny & the data fresh).
+//   scheduled() (cron "0 9 * * *")  — PRODUCER (NIGHTLY BACKSTOP)
+//     The primary D1 -> Framer path is event-driven (admin + ingest enqueue on
+//     write). This nightly run is the safety net: for each of the 9 tables, SELECT
+//     ids whose updated_at is within the last CRON_LOOKBACK_MINUTES (default 1500 =
+//     25h) and enqueue one { collection, action:'upsert', id } per id. The consumer
+//     re-reads the FULL field set per id (so the message stays tiny & the data fresh).
 //
 //   queue() — CONSUMER
 //     Drains esperanza-framer-queue → reads each row from D1 → upserts into the
@@ -29,6 +30,7 @@ import {
 } from './consumer.js';
 import {
   CRON_LOOKBACK_MINUTES,
+  resolveLookbackMinutes,
   changedIdsSql,
   lookbackCutoffIso,
   COLLECTION_KEYS,
@@ -48,6 +50,11 @@ export interface Env extends ConsumerEnv {
   WEBHOOK_TOKEN: string;
   FRAMER_API_KEY: string;
   FRAMER_PROJECT_URL: string;
+  /**
+   * Optional override for the nightly backstop lookback window, in minutes
+   * (wrangler [vars] are strings). Defaults to CRON_LOOKBACK_MINUTES (1500 = 25h).
+   */
+  CRON_LOOKBACK_MINUTES?: string | number;
   // optional FRAMER_COLLECTION_* name overrides flow through ConsumerEnv index sig.
 }
 
@@ -55,11 +62,15 @@ export interface Env extends ConsumerEnv {
 // PRODUCER — cron lookback
 // =============================================================================
 
-/** Find changed ids per collection within the lookback window. */
+/**
+ * Find changed ids per collection within the lookback window. When
+ * `lookbackMinutes` is omitted it is resolved from env.CRON_LOOKBACK_MINUTES
+ * (default 1500 = 25h, the nightly-backstop window).
+ */
 export async function collectChangedMessages(
   env: Env,
   nowMs: number,
-  lookbackMinutes = CRON_LOOKBACK_MINUTES
+  lookbackMinutes = resolveLookbackMinutes(env.CRON_LOOKBACK_MINUTES)
 ): Promise<FramerSyncMessage[]> {
   const cutoff = lookbackCutoffIso(nowMs, lookbackMinutes);
   const messages: FramerSyncMessage[] = [];
@@ -86,15 +97,16 @@ async function enqueue(env: Env, messages: FramerSyncMessage[]): Promise<void> {
 export async function runLookback(env: Env, nowMs = Date.now()): Promise<{ enqueued: number }> {
   const startedAt = new Date(nowMs).toISOString();
   const start = Date.now();
+  const lookbackMinutes = resolveLookbackMinutes(env.CRON_LOOKBACK_MINUTES);
   try {
-    const messages = await collectChangedMessages(env, nowMs);
+    const messages = await collectChangedMessages(env, nowMs, lookbackMinutes);
     if (messages.length > 0) await enqueue(env, messages);
     await writeFramerSyncLog(env, {
       status: 'success',
       startedAt,
       finishedAt: new Date().toISOString(),
       durationS: (Date.now() - start) / 1000,
-      notes: `lookback (${CRON_LOOKBACK_MINUTES}m) enqueued ${messages.length} message(s)`,
+      notes: `nightly backstop lookback (${lookbackMinutes}m) enqueued ${messages.length} message(s)`,
     });
     return { enqueued: messages.length };
   } catch (err) {

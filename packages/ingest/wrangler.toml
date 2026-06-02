@@ -27,6 +27,15 @@ bucket_name = "esperanza-cms"
 binding = "SYNC_QUEUE"
 queue = "esperanza-sync-queue"
 
+# Producer: the queue CONSUMER (after a successful synced D1 write) enqueues a
+# Framer-push message { collection, action:'upsert', id } here so published-home
+# Snowflake updates flow to Framer immediately (event-driven), instead of waiting
+# for the framer-push lookback. framer-push drains this same queue and upserts the
+# row into Framer. New Draft homes push as draft:true (hidden) — which is correct.
+[[queues.producers]]
+binding = "FRAMER_QUEUE"
+queue = "esperanza-framer-queue"
+
 # Consumer: this same Worker also drains esperanza-sync-queue and applies the
 # synced columns. Per-message ack/retry; a message that still fails after
 # max_retries is delivered to the dead-letter queue for inspection.

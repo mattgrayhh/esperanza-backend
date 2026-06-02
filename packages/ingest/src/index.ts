@@ -33,6 +33,12 @@ import { handleQueueBatch, writeSyncLog, type ConsumerEnv, type D1Like } from '.
 export interface Env extends SnowflakeEnv, ConsumerEnv {
   DB: D1Like;
   SYNC_QUEUE: { send(body: unknown): Promise<void>; sendBatch(messages: { body: unknown }[]): Promise<void> };
+  /**
+   * Producer binding for esperanza-framer-queue. After the consumer applies a
+   * synced D1 write it enqueues a Framer-push message here so the change reaches
+   * Framer immediately (event-driven). Bound in wrangler.toml [[queues.producers]].
+   */
+  FRAMER_QUEUE: { send(body: unknown): Promise<void>; sendBatch(messages: { body: unknown }[]): Promise<void> };
   /** Optional Bearer secret gating the manual `POST /run` reconciliation trigger. */
   INGEST_TRIGGER_TOKEN?: string;
 }
