@@ -29,8 +29,13 @@ export function renderTemplate(type: PdfType, theme: Theme, data: unknown): stri
     }
     case 'floorplan':
       return wrapHtml(theme, <FloorPlanBrochure theme={theme} data={data as FloorPlanData} />);
-    case 'list':
-      return wrapHtml(theme, <ListBrochure theme={theme} data={data as ListData} />);
+    case 'list': {
+      const ld = data as ListData;
+      // The QMI grid renders full-bleed over the branded template artwork (header/footer are
+      // baked into the background image), so it uses zero page margins.
+      const margins = ld.kind === 'qmis' ? { top: 0, right: 0, bottom: 0, left: 0 } : undefined;
+      return wrapHtml(theme, <ListBrochure theme={theme} data={ld} />, margins);
+    }
     default:
       throw new Error(`template not implemented for type: ${type}`);
   }

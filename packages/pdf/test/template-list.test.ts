@@ -32,7 +32,7 @@ describe('list template', () => {
       qmis: [qmi({})],
     };
     const html = renderTemplate('list', defaultTheme, data);
-    expect(html).toContain('Quick Move-In Homes');
+    // (The "Quick Move-In Homes" title is baked into the template background artwork now.)
     expect(html).toContain('Los Prados');
     expect(html).toContain('3 Beds • 2 Bath • 1,101 SQFT');
     expect(html).toContain('Lot #51');

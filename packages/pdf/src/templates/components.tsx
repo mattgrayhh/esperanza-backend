@@ -140,7 +140,8 @@ export function BrandFooter({ theme, disclaimer }: { theme: Theme; disclaimer?: 
   );
 }
 
-/** One Quick Move-In home: hero image with promo banner + monthly pill, then centered details. */
+/** One Quick Move-In home: hero image with boxed promo callouts + monthly pill, then details.
+ *  Every overlay sits on a solid box with a drop-shadow so it stays legible on any image. */
 export function QmiCard({ card }: { card: QmiCardData }) {
   const p = card.promo;
   const isRate = p?.style === 'rate';
@@ -150,38 +151,50 @@ export function QmiCard({ card }: { card: QmiCardData }) {
     card.sqft != null && `${card.sqft.toLocaleString('en-US')} SQFT`,
   ].filter(Boolean).join(' • ');
   const monthly = card.estMonthly != null ? `From ${moneyCents(card.estMonthly)}*/month` : '';
+  const shadow = '0 1px 3px rgba(0,0,0,0.45)';
   return (
-    <div style={{ breakInside: 'avoid', marginBottom: 4 }}>
-      <div style={{ position: 'relative', height: 132, borderRadius: 3, overflow: 'hidden', background: '#eef0ee' }}>
+    <div style={{ breakInside: 'avoid' }}>
+      <div style={{ position: 'relative', height: 138, borderRadius: 4, overflow: 'hidden', background: '#eef0ee', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}>
         {card.imageUrl ? <img src={card.imageUrl} alt={card.address} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
-        {isRate ? <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(31,61,47,0) 30%, rgba(31,61,47,0.55) 62%, rgba(31,61,47,0.9) 100%)' }} /> : null}
 
+        {/* green (default) / dark (flex discount) banner across the top */}
         {p && !isRate ? (
           <div style={{
             position: 'absolute', top: 0, left: 0, right: 0, padding: '4px 8px', fontSize: 7.5, fontWeight: 700,
             letterSpacing: '0.03em', textTransform: 'uppercase', color: '#fff',
             background: p.style === 'flex' ? '#33402b' : 'var(--pdf-primary)',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', boxShadow: shadow,
           }}>
             {p.text}
           </div>
         ) : null}
 
-        {isRate ? <div style={{ position: 'absolute', top: 7, left: 8, color: '#fff', fontWeight: 700, fontSize: 13 }}>{p!.rateLabel}</div> : null}
+        {/* rate promo: solid corner badge box */}
+        {isRate ? (
+          <div style={{
+            position: 'absolute', top: 7, left: 7, background: 'var(--pdf-primary)', color: '#fff',
+            fontWeight: 700, fontSize: 11, padding: '2px 8px', borderRadius: 3, boxShadow: shadow,
+          }}>
+            {p!.rateLabel}
+          </div>
+        ) : null}
 
+        {/* monthly payment — always a solid white pill with a drop-shadow */}
         {monthly ? (
-          isRate ? (
-            <div style={{ position: 'absolute', left: 8, bottom: 7, display: 'flex', alignItems: 'center', gap: 5, color: '#fff', fontWeight: 700, fontSize: 9 }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 13, height: 13, borderRadius: '50%', border: '1px solid #fff', fontSize: 7.5 }}>%</span>
-              {monthly}
-            </div>
-          ) : (
-            <div style={{ position: 'absolute', left: 8, bottom: 7, background: '#fff', color: 'var(--pdf-primary)', fontWeight: 700, fontSize: 8.5, padding: '3px 9px', borderRadius: 3 }}>{monthly}</div>
-          )
+          <div style={{
+            position: 'absolute', left: 8, bottom: 8, display: 'flex', alignItems: 'center', gap: 5,
+            background: '#fff', color: 'var(--pdf-primary)', fontWeight: 700, fontSize: 8.5,
+            padding: '3px 9px', borderRadius: 3, boxShadow: shadow,
+          }}>
+            {isRate ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 12, height: 12, borderRadius: '50%', background: 'var(--pdf-primary)', color: '#fff', fontSize: 7 }}>%</span>
+            ) : null}
+            {monthly}
+          </div>
         ) : null}
       </div>
 
-      <div style={{ textAlign: 'center', marginTop: 5, lineHeight: 1.34, color: 'var(--pdf-ink)' }}>
+      <div style={{ textAlign: 'center', marginTop: 6, lineHeight: 1.34, color: 'var(--pdf-ink)' }}>
         <div style={{ fontWeight: 700, fontSize: 12 }}>{card.community}</div>
         <div style={{ fontSize: 9.5 }}>{card.city}</div>
         {specs ? <div style={{ fontWeight: 700, fontSize: 9.5, marginTop: 1 }}>{specs}</div> : null}

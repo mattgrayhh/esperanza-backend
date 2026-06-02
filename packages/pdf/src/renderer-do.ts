@@ -65,11 +65,10 @@ export class BrowserRenderer {
     try {
       await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30_000 });
       await page.evaluate(() => (document as any).fonts?.ready).catch(() => {});
-      const pdf = await page.pdf({
-        format: 'Letter',
-        printBackground: true,
-        margin: { top: `${m.top}mm`, right: `${m.right}mm`, bottom: `${m.bottom}mm`, left: `${m.left}mm` },
-      });
+      // preferCSSPageSize lets each template own its @page size + margins (set in wrapHtml).
+      // Some templates (e.g. the QMI grid) render full-bleed over a background image.
+      const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true });
+      void m; // margins now come from CSS @page, not the page.pdf call
       console.log(`[DO] rendered ${pdf.byteLength}b; connected=${browser.isConnected()}`);
       return new Response(pdf as unknown as BodyInit, { headers: { 'content-type': 'application/pdf' } });
     } finally {

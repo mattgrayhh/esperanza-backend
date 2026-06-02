@@ -28,7 +28,12 @@ export interface ListData {
   isMaster: boolean;       // true for the all-cities master "Quick Move-In Homes" doc
   cards: PlanCardData[];   // locations / plans
   qmis: QmiCardData[];     // qmis
+  templateBgUrl?: string;  // branded full-page template artwork (qmis grid renders over it)
 }
+
+// The Quick Move-In Homes one-pager artwork (logo + contact + green band header, website +
+// disclaimer + equal-housing footer). Cards are laid over the empty middle region.
+const QMI_TEMPLATE_PNG = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/pdf-templates/quick-move-in-homes.png';
 
 const num = (v: unknown): number | null => (v == null || v === '' ? null : Number(v));
 const str = (v: unknown): string => (v == null ? '' : String(v));
@@ -104,7 +109,10 @@ export async function loadListData(db: D1Database, citySlug: string, kind: ListK
         String(r.id),
       ),
     }));
-    return { citySlug, cityName, kind, isMaster, cards: [], qmis };
+    const templateBgUrl = imgProxyBase
+      ? `${imgProxyBase.replace(/\/$/, '')}/img?w=1240&u=${encodeURIComponent(QMI_TEMPLATE_PNG)}`
+      : QMI_TEMPLATE_PNG;
+    return { citySlug, cityName, kind, isMaster, cards: [], qmis, templateBgUrl };
   }
 
   // locations / plans — per-city only (no master variant).
