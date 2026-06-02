@@ -104,6 +104,45 @@ export function kebab(s: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+/**
+ * Per-item record suffix used to disambiguate a colliding slug. Mirrors the
+ * recSuffix the QMI/Testimonials mappers derive: chars 3..11 of `recXXXXXXXX…`
+ * (or the id minus a leading `rec`), normalized to the underscore-slug form.
+ */
+export function recSuffixOf(id: string): string {
+  const raw = id.length >= 11 ? id.slice(3, 11) : id.replace(/^rec/, '');
+  return toUnderscore(raw).toLowerCase();
+}
+
+/**
+ * Make every slug in a batch UNIQUE. Framer rejects a second item that reuses a
+ * slug ("Duplicate slug: 2004_s_lake_texoma_st" — two homes at the same address
+ * whose precomputed viewer/seo slug is identical). Because a stateless per-row
+ * mapper can't see its siblings, dedup happens here once the full set is built:
+ *   - the FIRST item to claim a slug keeps it (no URL churn, existing tests hold);
+ *   - any later item whose slug already taken gets `<slug>_<recSuffix>` appended
+ *     (the record suffix is globally unique, so this resolves the collision and is
+ *     stable across runs); on the vanishingly rare chance that is *also* taken we
+ *     append a numeric counter.
+ * Mutates each item's `slug` in place and returns the same array for chaining.
+ */
+export function dedupeSlugs(items: ManagedCollectionItemInput[]): ManagedCollectionItemInput[] {
+  const seen = new Set<string>();
+  for (const it of items) {
+    if (!seen.has(it.slug)) {
+      seen.add(it.slug);
+      continue;
+    }
+    const suffix = recSuffixOf(it.id);
+    let candidate = suffix ? `${it.slug}_${suffix}` : `${it.slug}_${it.id}`;
+    let n = 2;
+    while (seen.has(candidate)) candidate = `${it.slug}_${suffix || it.id}_${n++}`;
+    it.slug = candidate;
+    seen.add(candidate);
+  }
+  return items;
+}
+
 /** Parse a JSON-array column (stored TEXT). Returns [] on null/empty/parse-fail. */
 export function parseJsonArray(raw: unknown): unknown[] {
   if (raw == null || raw === '') return [];
@@ -350,7 +389,7 @@ const floorPlans: CollectionDef = {
       virtual_tour_url: sIf(row['virtual_tour_url']),
       master_bed_location: sIf(row['master_bed_location']),
       incentive: sIf(row['incentive']),
-      coming_soon: bool(asBool(row['coming_soon'])),
+      coming_soon: bool(asBool(row['coming_soon'])), // live FP (Managed) has the field (added 2026-06)
       // brochure_pdf_url MUST stay "string" (link type breaks live binding & aborts batch)
       brochure_pdf_url: sIf(row['brochure_pdf_url']),
       brochure_pdf: sIf(row['brochure_pdf']),
@@ -449,7 +488,7 @@ const qmi: CollectionDef = {
       move_in_date: sIf(row['move_in_date']),
       estimated_monthly_payment: nIf(row['estimated_monthly_payment']),
       published: bool(asBool(row['published'])),
-      coming_soon: bool(asBool(row['coming_soon'])),
+      coming_soon: bool(asBool(row['coming_soon'])), // live QMI (Managed) has the field (added 2026-06)
       // FP:* flattened
       fp_description: sIf(fpScalar(row['fp_description'])),
       fp_virtual_tour: sIf(fpScalar(row['fp_virtual_tour'])),
@@ -562,9 +601,12 @@ const communities: CollectionDef = {
       kitchen_features_copy_rich: ftIf(row['kitchen_features_copy_rich']),
       bath_features_copy_rich: ftIf(row['bath_features_copy_rich']),
       esperanza_difference_copy_rich: ftIf(row['esperanza_difference_copy_rich']),
+      // Utilities block: live Communities (Managed) types Gas/Internet/Water/Electric
+      // Details as formattedText (Security Details stays string). internet_details &
+      // water_details were emitting sIf (string) → "Expected formattedText but got string".
       gas_details_rich: ftIf(row['gas_details_rich']),
-      internet_details: sIf(row['internet_details']),
-      water_details: sIf(row['water_details']),
+      internet_details: ftIf(row['internet_details']),
+      water_details: ftIf(row['water_details']),
       electric_details_rich: ftIf(row['electric_details_rich']),
       security_details: sIf(row['security_details']),
       ...hoaFields,
@@ -745,6 +787,40 @@ const VENUE_IMG_KEYS = [
   'stay_image',
 ] as const;
 
+// Copy-block keys that EXIST on the live Cities (Managed) collection. The admin
+// JSON is free-form, but emitting a key Framer doesn't know rejects the item, so
+// we only push keys in this allow-list. Split by live field type: image vs string.
+const CITY_COPY_IMG_KEYS = new Set<string>([
+  'section_1_image',
+  'section_1a_image',
+  'section_2_image',
+  'section_3_image',
+  'image_0',
+  'live_in_image',
+]);
+const CITY_COPY_STR_KEYS = new Set<string>([
+  'section_1_title',
+  'section_1_description',
+  'section_2_title',
+  'section_2_description',
+  'section_3_title',
+  'section_3_description',
+  'pillar_1_title',
+  'pillar_1_description',
+  'pillar_2_title',
+  'pillar_2_description',
+  'pillar_3_title',
+  'pillar_3_description',
+  'pillar_4_title',
+  'pillar_4_description',
+  'homes_heading',
+  'homes_description',
+  'live_in_heading',
+  'live_in_description',
+  // hero_description & national_recognition also live in the JSON but are emitted
+  // from dedicated row columns below; they're intentionally excluded here.
+]);
+
 const cities: CollectionDef = {
   key: 'cities',
   defaultCollectionName: 'Cities',
@@ -764,15 +840,17 @@ const cities: CollectionDef = {
     for (const k of VENUE_FT_KEYS) venueFields[k] = ftIf(venue[k]);
     for (const k of VENUE_IMG_KEYS) venueFields[k] = imgIf(venue[k]);
 
-    // copy blocks: section/pillar/heading fields. String vs image distinguished by
-    // key suffix (_image → image field; everything else → string).
+    // copy blocks: section/pillar/heading fields. Only emit keys that EXIST on the
+    // live Cities (Managed) collection (an unknown key rejects the whole item), and
+    // type each by the live schema (image set vs string set).
     const copyFields: Record<string, AnyFieldValue | undefined> = {};
     for (const [k, v] of Object.entries(copy)) {
-      if (/_image$/.test(k) || k === 'image_0' || k === 'live_in_image') {
+      if (CITY_COPY_IMG_KEYS.has(k)) {
         copyFields[k] = imgIf(v);
-      } else {
+      } else if (CITY_COPY_STR_KEYS.has(k)) {
         copyFields[k] = sIf(v);
       }
+      // else: unknown copy key — drop it (Framer has no field to receive it).
     }
 
     const fieldData = compactFields({
@@ -789,7 +867,7 @@ const cities: CollectionDef = {
       floor_plans_count: nIf(row['floor_plans_count']),
       move_in_homes_count: nIf(row['move_in_homes_count']),
       incentive: sIf(row['incentive']),
-      coming_soon: bool(asBool(row['coming_soon'])),
+      coming_soon: bool(asBool(row['coming_soon'])), // live Cities (Managed) has the field (added 2026-06)
       ...copyFields,
       ...venueFields,
     });

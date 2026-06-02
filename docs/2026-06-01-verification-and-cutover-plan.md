@@ -65,3 +65,48 @@ Cron cap is **account-wide 5/5**. Only 3 are Esperanza-legacy. **DO NOT touch bh
 2. **Framer wiring:** framer-push↔Managed field-ID parity; add coming_soon field to QMI/Floor Plans Managed; resolve code-component field-shape drift.
 3. **Admin QA** (deployed, needs password) + **Cities-detail redesign** (page `SqyTFwTxP`).
 4. **Cutover** A→audit→B→C→D→E (production; reported per step).
+
+---
+
+## SESSION PROGRESS / RESUMPTION STATE (2026-06-01, autonomous run)
+
+Commits on master: 94af9f3 (Phase 1 status-model+admin images), 7f30226 (Phase 2 framer-push field ids),
+ab3b365 (framer-api bundling + collection-name "(Managed)" fallback), 5e16d89 (urlOf URL guard).
+
+DONE:
+- **Phase 1** ✅ remote: migration 0005 applied + views recreated + field_definitions reseeded (orphans
+  promotions.active/communities.draft deleted). Counts verified (cities 11 pub/1 cs, testimonials 74, promos 15).
+  esperanza-api redeployed + smoke-tested (coming_soon on qmi/cities/floorplans; /promotions emits legacy `active`).
+  All admin image fields render as thumbnails. Calallen slug fixed.
+- **Phase 2** ✅: framer-push mapper field-id fixes (FP bathrooms _minimum/_maximum, qmi postal_code string);
+  `coming_soon` boolean field ADDED to QMI/FloorPlans/Cities Managed collections (Communities already had it),
+  via esperanza-sync/src/add-coming-soon.ts (setFields append-only). 272 tests pass.
+- **Cutover Step A** ✅: legacy crons CLEARED via CF API PUT [] for esperanza-data-sync + esperanza-framer-sync.
+  UNTOUCHED (must stay): bhh-marks-sync (0 8), rhodes-availability (*/15), qmi-brochure-worker (0 6).
+- **Cutover Step B / ingest** ✅: deployed (cron 0 */4 registered) + manual trigger added (POST /run, Bearer
+  INGEST_TRIGGER_TOKEN secret). RAN reconciliation: qmi 326→330 (4 new homes published=0), prices/stages
+  refreshed, sync_log now has source='snowflake' rows. Data current via Snowflake path.
+- **Cutover Step B / framer-push** ✅ deployed (cron */5). Fixed: framer-api bundling (literal lazy import +
+  moved to dependencies), collection-name "(Managed)" fallback, urlOf URL guard. WEBHOOK_TOKEN rotated → /tmp/wt.txt.
+  IN PROGRESS: comprehensive field-TYPE parity fix (formattedText/string mismatches) + re-backfill verification.
+
+PENDING:
+- **framer-push clean push**: confirm a full backfill yields all-success (no partial/error). Type mismatches +
+  asset-upload + dup-slug being fixed.
+- **Cutover Step C** (flip 5 Framer code components QuickMoveIns-Cached/FloorPlansCatalog/Communities/
+  SingleLocationMap/LocationPickerFixed to cacheWorkerUrl=https://esperanza-api.round-base-ed8c.workers.dev/api/public).
+  REQUIRES resolving field-SHAPE drift first (components read Airtable-shaped keys like `Community (Link)`,
+  `FP: Starting Price`; new api emits D1 keys `slug`,`Price`,`total_square_footage`). Audit per-component field reads.
+- **Cutover Step D**: disable esperanza-xml-feed (no cron; safe).
+- **Admin QA** (deployed): rotate matt@hazard.house password via seed-admin --remote, redeploy admin (image code),
+  browser QA via pw.
+- **Cities-detail redesign** (Framer page SqyTFwTxP / "Cities (Managed)") — make more visually compelling.
+
+KNOWN DATA ISSUES (follow-ups, non-blocking, urlOf guard makes them safe):
+- 10/11 cities have literal '[object Object]' in city_copy_blocks_json + city_venue_blocks_json image sub-fields
+  (attachment object stringified at import — the airtable-attachment gotcha). urlOf now DROPS them (cities push,
+  block images blank until repaired). REPAIR before/with the Cities redesign: re-extract real URLs from Airtable.
+- 2 communities on live site (Aquero/Laredo, Los Arroyos/Harlingen) absent from D1; ingest did not create them
+  (not in Snowflake community set OR marketing-authored). Decide: author in admin or confirm out-of-scope.
+- New-site bed/bath shows Snowflake plan-BASE config (not as-built) for optioned homes — pre-existing source
+  characteristic, not a regression. Product decision if as-built fidelity is wanted.

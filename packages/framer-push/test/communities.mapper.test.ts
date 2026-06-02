@@ -43,6 +43,8 @@ describe('Communities mapper — rich text, HOA links, coords, gates', () => {
       photo_gallery_image_url: 'https://media.esperanzahomes.com/com/tres-lagos/g1.jpg',
       design_copy_rich: '## Design\nThoughtful homes.',
       education_rich: 'Top-rated *schools* nearby.',
+      internet_details: 'Fiber up to **1 Gbps**.',
+      water_details: 'Municipal water & sewer.',
       office_phone: '936-555-0100',
       master_planned: 1,
       coming_soon: 0,
@@ -82,6 +84,14 @@ describe('Communities mapper — rich text, HOA links, coords, gates', () => {
     expect(f['design_copy_rich']?.type).toBe('formattedText');
     expect(String(sval(f['design_copy_rich']))).toContain('<h2>Design</h2>');
     expect(String(sval(f['education_rich']))).toContain('<em>schools</em>');
+
+    // Utilities block: live Communities (Managed) types Internet/Water Details as
+    // formattedText (regression guard for the "Expected formattedText but got string"
+    // backfill error on community `los-prados`).
+    expect(f['internet_details']?.type).toBe('formattedText');
+    expect(String(sval(f['internet_details']))).toContain('<strong>1 Gbps</strong>');
+    expect(f['water_details']?.type).toBe('formattedText');
+    expect(String(sval(f['water_details']))).toContain('Municipal water');
 
     // booleans always emitted
     expect(sval(f['master_planned'])).toBe(true);

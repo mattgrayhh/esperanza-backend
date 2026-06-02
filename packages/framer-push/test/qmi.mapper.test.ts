@@ -7,7 +7,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { freshDb, d1, insertRow } from './helpers.js';
-import { COLLECTION_DEFS } from '../src/collections.js';
+import { COLLECTION_DEFS, dedupeSlugs } from '../src/collections.js';
+import type { ManagedCollectionItemInput } from '../src/framer-types.js';
 import { pushMessage, handleQueueBatch, loadRowById } from '../src/consumer.js';
 import type { ConsumerEnv } from '../src/consumer.js';
 import { createMockFramer } from '../src/framer.js';
@@ -124,6 +125,46 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
     // booleans we deliberately always emit
     expect(sval(f['self_tour_available'])).toBe(false);
     expect(sval(f['available_now'])).toBe(false);
+  });
+
+  it('dedupes colliding slugs across a batch (first keeps slug, rest get rec-suffix)', () => {
+    // Two homes at the same address share a precomputed slug → Framer "Duplicate slug".
+    const db = freshDb();
+    insertRow(db, 'qmi', {
+      id: 'recDUPE0001AAAA',
+      published: 1,
+      synced_address: '2004 S Lake Texoma St',
+      viewer_slug: '2004-s-lake-texoma-st',
+      updated_at: '2026-05-30T12:00:00.000Z',
+    });
+    insertRow(db, 'qmi', {
+      id: 'recDUPE0002BBBB',
+      published: 1,
+      synced_address: '2004 S Lake Texoma St',
+      viewer_slug: '2004-s-lake-texoma-st', // same precomputed slug
+      updated_at: '2026-05-30T12:00:00.000Z',
+    });
+
+    const rows = db.prepare(qmiDef.selectAllSql).all() as Record<string, unknown>[];
+    const items = dedupeSlugs(rows.map((r) => qmiDef.map(r)));
+    const slugs = items.map((i) => i.slug);
+
+    // both base-map to the same slug, but after dedup they are unique
+    expect(new Set(slugs).size).toBe(slugs.length);
+    // first to claim it keeps the clean slug (no URL churn)
+    expect(slugs).toContain('2004_s_lake_texoma_st');
+    // the collider is disambiguated with its record suffix
+    const collider = items.find((i) => i.slug !== '2004_s_lake_texoma_st')!;
+    expect(collider.slug.startsWith('2004_s_lake_texoma_st_')).toBe(true);
+  });
+
+  it('dedupeSlugs leaves an already-unique batch untouched', () => {
+    const items: ManagedCollectionItemInput[] = [
+      { id: 'recA', slug: 'alpha', fieldData: {} },
+      { id: 'recB', slug: 'beta', fieldData: {} },
+    ];
+    dedupeSlugs(items);
+    expect(items.map((i) => i.slug)).toEqual(['alpha', 'beta']);
   });
 
   it('soft-deletes via draft:true when unpublished (item kept, hidden)', async () => {

@@ -22,6 +22,7 @@
 import {
   COLLECTION_DEFS,
   resolveCollectionName,
+  dedupeSlugs,
   type CollectionDef,
   type Row,
 } from './collections.js';
@@ -403,7 +404,12 @@ export async function runBackfill(
         if (!collection) throw new Error(`collection not found by name: "${collectionName}"`);
 
         const rows = await loadAllRows(env, def);
-        const items = rows.map((r) => def.map(r));
+        // Dedupe slugs across the WHOLE collection before chunking — a stateless
+        // per-row map() can't see a sibling sharing a precomputed slug, so two homes
+        // at the same address would both emit e.g. `2004_s_lake_texoma_st` and the
+        // second would abort with Framer's "Duplicate slug". (id-keyed upsert is fine;
+        // it's the unique-slug constraint that fails.)
+        const items = dedupeSlugs(rows.map((r) => def.map(r)));
         await pushInChunks(collection, items, chunkSize, opts.backoff);
         res.upserted = items.length;
 
