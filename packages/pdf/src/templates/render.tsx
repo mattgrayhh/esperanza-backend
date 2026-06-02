@@ -3,8 +3,8 @@ import type { ReactElement } from 'react';
 import { themeToCssVars, type Theme } from '../theme';
 import { fontFaceCss } from '../fonts';
 
-export function wrapHtml(theme: Theme, body: ReactElement): string {
-  const m = theme.page.marginsMm;
+export function wrapHtml(theme: Theme, body: ReactElement, marginsMm?: { top: number; right: number; bottom: number; left: number }): string {
+  const m = marginsMm ?? theme.page.marginsMm;
   const css = `
 ${fontFaceCss()}
 :root{
