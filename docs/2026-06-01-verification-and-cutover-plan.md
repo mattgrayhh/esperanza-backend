@@ -139,3 +139,15 @@ fixed (commits ab3b365, 5e16d89, bc0b3b8) and pushes 8/9 collections cleanly. Re
 
 framer-push push status (last full backfill): collections+6, images+630, blogs+124, promotions+17, cities+11,
 floor_plans+62, communities+32 = SUCCESS. testimonials+75 (data ok, page-loader deploy error). qmi blocked by #2.
+
+---
+
+## CUTOVER COMPLETE (2026-06-02) — A→B→C done
+
+- **A — image re-migration DONE:** qmi 111 hero/og images re-hosted to R2 (root cause: migrator skipped media.esperanzahomes.com URLs as "already stable"); cities 78 block images re-hosted, ZERO `[object Object]` remain, all URLs 200. Reusable scripts: packages/db/scripts/rehost-qmi-images.mts, fix-city-block-images.ts. (Most qmi rows have no own source image → fall back to FP image, by source design.)
+- **B — Cities detail redesign DONE + PUBLISHED** (Framer 638a0684d): legible full-cover hero scrim, bottom-anchored content, CMS-bound 3-up stat band, upgraded "Why we build here" band, normalized rhythm — all on existing brand tokens/styles. (Fixed an AVIF-mislabeled-.jpg that blocked the cities push.)
+- **C — code-component flip DONE + NETWORK-VERIFIED** (Framer 2a52fe3bd): the 3 cache-fetching components (Quick_Move_ins, Community_Location_Picker, SingleLocationMap) repointed to esperanza-api/api/public. KEY GOTCHA: instances baked an EXPLICIT legacy override on `$control__cacheWorkerURL`/`$control__workerURL` (capital URL) — editing the code default was NOT enough; had to SET the control on all 13 instances. Live proof: /new-homes/available → /api/public/qmi 200, /new-homes → /api/public/communities 200, ZERO legacy-cache requests. FloorPlansCatalog + LocationPicker use embedded/CMS data (not cache-backed) — nothing to flip.
+
+**NET STATE:** New CF stack is the authoritative live source. Crons swapped (ingest 4h, framer-push 5m). Data current via Snowflake→D1 ingest. framer-push pushes 8/9 collections cleanly. Admin = editorial layer (image rendering + tri-state status). Embed pages read the new API. Legacy caches (esperanza-qmi-cache/-communities-cache) now UNREFERENCED → decommission at final cleanup (kept for rollback).
+
+**REMAINING FOLLOW-UPS (non-blocking, documented):** qmi duplicate home (2004 S Lake Texoma St) blocks the qmi full-backfill (cron pushes the rest); 2 communities (Aquero/Los Arroyos) absent from D1; testimonials Framer page `ensureComponentsInLoader` error (Framer page, data landed); rotate the temp admin password; decommission legacy workers after a soak.
