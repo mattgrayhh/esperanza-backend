@@ -54,6 +54,17 @@ queue = "esperanza-pdf-render"
 binding = "PDF"
 service = "esperanza-pdf"
 
+# Service binding to the framer-push worker. The applyFramerTypes action (Settings →
+# Framer Field Types) calls its POST /schema route via this binding (Authorization:
+# Bearer WEBHOOK_TOKEN). When the binding is present the request never leaves
+# Cloudflare's network. The Worker still authenticates the Bearer token on /schema, so
+# WEBHOOK_TOKEN must be set as an admin secret (it matches framer-push's WEBHOOK_TOKEN).
+# If the binding is absent (e.g. a partial deploy), the action falls back to
+# FRAMER_PUSH_URL + WEBHOOK_TOKEN over the public internet.
+[[services]]
+binding = "FRAMER_PUSH"
+service = "esperanza-framer-push"
+
 # Non-secret vars.
 #   IMAGES_PUBLIC_BASE_URL — public base for the R2 bucket. uploadImage() builds the
 #                            STABLE url as `${IMAGES_PUBLIC_BASE_URL}/<entity>/<id>/<file>`.
@@ -66,6 +77,9 @@ service = "esperanza-pdf"
 IMAGES_PUBLIC_BASE_URL = "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev"
 # PDF links resolve through the esperanza-pdf WORKER route, not the raw R2 bucket.
 PDF_PUBLIC_BASE_URL = "https://esperanza-pdf.round-base-ed8c.workers.dev"
+# Public fallback for framer-push POST /schema when the FRAMER_PUSH service binding is
+# unavailable. The action prefers the binding; this URL + WEBHOOK_TOKEN is the backstop.
+FRAMER_PUSH_URL = "https://esperanza-framer-push.round-base-ed8c.workers.dev"
 
 # === REQUIRED SECRETS (set via `wrangler secret put`, NOT here) ===
 #   AUTH_SECRET — Auth.js v5 JWT signing secret. The deployed Worker WILL NOT
@@ -80,3 +94,10 @@ PDF_PUBLIC_BASE_URL = "https://esperanza-pdf.round-base-ed8c.workers.dev"
 #                          openssl rand -base64 32
 #                          wrangler secret put PDF_PREVIEW_SECRET --config packages/admin/wrangler.toml
 #                        (locally, put PDF_PREVIEW_SECRET=... in packages/admin/.dev.vars).
+#
+#   WEBHOOK_TOKEN — Bearer token the applyFramerTypes action sends to framer-push
+#                   POST /schema (over the FRAMER_PUSH service binding, or the public
+#                   FRAMER_PUSH_URL fallback). Must equal the framer-push worker's
+#                   WEBHOOK_TOKEN secret. Set with:
+#                     wrangler secret put WEBHOOK_TOKEN --config packages/admin/wrangler.toml
+#                   (locally, put WEBHOOK_TOKEN=... in packages/admin/.dev.vars).

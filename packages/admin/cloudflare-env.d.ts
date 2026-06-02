@@ -39,16 +39,22 @@ declare global {
     ASSETS: Fetcher;
     /** Service binding to the esperanza-pdf worker (preview proxy). */
     PDF: Service;
+    /** Service binding to the esperanza-framer-push worker (applyFramerTypes → POST /schema). */
+    FRAMER_PUSH?: Service;
 
     // --- vars ---
     IMAGES_PUBLIC_BASE_URL: string;
     PDF_PUBLIC_BASE_URL?: string;
+    /** Public framer-push URL — fallback for POST /schema when FRAMER_PUSH binding is absent. */
+    FRAMER_PUSH_URL?: string;
 
     // --- secrets (wrangler secret put) ---
     /** Auth.js v5 JWT signing secret. REQUIRED in production. */
     AUTH_SECRET?: string;
     /** Shared HMAC secret for PDF preview tokens. Must match esperanza-pdf PDF_PREVIEW_SECRET. */
     PDF_PREVIEW_SECRET?: string;
+    /** Bearer token for framer-push POST /schema. Must match framer-push WEBHOOK_TOKEN. */
+    WEBHOOK_TOKEN?: string;
 
     // --- local-only (.dev.vars) ---
     /** Local dev login bypass — attributes writes to this email under `next dev`.

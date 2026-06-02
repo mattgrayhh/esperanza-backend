@@ -61,6 +61,12 @@ import {
   FIELD_TYPE_META,
   type FieldType,
 } from './field-builder';
+import { isSettableFramerType } from './framer-types';
+import {
+  postSchema,
+  type SchemaFieldRequest,
+  type SchemaFieldResult,
+} from './framer-push-client';
 
 // =============================================================================
 // Shared post-write step: audit_log rows + enqueue framer push.
@@ -1469,4 +1475,245 @@ export async function reorderFieldDefinitions(
   revalidatePath('/settings/fields');
   revalidatePath(`/${def.segment}`);
   return { ok: true };
+}
+
+// =============================================================================
+// FRAMER FIELD TYPES (Phase C) — applyFramerTypes.
+//
+// The Settings → Framer Field Types tab stages two kinds of change per entity:
+//   • RETYPE an existing field (change its field_definitions.framer_type), and/or
+//   • ADD a new custom field (key/label/admin-type/framer-type).
+// "Apply N changes to Framer" commits the whole batch here. For each affected
+// collection we:
+//   1. For ADDED fields: INSERT the field_definitions row FIRST (custom=1,
+//      visible_in_form=1, the given admin type + framer_type) so the entity's D1 edit
+//      page immediately renders the input (value ↔ custom_fields[key]).
+//   2. Call framer-push POST /schema (service binding or token) with the affected
+//      collection's fields to re-type/create the Framer fields + re-push the collection.
+//   3. On a successful per-field result (retyped/created/unchanged), update
+//      field_definitions.framer_type to the applied value + stamp framer_field_id (==
+//      the key, the framer-push convention).
+// Full-Admin gated (this is a data-feed/schema surface). Returns per-field results.
+// =============================================================================
+
+export interface ApplyTypeChange {
+  /** the field_definitions key (snake_case). For an added field this is the new key. */
+  key: string;
+  /** the target Framer CMS type (must be a settable framer-push type). */
+  framerType: string;
+  /** present ONLY for an ADDED field — its admin field-builder type + label. */
+  add?: { adminType: string; label: string };
+}
+
+export interface ApplyTypeFieldResult {
+  key: string;
+  /** how the registry row resolved (added inserts a row; existing just updates type). */
+  status: 'applied' | 'created' | 'unchanged' | 'error';
+  /** the Framer /schema action for this field, when reached. */
+  framerAction?: SchemaFieldResult['action'];
+  framerType?: string;
+  error?: string;
+}
+
+export interface ApplyTypeEntityResult {
+  entity: string;
+  /** the Framer collection name reported by /schema (when reached). */
+  collectionName?: string;
+  deploymentId?: string | null;
+  fields: ApplyTypeFieldResult[];
+  error?: string;
+}
+
+/**
+ * Apply a batch of Framer-type changes (re-types + added fields), grouped per entity.
+ * `batch` is keyed by EntityKey → the changes for that entity. Order within the action:
+ * insert added rows first (so the D1 edit page renders them), then call /schema, then
+ * advance field_definitions.framer_type for the fields the worker accepted.
+ */
+export async function applyFramerTypes(
+  batch: Record<string, ApplyTypeChange[]>
+): Promise<{ ok: true; results: ApplyTypeEntityResult[] } | { ok: false; error: string }> {
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate;
+  const { actor } = gate;
+
+  const { db } = getDb();
+  const env = getCloudflareContext().env as unknown as {
+    FRAMER_PUSH?: { fetch: (req: Request) => Promise<Response> };
+    FRAMER_PUSH_URL?: string;
+    WEBHOOK_TOKEN?: string;
+  };
+
+  const results: ApplyTypeEntityResult[] = [];
+
+  for (const [entityRaw, changes] of Object.entries(batch)) {
+    const def = getEntity(entityRaw);
+    if (!def) {
+      results.push({ entity: entityRaw, fields: [], error: `Unknown entity: ${entityRaw}` });
+      continue;
+    }
+    if (!Array.isArray(changes) || changes.length === 0) continue;
+    const entity = def.key;
+    const entityResult: ApplyTypeEntityResult = { entity, fields: [] };
+
+    // Per-field bookkeeping: validate types, insert added rows, build the /schema request.
+    const existing = (await db
+      .select()
+      .from(fieldDefinitions)
+      .where(eq(fieldDefinitions.entity, entity))
+      .orderBy(asc(fieldDefinitions.sort))) as FieldDefinition[];
+    const byKey = new Map(existing.map((r) => [r.key, r]));
+    const taken = reservedKeysForEntity(entity);
+    for (const r of existing) taken.add(r.key);
+    let maxSort = existing.reduce((m, r) => Math.max(m, r.sort), -1);
+
+    const schemaReqs: SchemaFieldRequest[] = [];
+    // Track which keys we attempted to apply (to advance framer_type after /schema).
+    const attempted = new Map<string, ApplyTypeFieldResult>();
+
+    for (const ch of changes) {
+      const key = (ch.key ?? '').trim();
+      const framerType = (ch.framerType ?? '').trim();
+      const fr: ApplyTypeFieldResult = { key, status: 'error', framerType };
+
+      if (!key) {
+        fr.error = 'missing key';
+        entityResult.fields.push(fr);
+        continue;
+      }
+      if (!isSettableFramerType(framerType)) {
+        fr.error = `“${framerType}” is not a Framer type that can be applied`;
+        entityResult.fields.push(fr);
+        continue;
+      }
+
+      if (ch.add) {
+        // ADD a new custom field — insert the registry row FIRST.
+        const adminType = String(ch.add.adminType ?? '');
+        const label = String(ch.add.label ?? '').trim();
+        if (!isFieldType(adminType)) {
+          fr.error = `invalid admin type: ${adminType}`;
+          entityResult.fields.push(fr);
+          continue;
+        }
+        if (label === '') {
+          fr.error = 'label is required';
+          entityResult.fields.push(fr);
+          continue;
+        }
+        if (!isValidKeyShape(key)) {
+          fr.error = `invalid key “${key}” — use lower snake_case`;
+          entityResult.fields.push(fr);
+          continue;
+        }
+        if (taken.has(key)) {
+          fr.error = `key “${key}” is reserved or already in use`;
+          entityResult.fields.push(fr);
+          continue;
+        }
+        maxSort += 1;
+        const id = `${entity}__${key}`;
+        const row: NewFieldDefinition = {
+          id,
+          entity,
+          key,
+          label,
+          help: null,
+          groupLabel: null,
+          sort: maxSort,
+          type: adminType,
+          optionsJson: adminType === 'select' ? '[]' : null,
+          required: false,
+          system: false,
+          visibleInForm: true, // so the entity edit page renders it immediately
+          visibleInList: false,
+          halfWidth: false,
+          framerFieldId: null,
+          framerType, // provisional; confirmed/advanced after /schema succeeds
+          custom: true, // value lives in custom_fields[key]
+        };
+        await db.insert(fieldDefinitions).values(row);
+        await postFieldWrite(db, entity, key, 'field_create', null, `${adminType}:${label}`, actor);
+        taken.add(key);
+        fr.status = 'created';
+        attempted.set(key, fr);
+        schemaReqs.push({ key, framer_type: framerType, label });
+        entityResult.fields.push(fr);
+        continue;
+      }
+
+      // RETYPE an existing field.
+      const cur = byKey.get(key);
+      if (!cur) {
+        fr.error = `field “${key}” not found for ${def.label}`;
+        entityResult.fields.push(fr);
+        continue;
+      }
+      fr.status = 'applied';
+      attempted.set(key, fr);
+      schemaReqs.push({ key, framer_type: framerType, label: cur.label ?? key });
+      entityResult.fields.push(fr);
+    }
+
+    // Nothing valid to send → record the entity result and move on.
+    if (schemaReqs.length === 0) {
+      results.push(entityResult);
+      continue;
+    }
+
+    // Call framer-push /schema for this collection (re-type/create + re-push).
+    let schema;
+    try {
+      schema = await postSchema(env, entity, schemaReqs);
+    } catch (e) {
+      const error = e instanceof Error ? e.message : 'framer-push /schema failed';
+      entityResult.error = error;
+      // Mark every attempted field errored; do NOT advance framer_type.
+      for (const fr of attempted.values()) {
+        fr.status = 'error';
+        fr.error = error;
+      }
+      results.push(entityResult);
+      continue;
+    }
+
+    entityResult.collectionName = schema.collectionName;
+    entityResult.deploymentId = schema.deploymentId ?? null;
+    if (schema.error) entityResult.error = schema.error;
+
+    // Advance field_definitions.framer_type (+ framer_field_id) for accepted fields.
+    const schemaByKey = new Map((schema.fields ?? []).map((f) => [f.key, f]));
+    const at = new Date().toISOString();
+    for (const [key, fr] of attempted) {
+      const sf = schemaByKey.get(key);
+      fr.framerAction = sf?.action;
+      if (!sf || sf.action === 'error') {
+        fr.status = 'error';
+        fr.error = sf?.detail ?? schema.error ?? 'field not applied by Framer';
+        continue;
+      }
+      // retyped | created | unchanged → persist the configured type + the live field id.
+      await db
+        .update(fieldDefinitions)
+        .set({ framerType: fr.framerType ?? null, framerFieldId: key, updatedAt: at })
+        .where(and(eq(fieldDefinitions.entity, entity), eq(fieldDefinitions.key, key)));
+      await postFieldWrite(
+        db,
+        entity,
+        key,
+        'framer_type_set',
+        null,
+        `${fr.framerType} (${sf.action})`,
+        actor
+      );
+      if (fr.status !== 'created') fr.status = sf.action === 'unchanged' ? 'unchanged' : 'applied';
+    }
+
+    results.push(entityResult);
+    revalidatePath(`/${def.segment}`);
+  }
+
+  revalidatePath('/settings/framer-types');
+  revalidatePath('/settings/fields');
+  return { ok: true, results };
 }
