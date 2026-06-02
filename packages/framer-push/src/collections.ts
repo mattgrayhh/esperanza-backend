@@ -322,8 +322,10 @@ const floorPlans: CollectionDef = {
       starting_price: nIf(row['starting_price']),
       bedroom_count_minimum: nIf(row['bedroom_min']),
       bedroom_count_maximum: nIf(row['bedroom_max']),
-      bathroom_count_min: nIf(row['bathroom_min']),
-      bathroom_count_max: nIf(row['bathroom_max']),
+      // Live Floor Plans (Managed) field ids are *_minimum/_maximum (match bedrooms);
+      // emitting *_min/_max silently dropped bathroom data. Reuse the existing live fields.
+      bathroom_count_minimum: nIf(row['bathroom_min']),
+      bathroom_count_maximum: nIf(row['bathroom_max']),
       car_garage_count: nIf(row['car_garage_count']),
       stories_count: nIf(row['stories_count']),
       living_square_footage: nIf(row['living_square_footage']),
@@ -393,7 +395,7 @@ const qmi: CollectionDef = {
       address: sIf(row['address']),
       slug: str(slug),
       city: sIf(row['city']),
-      postal_code: nIf(row['postal_code']),
+      postal_code: sIf(row['postal_code']), // live field is type string ("ZIP") — emit string, not number
       latitude: nIf(row['latitude']),
       longitude: nIf(row['longitude']),
       community: sIf(row['community']),

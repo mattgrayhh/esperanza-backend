@@ -86,8 +86,8 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
     expect(sval(f['bathroom_count'])).toBe(2.5); // synced (no override)
     expect(sval(f['city'])).toBe('Conroe');
     expect(sval(f['community'])).toBe('Tres Lagos');
-    expect(sval(f['postal_code'])).toBe(77384);
-    expect(f['postal_code']?.type).toBe('number'); // numeric, load-bearing
+    expect(sval(f['postal_code'])).toBe('77384');
+    expect(f['postal_code']?.type).toBe('string'); // live Framer field "ZIP" is type string
     expect(sval(f['collection'])).toBe('Haven');
     expect(sval(f['self_tour_available'])).toBe(true);
     expect(sval(f['available_now'])).toBe(true);
