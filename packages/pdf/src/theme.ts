@@ -15,6 +15,9 @@ export interface Theme {
 
 export const defaultTheme: Theme = {
   brand: {
+    // Vector wordmark in R2 (brand greens #244027 / gold #74613c). Used by every template
+    // that isn't rendered over baked-in artwork (the QMI grid bakes the logo into its PNG).
+    logoWordmarkUrl: 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/brand/nav-logo.svg',
     colors: { primary: '#1f3d2f', accent: '#b08d57', neutral: '#888888', bandText: '#ffffff', pageBg: '#ffffff', ink: '#333333' },
     fontHeading: 'Cormorant', fontBody: 'Inter', fontLabel: 'Inter',
   },
