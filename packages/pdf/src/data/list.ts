@@ -109,9 +109,9 @@ export async function loadListData(db: D1Database, citySlug: string, kind: ListK
         String(r.id),
       ),
     }));
-    const templateBgUrl = imgProxyBase
-      ? `${imgProxyBase.replace(/\/$/, '')}/img?w=1240&u=${encodeURIComponent(QMI_TEMPLATE_PNG)}`
-      : QMI_TEMPLATE_PNG;
+    // Use the full-resolution template artwork (no downscale) so the logo + fine print stay
+    // crisp; it's mostly white space so it compresses well.
+    const templateBgUrl = QMI_TEMPLATE_PNG;
     return { citySlug, cityName, kind, isMaster, cards: [], qmis, templateBgUrl };
   }
 
