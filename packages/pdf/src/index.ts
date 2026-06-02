@@ -1,10 +1,12 @@
 import puppeteer from '@cloudflare/puppeteer';
 import type { Env, PdfType, RenderJob } from './env';
 import { renderPdf } from './render';
-import { serve } from './serve';
+import { serve, loadData } from './serve';
 import { preview } from './preview';
 import { verifyPreviewToken } from './token';
 import { processJob, enqueueStaleLists, enqueueAllStale } from './queue';
+import { renderTemplate } from './templates';
+import { loadActiveTheme } from './theme';
 
 export { BrowserRenderer } from './renderer-do';
 
@@ -38,6 +40,34 @@ export default {
     if (request.method === 'GET' && url.pathname === '/debug/render') {
       const html = url.searchParams.get('html') ?? '<h1>hi</h1>';
       const pdf = await renderPdf(env, `<!DOCTYPE html><html><body>${html}</body></html>`);
+      return new Response(pdf as unknown as BodyInit, { headers: { 'content-type': 'application/pdf' } });
+    }
+    if (request.method === 'GET' && url.pathname === '/img') {
+      // Image proxy: resize via Cloudflare Image Resizing so the PDF embeds small images
+      // (Chrome re-encodes embedded images at high quality, so source pixel size is the lever).
+      // Degrades gracefully to the source if Image Resizing isn't enabled.
+      const u = url.searchParams.get('u');
+      if (!u) return new Response('missing u', { status: 400 });
+      const w = Math.min(2000, Math.max(40, Number(url.searchParams.get('w') || '300')));
+      const upstream = await fetch(u, {
+        cf: { image: { width: w, quality: 72, fit: 'scale-down', format: 'auto' }, cacheTtl: 86400, cacheEverything: true },
+      } as any);
+      if (!upstream.ok) return new Response('img fetch failed', { status: 502 });
+      const h = new Headers();
+      h.set('content-type', upstream.headers.get('content-type') || 'image/jpeg');
+      h.set('cache-control', 'public, max-age=86400');
+      return new Response(upstream.body, { status: 200, headers: h });
+    }
+    if (request.method === 'GET' && url.pathname === '/debug/pdf') {
+      // Render a real template on demand from type+entityId — bypasses R2/cache/queue.
+      // Fast iteration loop for template work. e.g. /debug/pdf?type=list&id=list:all:qmis
+      const type = (url.searchParams.get('type') || '') as PdfType;
+      const id = url.searchParams.get('id') || '';
+      const { theme } = await loadActiveTheme(env.DB);
+      const data = await loadData(env, type, id, theme);
+      if (!data) return new Response(`no data for ${type} ${id}`, { status: 404 });
+      const html = renderTemplate(type, theme, data);
+      const pdf = await renderPdf(env, html, theme.page.marginsMm);
       return new Response(pdf as unknown as BodyInit, { headers: { 'content-type': 'application/pdf' } });
     }
     const pdfMatch = url.pathname.match(/^\/pdf\/(community|qmi|floorplan|list)\/(.+)$/);

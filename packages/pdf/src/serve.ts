@@ -25,14 +25,14 @@ const EDGE_CACHE_HEADERS = {
   'cache-control': 'public, max-age=600, s-maxage=3600, stale-while-revalidate=86400',
 };
 
-async function loadData(env: Env, type: PdfType, entityId: string, theme: Awaited<ReturnType<typeof loadActiveTheme>>['theme']) {
+export async function loadData(env: Env, type: PdfType, entityId: string, theme: Awaited<ReturnType<typeof loadActiveTheme>>['theme']) {
   switch (type) {
     case 'community': return loadCommunityData(env.DB, entityId, theme.copy.collectionIntros);
     case 'qmi': return loadQmiData(env.DB, entityId, { appendFloorPlanPages: theme.qmi.appendFloorPlanPages });
     case 'floorplan': return loadFloorPlanData(env.DB, entityId);
     case 'list': {
       const [, citySlug, kind] = entityId.split(':'); // "list:<citySlug>:<kind>"
-      return loadListData(env.DB, citySlug!, kind as ListKind);
+      return loadListData(env.DB, citySlug!, kind as ListKind, env.PDF_PUBLIC_BASE_URL);
     }
     default: throw new Error(`loadData not implemented for ${type}`);
   }

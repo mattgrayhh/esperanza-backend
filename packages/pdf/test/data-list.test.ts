@@ -31,7 +31,7 @@ describe('loadListData', () => {
     raw.exec(`INSERT INTO cities (id,slug,city_name) VALUES ('ci1','mcallen','McAllen')`);
     raw.exec(`INSERT INTO qmi (id,published,synced_city_id,synced_address,image_url,synced_price,synced_total_square_footage,synced_bedroom_count) VALUES ('q1',1,'ci1','6529 Anaqua Loop','https://x/q1',379990,3057,4)`);
     const data = await loadListData(d1FromSqlite(raw), 'mcallen', 'qmis');
-    expect(data?.cards.map(c => c.name)).toContain('6529 Anaqua Loop');
-    expect(data?.cards[0]!.price).toBe(379990);
+    expect(data?.qmis.map(c => c.address)).toContain('6529 Anaqua Loop');
+    expect(data?.qmis[0]!.price).toBe(379990);
   });
 });
