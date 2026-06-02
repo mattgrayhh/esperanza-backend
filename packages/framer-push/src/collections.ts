@@ -60,11 +60,23 @@ export function asString(v: unknown): string | undefined {
   return s === '' ? undefined : s;
 }
 
-/** A non-empty string url, else undefined. (D1 stores stable single URLs.) */
+/**
+ * A valid absolute http(s) URL, else undefined. Feeds image() and link() fields,
+ * which framer-api passes to `new URL(...)` — a non-URL value (e.g. a stringified
+ * attachment object that imported as the literal "[object Object]") would throw
+ * "Invalid URL" and ABORT the whole item upsert. Dropping the bad value instead
+ * keeps the rest of the item (and every other item in the batch) syncing.
+ */
 export function urlOf(v: unknown): string | undefined {
   if (v == null) return undefined;
   const s = String(v).trim();
-  return s === '' ? undefined : s;
+  if (s === '') return undefined;
+  try {
+    const u = new URL(s);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? s : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** numField: empty → undefined (dropped) so "0" never leaks to the live site. */

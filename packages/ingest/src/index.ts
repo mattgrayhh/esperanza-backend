@@ -33,6 +33,8 @@ import { handleQueueBatch, writeSyncLog, type ConsumerEnv, type D1Like } from '.
 export interface Env extends SnowflakeEnv, ConsumerEnv {
   DB: D1Like;
   SYNC_QUEUE: { send(body: unknown): Promise<void>; sendBatch(messages: { body: unknown }[]): Promise<void> };
+  /** Optional Bearer secret gating the manual `POST /run` reconciliation trigger. */
+  INGEST_TRIGGER_TOKEN?: string;
 }
 
 // -- D1 reads for the diff --
@@ -119,6 +121,27 @@ export default {
   // ── CONSUMER: drain the queue, write only allow-listed synced columns ──
   async queue(batch: { messages: { body: SyncMessage; ack(): void; retry(): void }[] }, env: Env): Promise<void> {
     await handleQueueBatch(batch, env);
+  },
+
+  // ── MANUAL TRIGGER: POST /run (Bearer INGEST_TRIGGER_TOKEN) runs the same
+  //    Snowflake→D1 reconciliation as the cron, on demand (e.g. cutover/backfill).
+  //    Mirrors framer-push's POST /cron. Any other path → 404. No token set → 403.
+  async fetch(req: Request, env: Env): Promise<Response> {
+    const url = new URL(req.url);
+    if (req.method === 'POST' && url.pathname === '/run') {
+      const auth = req.headers.get('authorization') || '';
+      const expected = env.INGEST_TRIGGER_TOKEN ? `Bearer ${env.INGEST_TRIGGER_TOKEN}` : '';
+      if (!expected || auth !== expected) {
+        return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 403, headers: { 'content-type': 'application/json' } });
+      }
+      try {
+        await runIngest(env);
+        return new Response(JSON.stringify({ ok: true, ran: 'ingest' }), { headers: { 'content-type': 'application/json' } });
+      } catch (err) {
+        return new Response(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) }), { status: 502, headers: { 'content-type': 'application/json' } });
+      }
+    }
+    return new Response('Not found', { status: 404 });
   },
 };
 
