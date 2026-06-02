@@ -38,8 +38,16 @@ import {
   type FramerConnect,
   type FramerEnv,
   type FramerCollection,
+  type ManagedField,
+  type ManagedFieldInput,
   connectFramer,
 } from './framer.js';
+import {
+  type FieldDef,
+  loadFieldDefs,
+  applyTypeOverrides,
+  emitCustomFields,
+} from './type-overrides.js';
 
 export interface ConsumerEnv extends FramerEnv {
   DB: D1Like;
@@ -210,6 +218,43 @@ async function firstNonNull(
 }
 
 // =============================================================================
+// Item build = mapper + config-driven type overrides + custom-field push
+// =============================================================================
+
+/**
+ * Map a row to a Framer item, then apply the field_definitions-driven type
+ * overrides and append CUSTOM-field values from the row's custom_fields JSON.
+ *
+ * Order matters: def.map(row) builds the base fieldData with the mappers' emitted
+ * types; applyTypeOverrides re-types only the keys whose configured framer_type
+ * differs (a guaranteed no-op for the reconciled steady state); emitCustomFields
+ * then adds the user-defined fields (custom=1) — merged LAST so a custom key never
+ * silently shadows a system field (custom keys are disjoint by construction).
+ *
+ * defs are loaded once per entity via the passed cache (scoped to one invocation).
+ */
+export async function buildItem(
+  env: ConsumerEnv,
+  def: CollectionDef,
+  row: Row,
+  defsCache: Map<string, FieldDef[]>
+): Promise<ManagedCollectionItemInput> {
+  const item = def.map(row);
+  let defs: FieldDef[] = [];
+  try {
+    defs = await loadFieldDefs(env.DB, def.key, defsCache);
+  } catch {
+    // field_definitions unavailable (e.g. pre-migration) → skip overrides entirely;
+    // the mapper output is the safe default. Never let a missing registry abort push.
+    return item;
+  }
+  applyTypeOverrides(def.key, item.fieldData, defs);
+  const custom = emitCustomFields(row['custom_fields'], defs);
+  for (const [k, v] of Object.entries(custom)) item.fieldData[k] = v;
+  return item;
+}
+
+// =============================================================================
 // Per-message push
 // =============================================================================
 
@@ -223,7 +268,7 @@ export async function pushMessage(
   env: ConsumerEnv,
   framer: FramerClient,
   msg: FramerSyncMessage,
-  opts: { backoff?: BackoffOptions } = {}
+  opts: { backoff?: BackoffOptions; defsCache?: Map<string, FieldDef[]> } = {}
 ): Promise<PushResult> {
   const def = COLLECTION_DEFS[msg.collection];
   if (!def) throw new Error(`unknown collection key: ${msg.collection}`);
@@ -242,7 +287,7 @@ export async function pushMessage(
     await retryWithBackoff(() => collection.removeItems([msg.id]), opts.backoff);
     return { upserted: 0, deleted: 1 };
   }
-  const item = def.map(row);
+  const item = await buildItem(env, def, row, opts.defsCache ?? new Map());
   await retryWithBackoff(() => collection.addItems([item]), opts.backoff);
   return { upserted: 1, deleted: 0 };
 }
@@ -264,11 +309,14 @@ export async function handleQueueBatch(
   let pushedAny = false;
   let deploymentId: string | null = null;
 
+  // One field_definitions cache for the whole batch → each entity's defs load once.
+  const defsCache = new Map<string, FieldDef[]>();
+
   const framer = await connect(env);
   try {
     for (const m of batch.messages) {
       try {
-        const r = await pushMessage(env, framer, m.body);
+        const r = await pushMessage(env, framer, m.body, { defsCache });
         const bucket = (perCollection[m.body.collection] ??= { upserted: 0, deleted: 0 });
         bucket.upserted += r.upserted;
         bucket.deleted += r.deleted;
@@ -387,6 +435,9 @@ export async function runBackfill(
   const reconcile = opts.reconcileOrphans ?? true;
   const results: BackfillCollectionResult[] = [];
 
+  // One field_definitions cache for the whole backfill → each entity loads once.
+  const defsCache = new Map<string, FieldDef[]>();
+
   const framer = await connect(env);
   try {
     for (const key of keys) {
@@ -409,7 +460,11 @@ export async function runBackfill(
         // at the same address would both emit e.g. `2004_s_lake_texoma_st` and the
         // second would abort with Framer's "Duplicate slug". (id-keyed upsert is fine;
         // it's the unique-slug constraint that fails.)
-        const items = dedupeSlugs(rows.map((r) => def.map(r)));
+        // buildItem applies the field_definitions type overrides + custom-field push
+        // per row (defs cached per entity); sequential to keep the cache single-load.
+        const built: ManagedCollectionItemInput[] = [];
+        for (const r of rows) built.push(await buildItem(env, def, r, defsCache));
+        const items = dedupeSlugs(built);
         await pushInChunks(collection, items, chunkSize, opts.backoff);
         res.upserted = items.length;
 
@@ -467,4 +522,171 @@ async function removeInChunks(
     const slice = ids.slice(i, i + chunkSize);
     if (slice.length) await retryWithBackoff(() => collection.removeItems(slice), backoff);
   }
+}
+
+// =============================================================================
+// SCHEMA — POST /schema: re-type existing Framer fields / create missing ones.
+// Append-only setFields pattern: read the live field set, rebuild it preserving
+// EVERY existing field, change the type of a requested existing field (retyped) or
+// append a requested missing field (created), then setFields the full new set. After
+// the schema change, RE-PUSH the collection (re-typing clears Framer values) by
+// reusing runBackfill for that single collection key so values repopulate.
+// =============================================================================
+
+/** One field the caller wants set/created on a collection. framer_type == CMS type. */
+export interface SchemaFieldRequest {
+  key: string; // Framer field id (== field_definitions.key by convention)
+  framer_type: string; // target CMS field type
+  label?: string; // display name (for a newly-created field; existing names preserved)
+}
+
+export type SchemaFieldAction = 'retyped' | 'created' | 'unchanged' | 'error';
+
+export interface SchemaFieldResult {
+  key: string;
+  action: SchemaFieldAction;
+  detail: string;
+}
+
+export interface ApplySchemaResult {
+  collection: CollectionKey;
+  collectionName: string;
+  fields: SchemaFieldResult[];
+  /** deploymentId from the post-schema re-push, or null if nothing repushed. */
+  deploymentId: string | null;
+  error?: string;
+}
+
+// CMS field types framer-push supports setting via /schema. `enum` is intentionally
+// excluded from CREATE (needs `cases`); a re-type TO enum is rejected per-field.
+const SETTABLE_TYPES = new Set<string>([
+  'string',
+  'number',
+  'boolean',
+  'image',
+  'link',
+  'formattedText',
+  'date',
+  'array',
+  'file',
+]);
+
+/**
+ * Re-type and/or create Framer fields on a collection, then re-push it.
+ *
+ *  - getFields() → the live schema.
+ *  - ABORT if ANY existing field is type "unsupported" (rebuilding the set would
+ *    drop/garble it — Framer can't round-trip an unsupported field through setFields).
+ *  - For each requested field: re-type an existing field (action=retyped), or append
+ *    a new one (action=created). A request whose type already matches → unchanged.
+ *  - Preserve every other existing field verbatim (append-only pattern).
+ *  - setFields(nextSet); then re-push the collection (reuse runBackfill) so values
+ *    repopulate in the new type.
+ */
+export async function applySchema(
+  env: ConsumerEnv,
+  framer: FramerClient,
+  collectionKey: CollectionKey,
+  requests: SchemaFieldRequest[],
+  opts: { backoff?: BackoffOptions; repush?: boolean } = {}
+): Promise<ApplySchemaResult> {
+  const def = COLLECTION_DEFS[collectionKey];
+  if (!def) throw new Error(`unknown collection key: ${collectionKey}`);
+  const collectionName = resolveCollectionName(def, env as Record<string, string | undefined>);
+  const result: ApplySchemaResult = {
+    collection: collectionKey,
+    collectionName,
+    fields: [],
+    deploymentId: null,
+  };
+
+  const collection = await framer.getCollectionByName(collectionName);
+  if (!collection) {
+    result.error = `Framer collection not found by name: "${collectionName}"`;
+    result.fields = requests.map((r) => ({ key: r.key, action: 'error', detail: result.error! }));
+    return result;
+  }
+
+  const existing = await retryWithBackoff(() => collection.getFields(), opts.backoff);
+
+  // Abort the WHOLE schema change if any existing field is unsupported — rebuilding
+  // the field set would lose it (we can't reconstruct an unsupported field input).
+  const unsupported = existing.find((f) => f.type === 'unsupported');
+  if (unsupported) {
+    result.error = `collection has an unsupported field ("${unsupported.id}"); aborting to avoid data loss`;
+    result.fields = requests.map((r) => ({ key: r.key, action: 'error', detail: result.error! }));
+    return result;
+  }
+
+  // Build the next field set as inputs, preserving every existing field.
+  const byId = new Map<string, ManagedField>();
+  for (const f of existing) byId.set(f.id, f);
+  const nextById = new Map<string, ManagedFieldInput>();
+  for (const f of existing) nextById.set(f.id, { id: f.id, type: f.type, name: f.name });
+
+  const fieldResults: SchemaFieldResult[] = [];
+  for (const req of requests) {
+    if (!SETTABLE_TYPES.has(req.framer_type)) {
+      fieldResults.push({
+        key: req.key,
+        action: 'error',
+        detail: `unsupported target type "${req.framer_type}"`,
+      });
+      continue;
+    }
+    const cur = byId.get(req.key);
+    if (!cur) {
+      // create missing
+      nextById.set(req.key, {
+        id: req.key,
+        type: req.framer_type,
+        name: req.label ?? req.key,
+      });
+      fieldResults.push({ key: req.key, action: 'created', detail: `created as ${req.framer_type}` });
+    } else if (cur.type === req.framer_type) {
+      fieldResults.push({ key: req.key, action: 'unchanged', detail: `already ${req.framer_type}` });
+    } else {
+      // re-type existing (preserve its name)
+      nextById.set(req.key, { id: req.key, type: req.framer_type, name: cur.name });
+      fieldResults.push({
+        key: req.key,
+        action: 'retyped',
+        detail: `${cur.type} → ${req.framer_type}`,
+      });
+    }
+  }
+  result.fields = fieldResults;
+
+  // Only call setFields when something actually changed (created/retyped present).
+  const changed = fieldResults.some((r) => r.action === 'created' || r.action === 'retyped');
+  if (!changed) return result; // pure no-op: leave the schema + values untouched.
+
+  const nextSet = [...nextById.values()];
+  try {
+    await retryWithBackoff(() => collection.setFields(nextSet), opts.backoff);
+  } catch (err) {
+    result.error = err instanceof Error ? err.message : String(err);
+    // mark the would-change fields as errored
+    for (const r of result.fields) {
+      if (r.action === 'created' || r.action === 'retyped') {
+        r.action = 'error';
+        r.detail = `setFields failed: ${result.error}`;
+      }
+    }
+    return result;
+  }
+
+  // Re-push the collection so values repopulate in the new type. Reuse the backfill
+  // path for this single key. (Re-typing a field clears its Framer values.)
+  if (opts.repush !== false) {
+    const [bf] = await runBackfill(
+      env,
+      { keys: [collectionKey], reconcileOrphans: false, backoff: opts.backoff },
+      async () => framer // reuse the already-connected client (don't reconnect/disconnect)
+    );
+    if (bf?.error) result.error = `repush: ${bf.error}`;
+    result.deploymentId = bf?.deploymentId ?? null;
+  }
+
+  return result;
 }

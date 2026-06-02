@@ -26,8 +26,11 @@
 import {
   handleQueueBatch,
   runBackfill,
+  applySchema,
   type ConsumerEnv,
+  type SchemaFieldRequest,
 } from './consumer.js';
+import { connectFramer } from './framer.js';
 import {
   CRON_LOOKBACK_MINUTES,
   resolveLookbackMinutes,
@@ -183,6 +186,97 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+// =============================================================================
+// /schema — re-type + create Framer fields, then re-push (Field Types Phase C).
+// =============================================================================
+
+const VALID_COLLECTION_KEYS = new Set<CollectionKey>([
+  'floor_plans',
+  'qmi',
+  'communities',
+  'collections',
+  'images',
+  'blogs',
+  'promotions',
+  'cities',
+  'testimonials',
+]);
+
+/** Map a few common human collection NAMES → the canonical CollectionKey. */
+const NAME_TO_KEY: Record<string, CollectionKey> = {
+  'floor plans': 'floor_plans',
+  'quick move-ins': 'qmi',
+  'quick move ins': 'qmi',
+  communities: 'communities',
+  collections: 'collections',
+  images: 'images',
+  blogs: 'blogs',
+  promotions: 'promotions',
+  cities: 'cities',
+  testimonials: 'testimonials',
+};
+
+/** Resolve the body's `collection` (a CollectionKey OR a human name) to a key. */
+export function resolveCollectionKey(collection: unknown): CollectionKey | null {
+  if (typeof collection !== 'string') return null;
+  const raw = collection.trim();
+  if (VALID_COLLECTION_KEYS.has(raw as CollectionKey)) return raw as CollectionKey;
+  const norm = raw.toLowerCase().replace(/\s*\(managed\)\s*$/, '').trim();
+  return NAME_TO_KEY[norm] ?? null;
+}
+
+interface SchemaPayload {
+  collection?: unknown;
+  fields?: Array<{ key?: unknown; framer_type?: unknown; label?: unknown }>;
+}
+
+async function handleSchema(request: Request, env: Env): Promise<Response> {
+  let payload: SchemaPayload;
+  try {
+    payload = (await request.json()) as SchemaPayload;
+  } catch {
+    return json({ error: 'invalid JSON body' }, 400);
+  }
+
+  const key = resolveCollectionKey(payload.collection);
+  if (!key) {
+    return json(
+      { error: 'unknown or missing `collection`', valid: [...VALID_COLLECTION_KEYS] },
+      400
+    );
+  }
+
+  // Validate + normalize the requested fields.
+  const reqFields: SchemaFieldRequest[] = [];
+  for (const f of payload.fields ?? []) {
+    const k = typeof f?.key === 'string' ? f.key.trim() : '';
+    const t = typeof f?.framer_type === 'string' ? f.framer_type.trim() : '';
+    if (!k || !t) {
+      return json({ error: 'each field needs a non-empty `key` and `framer_type`' }, 400);
+    }
+    reqFields.push({
+      key: k,
+      framer_type: t,
+      label: typeof f.label === 'string' && f.label.trim() ? f.label.trim() : undefined,
+    });
+  }
+
+  // Empty fields list → valid no-op (route health-check): resolve, return 200.
+  if (reqFields.length === 0) {
+    return json({ ok: true, collection: key, fields: [], deploymentId: null, noop: true });
+  }
+
+  const framer = await connectFramer(env);
+  try {
+    const result = await applySchema(env, framer, key, reqFields);
+    return json({ ok: !result.error, ...result });
+  } finally {
+    // applySchema's re-push already disconnects via runBackfill; this is a harmless
+    // belt-and-suspenders close (catch swallows a double-disconnect).
+    await framer.disconnect().catch(() => {});
+  }
+}
+
 async function handleFetch(request: Request, env: Env): Promise<Response> {
   if (request.method !== 'POST') {
     return json({ error: 'method not allowed', allowed: ['POST'] }, 405);
@@ -205,6 +299,14 @@ async function handleFetch(request: Request, env: Env): Promise<Response> {
       : undefined;
     const results = await runBackfill(env, { keys });
     return json({ ok: true, results });
+  }
+
+  // Schema sync (Field Types Phase C): POST /schema
+  //   body { collection, fields: [{ key, framer_type, label }] }
+  // Re-types existing Framer fields / creates missing ones, then re-pushes the
+  // collection so values repopulate. Returns per-field {key, action, detail}.
+  if (url.pathname.replace(/\/+$/, '') === '/schema') {
+    return handleSchema(request, env);
   }
 
   const key = routeToKey(url.pathname);

@@ -140,6 +140,63 @@ function framerType(type: FieldType, f: FieldConfig): string | null {
   }
 }
 
+// ── mapper-truth Framer-type overrides ───────────────────────────────────────
+// AUDIT RECONCILIATION (Field Types Phase C, pre-work): the generic widgetToType →
+// framerType mapping above is the *intent*, but the live framer-push mappers
+// (packages/framer-push/src/collections.ts) emit a DIFFERENT Framer type for a
+// specific set of (entity,key) whose emitted Framer field id equals the
+// field_definitions.key. The override pass (applyTypeOverrides) only acts when a
+// def's framer_type != the type the mapper actually emits — so for the seed to make
+// that pass a guaranteed NO-OP, framer_type must equal the mapper's CURRENT output,
+// NOT the generic intent. These are the exact divergences the audit found:
+//
+//   * textarea/richtext admin fields the mappers push with sIf() (plain `string`),
+//     not ftIf()/formattedText — the mapper, not the widget, is the live truth
+//     (the proven per-field mapper type-assertion tests pin these as `string`).
+//   * `date` admin fields the mappers push as `string` (sIf) — Framer has no live
+//     date binding for them; they go out as plain strings.
+//   * qmi.postal_code: the live Framer "ZIP" field is `string` (qmi mapper comment +
+//     qmi.mapper.test asserts type==='string'); the override widget intent was number.
+//   * testimonials.status: the `select` widget intent was enum, but the mapper emits
+//     the status label via sIf() as a plain `string`.
+//
+// Keyed by `${entity}.${key}` → the Framer type the mapper EMITS today. Editing this
+// map (or the mappers) is how a future field is reconciled; do NOT widen framerType()
+// generically (most *_rich fields ARE correctly pushed as formattedText via ftIf).
+const MAPPER_FRAMER_TYPE: Record<string, string> = {
+  'floor_plans.description': 'string',
+  'qmi.postal_code': 'string',
+  'qmi.description': 'string',
+  'qmi.upgrades': 'string',
+  'qmi.incentive': 'string',
+  'qmi.move_in_date': 'string',
+  'communities.description': 'string',
+  'communities.directions': 'string',
+  'communities.community_map_embed': 'string',
+  'communities.security_details': 'string',
+  'collections.content': 'string',
+  'collections.incentive': 'string',
+  'images.caption': 'string',
+  'images.caption_clean': 'string',
+  'blogs.excerpt': 'string',
+  'blogs.content': 'string',
+  'blogs.publish_date': 'string',
+  'blogs.seo_description': 'string',
+  'promotions.copy': 'string',
+  'cities.hero_description': 'string',
+  'cities.incentive': 'string',
+  'testimonials.date_posted': 'string',
+  'testimonials.testimonial_text': 'string',
+  'testimonials.status': 'string',
+};
+
+/** Generic framerType(), then apply the mapper-truth override if one exists. */
+function resolveFramerType(entity: string, type: FieldType, f: FieldConfig): string | null {
+  const override = MAPPER_FRAMER_TYPE[`${entity}.${f.field}`];
+  if (override !== undefined) return override;
+  return framerType(type, f);
+}
+
 // ── system (locked / synced) flag ───────────────────────────────────────────
 // system=1 = the data source is NOT marketing-editable as a free field (Snowflake
 // synced, or a publish gate / targeting widget the engine owns). The builder may
@@ -180,6 +237,8 @@ interface SeedRow {
   half_width: number;
   framer_field_id: string | null;
   framer_type: string | null;
+  /** 0 for every static-config field (they map real columns / bespoke widgets). */
+  custom: number;
 }
 
 function listColumnKeys(listColumns: ListColumn[]): Set<string> {
@@ -216,7 +275,8 @@ function buildRows(): { rows: SeedRow[]; perEntity: Record<string, number> } {
         visible_in_list: listKeys.has(f.field) ? 1 : 0,
         half_width: f.halfWidth ? 1 : 0,
         framer_field_id: null, // populated in Phase C by setFields
-        framer_type: framerType(type, f),
+        framer_type: resolveFramerType(key, type, f),
+        custom: 0, // every static-config field maps a real column / bespoke widget
       };
       // The publish-gate (bucket 'publish') is rendered as the detail-header toggle,
       // NOT as a form input — build-edit-view skips it in the form loop. Mark it
@@ -273,6 +333,7 @@ async function main(): Promise<void> {
       half_width: r.half_width,
       framer_field_id: r.framer_field_id,
       framer_type: r.framer_type,
+      custom: r.custom,
     });
     sink.add(stmt.sql, stmt.params);
   }

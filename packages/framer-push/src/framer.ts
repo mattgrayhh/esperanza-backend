@@ -25,6 +25,31 @@
 
 import type { ManagedCollectionItemInput } from './framer-types.js';
 
+/**
+ * One existing Managed-collection field, as getFields() exposes it. The `id` is the
+ * Framer field id (== our snake_case key by convention); `type` is the Framer CMS
+ * field type ("string"|"number"|"boolean"|"image"|"link"|"formattedText"|"date"|
+ * "enum"|"array"|"file"|"unsupported"|…). We re-type by rebuilding the input list.
+ */
+export interface ManagedField {
+  id: string;
+  name: string;
+  type: string;
+}
+
+/**
+ * A field input for setFields. Mirrors framer-api's ManagedCollectionFieldInput:
+ * `{ id, type, name, userEditable? }`. We only ever emit the scalar CMS types our
+ * push produces (string/number/boolean/image/link/formattedText/date/enum); other
+ * existing fields are passed through verbatim by copying their id/type/name.
+ */
+export interface ManagedFieldInput {
+  id: string;
+  type: string;
+  name: string;
+  userEditable?: boolean;
+}
+
 /** A single managed collection handle (the subset of the framer-api surface we use). */
 export interface FramerCollection {
   readonly name: string;
@@ -34,6 +59,10 @@ export interface FramerCollection {
   removeItems(ids: string[]): Promise<void>;
   /** All existing item ids (for orphan reconciliation). */
   getItemIds(): Promise<string[]>;
+  /** The collection's current field schema (id/name/type). */
+  getFields(): Promise<ManagedField[]>;
+  /** Replace the collection's field schema with `fields` (full set). */
+  setFields(fields: ManagedFieldInput[]): Promise<void>;
 }
 
 /** A connected Framer project session. */
@@ -68,11 +97,18 @@ export type FramerConnect = (env: FramerEnv) => Promise<FramerClient>;
  * (the package ships its own d.ts; we don't import its types so the build never
  * requires it to be present).
  */
+interface FramerApiField {
+  id: string;
+  name: string;
+  type: string;
+}
 interface FramerApiCollection {
   name: string;
   addItems(items: ManagedCollectionItemInput[]): Promise<unknown>;
   removeItems(ids: string[]): Promise<unknown>;
   getItemIds(): Promise<string[]>;
+  getFields(): Promise<FramerApiField[]>;
+  setFields(fields: ManagedFieldInput[]): Promise<unknown>;
 }
 interface FramerApiSession {
   getManagedCollections(): Promise<FramerApiCollection[]>;
@@ -121,6 +157,9 @@ export const connectFramer: FramerConnect = async (env) => {
         addItems: (items) => c.addItems(items).then(() => undefined),
         removeItems: (ids) => c.removeItems(ids).then(() => undefined),
         getItemIds: () => c.getItemIds(),
+        getFields: async () =>
+          (await c.getFields()).map((f) => ({ id: f.id, name: f.name, type: f.type })),
+        setFields: (fields) => c.setFields(fields).then(() => undefined),
       };
     },
     async publishAndDeploy(): Promise<{ deploymentId: string }> {
@@ -144,6 +183,10 @@ export interface MockCollectionState {
   items: Map<string, ManagedCollectionItemInput>;
   addItemsCalls: ManagedCollectionItemInput[][];
   removeItemsCalls: string[][];
+  /** The collection's current field schema (mutated by setFields). */
+  fields: ManagedField[];
+  /** Every setFields call's argument (for assertions). */
+  setFieldsCalls: ManagedFieldInput[][];
 }
 
 export interface MockFramer {
@@ -159,8 +202,14 @@ export interface MockFramer {
  * Build a mock FramerClient factory. `names` seeds which managed collections
  * exist (resolveCollection matches by NAME, so the mock must know them up front,
  * exactly like a live project whose collections were created by setup.ts).
+ *
+ * `seedFields` optionally seeds each collection's starting field schema (keyed by
+ * collection name) so /schema re-type tests can assert against a known pre-state.
  */
-export function createMockFramer(names: string[]): MockFramer {
+export function createMockFramer(
+  names: string[],
+  seedFields: Record<string, ManagedField[]> = {}
+): MockFramer {
   const collections = new Map<string, MockCollectionState>();
   for (const name of names) {
     collections.set(name, {
@@ -168,6 +217,8 @@ export function createMockFramer(names: string[]): MockFramer {
       items: new Map(),
       addItemsCalls: [],
       removeItemsCalls: [],
+      fields: (seedFields[name] ?? []).map((f) => ({ ...f })),
+      setFieldsCalls: [],
     });
   }
   const mock: MockFramer = {
@@ -191,6 +242,14 @@ export function createMockFramer(names: string[]): MockFramer {
           },
           async getItemIds() {
             return [...state.items.keys()];
+          },
+          async getFields() {
+            return state.fields.map((f) => ({ ...f }));
+          },
+          async setFields(fields) {
+            state.setFieldsCalls.push(fields);
+            // Apply the new schema (id/name/type) so a subsequent getFields reflects it.
+            state.fields = fields.map((f) => ({ id: f.id, name: f.name, type: f.type }));
           },
         };
       },

@@ -589,6 +589,9 @@ export const fieldDefinitions = sqliteTable(
     halfWidth: integer('half_width', { mode: 'boolean' }).notNull().default(false),
     framerFieldId: text('framer_field_id'),
     framerType: text('framer_type'),
+    // 1 = user-added field whose value lives in the entity's custom_fields JSON
+    // (key == JSON key == Framer field id). 0 = maps a real column / bespoke widget.
+    custom: integer('custom', { mode: 'boolean' }).notNull().default(false),
     createdAt: text('created_at').default(nowIso),
     updatedAt: text('updated_at').default(nowIso),
   },

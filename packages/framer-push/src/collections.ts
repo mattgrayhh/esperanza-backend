@@ -302,6 +302,7 @@ const QMI_PROJECTION = `
   q.mls_id, q.mls_number, q.lot_number, q.year_built, q.lot_size_sqft, q.move_in_date,
   q.hers_score, q.arm_rate, q.promo_text, q.availability_text, q.nter_now, q.cities,
   q.posted, q.publish_date, q.last_modified_time,
+  q.custom_fields, -- Phase C: custom-field VALUES (emitted by emitCustomFields)
   -- FP:* lookups resolved from the linked floor plan (qmi.fp_* removed — D1
   -- 100-col limit; mirrors v_public_qmi's LEFT JOIN). Same output names so the
   -- mapper below is unchanged. fp_image / fp_additional_images carry attachment
