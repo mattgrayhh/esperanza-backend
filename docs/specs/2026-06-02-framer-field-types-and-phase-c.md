@@ -76,3 +76,9 @@ re-pushes → every future D1 edit of that field flows to Framer as a Link, auto
 
 ## Out of scope
 Deleting fields; editing record VALUES (that's the normal entity forms); reordering (existing Field Builder).
+
+---
+
+## SHIPPED 2026-06-02 (master @ a95a3e0)
+Built + deployed + E2E-verified. framer-push 09ea4607 (override pass + custom_fields push + POST /schema re-type/create; migration 0006 adds field_definitions.custom; 24 framer_type drifts reconciled in the seed so the override is a no-op; 53 tests). admin 9dd9da85 (Settings → Framer Field Types tab, applyFramerTypes action, FRAMER_PUSH service binding, full-stack add-field; 131 tests). E2E: re-type (header_image_alt string↔formattedText) + add-field (ztest_link renders on the live Collections edit page + created in Framer + value pushed) both PASS, test artifacts cleaned up.
+OPERATOR: admin WEBHOOK_TOKEN secret was set to match framer-push (done) — required for the Apply button's /schema call. The one link not exercised through the deployed admin UI is the admin→framer-push outbound hop (service binding / token), which is unit-tested + now fully configured.
