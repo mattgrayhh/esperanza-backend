@@ -364,7 +364,6 @@ const floorPlans: CollectionDef = {
       asString(row['slug']) ?? (asString(row['name']) ? kebab(String(row['name'])) : id);
     const draft = !asBool(row['published']);
     const photo = galleryUrls(row['photo_gallery']);
-    const photoUrlsStr = asString(row['photo_gallery_urls']) ?? joinUrls(photo);
     const elevGallery = galleryUrls(row['elevation_gallery']);
     const addl = galleryUrls(row['additional_images_gallery']);
     const fieldData = compactFields({
@@ -400,7 +399,6 @@ const floorPlans: CollectionDef = {
       energy_cost_monthly_savings: nIf(row['energy_cost_avg']),
       communities: sIf(row['communities']),
       community_count: nIf(row['community_count']),
-      photo_gallery_urls: photoUrlsStr === undefined ? undefined : str(photoUrlsStr),
       photo_gallery: galIf(photo),
       elevation_renderings: sIf(row['elevation_renderings']),
       elevation_gallery: galIf(elevGallery),
@@ -572,7 +570,6 @@ const communities: CollectionDef = {
       secondary_image: imgIf(row['secondary_image_url']),
       secondary_image_alt: sIf(row['secondary_image_alt']),
       photo_gallery_image: imgIf(row['photo_gallery_image_url']),
-      photo_gallery_urls: joinUrls(photo) === undefined ? undefined : str(joinUrls(photo) as string),
       photo_gallery: galIf(photo),
       photo_gallery_image_alt: sIf(row['photo_gallery_image_alt']),
       description_image: imgIf(row['description_image_url']),
