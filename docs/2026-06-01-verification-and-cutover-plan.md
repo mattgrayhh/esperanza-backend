@@ -110,3 +110,32 @@ KNOWN DATA ISSUES (follow-ups, non-blocking, urlOf guard makes them safe):
   (not in Snowflake community set OR marketing-authored). Decide: author in admin or confirm out-of-scope.
 - New-site bed/bath shows Snowflake plan-BASE config (not as-built) for optioned homes — pre-existing source
   characteristic, not a regression. Product decision if as-built fidelity is wanted.
+
+---
+
+## DATA-QUALITY FOLLOW-UPS surfaced by the first real framer-push run (2026-06-01)
+
+framer-push had never executed (bundling bug) — its first run exposed real data debt. framer-push CODE is now
+fixed (commits ab3b365, 5e16d89, bc0b3b8) and pushes 8/9 collections cleanly. Remaining are DATA tasks:
+
+1. **110/330 qmi rows have un-migrated images** [HIGH]. `image_url`(2) + `og_image_url`(108) kept the upstream
+   feed paths `…r2.dev/153/YYYY/M/D/<file>?…ois=…` — the R2 objects were never uploaded (migrate-images skipped
+   these columns / host-rewrote without upload). All 110 dead refs were NULLed (so qmi pushes; they fall back to
+   the linked floor-plan image). **FIX: re-run the R2 image migration for qmi image_url/og_image_url** from the
+   Airtable source so these homes regain their own hero image. (api "100% stable URLs" verified host, not object existence.)
+2. **Duplicate qmi home** [MEDIUM]: "2004 S Lake Texoma St" exists as BOTH recVnaTPnaPDqtugd (new, ingest-created,
+   in Framer draft) and rece7ee14e93adf42 (older, viewer_slug NULL). Same derived slug → Framer "Duplicate slug"
+   aborts the qmi BACKFILL (the cron/queue path still pushes the other ~325 in batches). FIX: dedupe the duplicate
+   home in D1 (remove/unpublish the stale rece7ee14e93adf42) — likely a Snowflake re-key left both. Then re-backfill qmi.
+   (Also consider reordering runBackfill: orphan-reconcile BEFORE pushInChunks so stale slugs free up — but verify
+   the Framer-item-id↔D1-id match first to avoid mass deletion.)
+3. **10/11 cities `[object Object]` block images** [MEDIUM] (see prior section) — re-extract from Airtable; matters
+   for the Cities redesign.
+4. **testimonials**: data pushed (+75) but the Framer deploy step errors `ensureComponentsInLoader: Some modules
+   are missing` — a Framer PAGE references a missing component module. Framer-project issue, not sync. Fix in the
+   Framer project (the testimonials page/component).
+5. **2 communities** (Aquero/Laredo, Los Arroyos/Harlingen) on live site, absent from D1; ingest didn't create them.
+   Decide: marketing-author in admin, or confirm not in Snowflake.
+
+framer-push push status (last full backfill): collections+6, images+630, blogs+124, promotions+17, cities+11,
+floor_plans+62, communities+32 = SUCCESS. testimonials+75 (data ok, page-loader deploy error). qmi blocked by #2.
