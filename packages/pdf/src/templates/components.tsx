@@ -141,7 +141,7 @@ export function BrandFooter({ theme, disclaimer }: { theme: Theme; disclaimer?: 
 }
 
 /** One Quick Move-In home: hero image with boxed promo callouts + monthly pill, then details.
- *  Every overlay sits on a solid box with a drop-shadow so it stays legible on any image. */
+ *  Every overlay sits on a solid box so it stays legible on any image. */
 export function QmiCard({ card }: { card: QmiCardData }) {
   const p = card.promo;
   const isRate = p?.style === 'rate';
@@ -151,10 +151,9 @@ export function QmiCard({ card }: { card: QmiCardData }) {
     card.sqft != null && `${card.sqft.toLocaleString('en-US')} SQFT`,
   ].filter(Boolean).join(' • ');
   const monthly = card.estMonthly != null ? `From ${moneyCents(card.estMonthly)}*/month` : '';
-  const shadow = '0 1px 3px rgba(0,0,0,0.45)';
   return (
     <div style={{ breakInside: 'avoid' }}>
-      <div style={{ position: 'relative', height: 138, borderRadius: 4, overflow: 'hidden', background: '#eef0ee', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}>
+      <div style={{ position: 'relative', height: 138, borderRadius: 4, overflow: 'hidden', background: '#eef0ee' }}>
         {card.imageUrl ? <img src={card.imageUrl} alt={card.address} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
 
         {/* green (default) / dark (flex discount) banner across the top */}
@@ -163,8 +162,7 @@ export function QmiCard({ card }: { card: QmiCardData }) {
             position: 'absolute', top: 0, left: 0, right: 0, padding: '4px 8px', fontSize: 7.5, fontWeight: 700,
             letterSpacing: '0.03em', textTransform: 'uppercase', color: '#fff',
             background: p.style === 'flex' ? '#33402b' : 'var(--pdf-primary)',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', boxShadow: shadow,
-          }}>
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',          }}>
             {p.text}
           </div>
         ) : null}
@@ -173,19 +171,17 @@ export function QmiCard({ card }: { card: QmiCardData }) {
         {isRate ? (
           <div style={{
             position: 'absolute', top: 7, left: 7, background: 'var(--pdf-primary)', color: '#fff',
-            fontWeight: 700, fontSize: 11, padding: '2px 8px', borderRadius: 3, boxShadow: shadow,
-          }}>
+            fontWeight: 700, fontSize: 11, padding: '2px 8px', borderRadius: 3,          }}>
             {p!.rateLabel}
           </div>
         ) : null}
 
-        {/* monthly payment — always a solid white pill with a drop-shadow */}
+        {/* monthly payment — always a solid white pill */}
         {monthly ? (
           <div style={{
             position: 'absolute', left: 8, bottom: 8, display: 'flex', alignItems: 'center', gap: 5,
             background: '#fff', color: 'var(--pdf-primary)', fontWeight: 700, fontSize: 8.5,
-            padding: '3px 9px', borderRadius: 3, boxShadow: shadow,
-          }}>
+            padding: '3px 9px', borderRadius: 3,          }}>
             {isRate ? (
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 12, height: 12, borderRadius: '50%', background: 'var(--pdf-primary)', color: '#fff', fontSize: 7 }}>%</span>
             ) : null}
