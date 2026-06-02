@@ -32,6 +32,7 @@ import { SyncedOverrideField } from '@/components/fields/SyncedOverrideField';
 import { GenericField } from '@/components/fields/GenericField';
 import { ImageUploader } from '@/components/fields/ImageUploader';
 import { PublishedToggle } from '@/components/fields/PublishedToggle';
+import { LOCATION_STATUS, statusTone } from '@/lib/status';
 import { QmiPhotoGallery } from './QmiPhotoGallery';
 import { CopyableId } from './CopyableId';
 import { QmiPriceCard } from './QmiPriceCard';
@@ -119,11 +120,16 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
               {msg}
             </Badge>
           ) : null}
+          {/* Publish gate — tri-state Status (Draft / Coming Soon / Live), matching the
+              generic Communities/Floor Plans control. Writes via setStatus('qmi',…),
+              which sets published + coming_soon atomically (lib/status.statusPatch), so a
+              freshly published home can be flagged "Coming Soon" per the operator's model. */}
           <PublishedToggle
             entityKey="qmi"
             id={view.id}
-            gate="published"
-            initialPublished={view.published}
+            gate="status"
+            initialStatus={view.status}
+            statusOptions={LOCATION_STATUS}
             onResult={setMsg}
           />
           {previewHref ? (
@@ -151,8 +157,23 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-          <Badge variant={view.published ? 'default' : 'secondary'}>
-            {view.published ? 'Published' : 'Draft'}
+          {/* Tri-state publish status badge (Draft / Coming Soon / Live). Coming Soon is a
+              published home rendered in its coming-soon treatment on the site. */}
+          <Badge
+            variant={
+              statusTone(view.status) === 'live'
+                ? 'default'
+                : statusTone(view.status) === 'pending'
+                  ? 'outline'
+                  : 'secondary'
+            }
+            className={
+              statusTone(view.status) === 'pending'
+                ? 'text-amber-700 dark:text-amber-400'
+                : undefined
+            }
+          >
+            {view.status}
           </Badge>
           {view.availableNow ? (
             <Badge variant="outline" className="text-emerald-700 dark:text-emerald-400">

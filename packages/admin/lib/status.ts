@@ -15,12 +15,20 @@ import type { EntityKey } from './entities';
 
 export type StatusGate = 'location' | 'blog' | 'promotion' | 'testimonial' | null;
 
-/** Which status track an entity uses (null = no publish gate: cities/collections/images). */
+/** Which status track an entity uses (null = no publish gate: collections/images). */
 export function statusGate(key: EntityKey): StatusGate {
   switch (key) {
     case 'qmi':
     case 'communities':
     case 'floor_plans':
+    // Cities use the SAME publish/coming-soon model as the other location entities
+    // (migration 0005 gave cities `published` + `coming_soon`). They are GENERIC
+    // field-builder forms, so the only thing that surfaces the publish gate as a
+    // header control is being on the 'location' track here (build-edit-view derives
+    // the tri-state Status dropdown solely from statusGate). `cities.status` stays a
+    // demoted informational text field; this `published`+`coming_soon` gate is the
+    // real publish/draft control. setStatus('cities', …) writes both columns.
+    case 'cities':
       return 'location';
     case 'blogs':
       return 'blog';

@@ -23,6 +23,7 @@ import { getReadDb } from './db';
 import { qmi, floorPlans, communities, cities, promotions, promotionTargets } from '@esperanza/db';
 import { effectiveValue } from '@esperanza/db/override';
 import { loadOptions, type SelectOption } from './select-options';
+import { deriveStatus } from './status';
 
 type Row = Record<string, unknown>;
 
@@ -87,6 +88,10 @@ export interface QmiDetailView {
   id: string;
   /** publish gate state. */
   published: boolean;
+  /** coming-soon flag (migration 0005). published + coming_soon → "Coming Soon" on site. */
+  comingSoon: boolean;
+  /** derived tri-state publish status: 'Draft' | 'Coming Soon' | 'Live' (lib/status). */
+  status: string;
   availableNow: boolean;
 
   /** ecommerce-SKU technical ids (copyable). */
@@ -340,9 +345,16 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
     help,
   });
 
+  const published = Boolean(r.published);
+  const comingSoon = Boolean(r.coming_soon);
+
   return {
     id,
-    published: Boolean(r.published),
+    published,
+    comingSoon,
+    // Tri-state status from the same publish columns the rest of the engine uses
+    // (lib/status: !published → Draft; published+coming_soon → Coming Soon; else Live).
+    status: deriveStatus('location', { published, comingSoon }),
     availableNow: Boolean(r.available_now),
 
     housenumber: s(r.housenumber),

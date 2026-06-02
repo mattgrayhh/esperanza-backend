@@ -58,7 +58,10 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     table: communities,
     publishable: true,
   },
-  cities: { key: 'cities', label: 'Cities', segment: 'cities', table: cities, publishable: false },
+  // Cities ARE publishable (migration 0005: published + coming_soon). They use the
+  // generic form's tri-state Status gate (statusGate('cities') === 'location') →
+  // setStatus writes published+coming_soon, matching Communities.
+  cities: { key: 'cities', label: 'Cities', segment: 'cities', table: cities, publishable: true },
   floor_plans: {
     key: 'floor_plans',
     label: 'Floor Plans',
