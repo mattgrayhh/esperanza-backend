@@ -264,6 +264,20 @@ async function seedLists(
     }
   }
 
+  // Master "Quick Move-In Homes" doc — all QMIs across cities, grouped by community.
+  // entity_id 'list:all:qmis' → loadListData(citySlug='all') loads every QMI.
+  {
+    const type: PdfType = 'list';
+    const slug = 'quick-move-in-homes';
+    const entityId = 'list:all:qmis';
+    const r2Key = r2KeyFor(type, entityId);
+    sink.add(
+      `INSERT OR IGNORE INTO pdf_renders (type, slug, entity_id, city_slug, community_id, r2_key, status)` +
+        ` VALUES (${q(type)}, ${q(slug)}, ${q(entityId)}, 'all', NULL, ${q(r2Key)}, 'not_built')`
+    );
+    count++;
+  }
+
   return count;
 }
 

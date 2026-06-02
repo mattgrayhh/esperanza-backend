@@ -1,5 +1,7 @@
 # Esperanza Cloudflare Migration + Admin — HANDOFF
 
+> **▶ LATEST WORK (2026-06-01): PDF platform + template redesign → see [`HANDOFF-PDF-PLATFORM.md`](./HANDOFF-PDF-PLATFORM.md).** The on-platform PDF brochure system is built, deployed, robust (browser-reuse DO, edge-cached, Workers Paid). Currently redesigning templates "one by one" to match Esperanza's marketing artwork — QMI grid DONE; per-home QMI spec sheet is next.
+
 _Last updated 2026-05-31. This is the entry point for the next agent. Also read the auto-memory at `~/.claude/projects/-Users-mgd/memory/` — `project_esperanza_cf_migration.md` is the running log, and the `reference_*` files capture the gotchas below._
 
 ## What this is
