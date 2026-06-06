@@ -23,12 +23,15 @@ import {
   assertQmiPatchAllowed,
   applySyncedCommunity,
   assertCommunityPatchAllowed,
+  applySyncedFloorPlan,
+  assertFloorPlanPatchAllowed,
 } from './synced.js';
 import type {
   SyncMessage,
   QmiUpsertMessage,
   QmiUnpublishMessage,
   CommunityUpsertMessage,
+  FloorPlanUpsertMessage,
 } from './diff.js';
 
 /** Minimal D1 surface (the subset of @cloudflare/workers-types D1Database we use). */
@@ -55,8 +58,8 @@ export interface D1Like {
 // the contract enforced there.
 // =============================================================================
 
-/** A subset of the framer-push CollectionKey union — the two ingest can touch. */
-export type FramerCollectionKey = 'qmi' | 'communities';
+/** A subset of the framer-push CollectionKey union — the three ingest can touch. */
+export type FramerCollectionKey = 'qmi' | 'communities' | 'floor_plans';
 
 /** The framer-push queue message shape (id-only; framer-push re-reads the row). */
 export interface FramerSyncMessage {
@@ -101,6 +104,7 @@ export interface ApplyResult {
   updated: number;
   unpublished: number;
   communities: number;
+  floorPlans: number;
   priceUpdated: number;
   /** Framer-push hand-off messages for the row(s) written by this message. */
   framer: FramerSyncMessage[];
@@ -111,6 +115,7 @@ const emptyResult = (): ApplyResult => ({
   updated: 0,
   unpublished: 0,
   communities: 0,
+  floorPlans: 0,
   priceUpdated: 0,
   framer: [],
 });
@@ -131,6 +136,8 @@ export async function applyMessage(
       return applyQmiUnpublish(env, msg);
     case 'community.upsert':
       return applyCommunityUpsert(env, msg);
+    case 'floorplan.upsert':
+      return applyFloorPlanUpsert(env, msg);
   }
 }
 
@@ -208,7 +215,7 @@ async function applyQmiUnpublish(env: ConsumerEnv, msg: QmiUnpublishMessage): Pr
 
 async function applyCommunityUpsert(env: ConsumerEnv, msg: CommunityUpsertMessage): Promise<ApplyResult> {
   const result = emptyResult();
-  const patch = applySyncedCommunity(msg.values); // only square_footage_range
+  const patch = applySyncedCommunity(msg.values); // 0007: sqft/bed/bath ranges + price_from
   assertCommunityPatchAllowed(patch);
   if (Object.keys(patch).length === 0) return result;
   const setClause = Object.keys(patch)
@@ -223,6 +230,26 @@ async function applyCommunityUpsert(env: ConsumerEnv, msg: CommunityUpsertMessag
   result.communities = 1;
   // Event-driven push: the changed square-footage range flows to Framer.
   result.framer.push({ collection: 'communities', action: 'upsert', id: msg.communityId });
+  return result;
+}
+
+async function applyFloorPlanUpsert(env: ConsumerEnv, msg: FloorPlanUpsertMessage): Promise<ApplyResult> {
+  const result = emptyResult();
+  const patch = applySyncedFloorPlan(msg.values); // 0007: DM_FLOOR_PLAN write-set
+  assertFloorPlanPatchAllowed(patch);
+  if (Object.keys(patch).length === 0) return result;
+  const setClause = Object.keys(patch)
+    .map((c) => `${c} = ?`)
+    .join(', ');
+  const vals = [...Object.values(patch), nowIso(), msg.floorPlanId];
+  await env.DB.prepare(
+    `UPDATE floor_plans SET ${setClause}, updated_at = ? WHERE id = ?`
+  )
+    .bind(...vals)
+    .run();
+  result.floorPlans = 1;
+  // Event-driven push: the changed synced plan values flow to Framer.
+  result.framer.push({ collection: 'floor_plans', action: 'upsert', id: msg.floorPlanId });
   return result;
 }
 
@@ -246,6 +273,7 @@ export async function writeSyncLog(
     qmisUnpublished?: number;
     qmisInSnowflake?: number;
     communitiesUpdated?: number;
+    floorPlansUpdated?: number;
     pricesUpdated?: number;
     unresolvedLinks?: number;
     notes?: string | null;
@@ -256,8 +284,8 @@ export async function writeSyncLog(
     `INSERT INTO sync_log
        (run_id, source, status, started_at, finished_at, duration_s,
         qmis_updated, qmis_created, qmis_unpublished, qmis_in_snowflake,
-        communities_updated, prices_updated, unresolved_links, notes, error_message)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        communities_updated, floor_plans_updated, prices_updated, unresolved_links, notes, error_message)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       row.runId,
@@ -271,6 +299,7 @@ export async function writeSyncLog(
       row.qmisUnpublished ?? 0,
       row.qmisInSnowflake ?? 0,
       row.communitiesUpdated ?? 0,
+      row.floorPlansUpdated ?? 0,
       row.pricesUpdated ?? 0,
       row.unresolvedLinks ?? 0,
       row.notes ?? null,
@@ -305,7 +334,7 @@ export async function handleQueueBatch(
 ): Promise<void> {
   const startedAt = nowIso();
   const start = Date.now();
-  const agg = { created: 0, updated: 0, unpublished: 0, communities: 0, priceUpdated: 0 };
+  const agg = { created: 0, updated: 0, unpublished: 0, communities: 0, floorPlans: 0, priceUpdated: 0 };
   let errors = 0;
   let lastError: string | null = null;
   // Framer-push hand-off messages accumulated ONLY from successful D1 writes.
@@ -318,6 +347,7 @@ export async function handleQueueBatch(
       agg.updated += r.updated;
       agg.unpublished += r.unpublished;
       agg.communities += r.communities;
+      agg.floorPlans += r.floorPlans;
       agg.priceUpdated += r.priceUpdated;
       // Enqueue the Framer push only after the D1 write succeeded (applyMessage
       // returned without throwing). A throwing message lands in the catch below
@@ -350,6 +380,7 @@ export async function handleQueueBatch(
     qmisUpdated: agg.updated,
     qmisUnpublished: agg.unpublished,
     communitiesUpdated: agg.communities,
+    floorPlansUpdated: agg.floorPlans,
     pricesUpdated: agg.priceUpdated,
     notes: `consumer batch of ${batch.messages.length} message(s); framer-push enqueued ${framerOut.length}`,
     errorMessage: lastError,

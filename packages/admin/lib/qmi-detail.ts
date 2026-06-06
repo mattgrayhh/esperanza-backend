@@ -140,6 +140,11 @@ export interface QmiDetailView {
     bathroomCount: SyncedOverrideView;
     totalSquareFootage: SyncedOverrideView;
     elevation: SyncedOverrideView;
+    // 0007 Snowflake sync expansion
+    lotNumber: SyncedOverrideView;
+    elevationType: SyncedOverrideView;
+    materialType: SyncedOverrideView;
+    isModelHome: SyncedOverrideView;
   };
 
   /** relationship override selects (floor plan / community / city) — synced display is
@@ -399,7 +404,7 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
     descriptionFromFloorPlan,
 
     slug: s(r.slug),
-    moveInDate: s(r.move_in_date),
+    moveInDate: s(effectiveValue(r.synced_move_in_date, r.override_move_in_date)),
 
     gallery: dedupedGallery,
 
@@ -410,6 +415,11 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
       bathroomCount: buildSO('bathroom_count', 'Bathrooms', 'number', 'synced_bathroom_count', 'override_bathroom_count', 'any'),
       totalSquareFootage: buildSO('total_square_footage', 'Total SqFt', 'number', 'synced_total_square_footage', 'override_total_square_footage', '1'),
       elevation: buildSO('elevation', 'Elevation', 'text', 'synced_elevation', 'override_elevation'),
+      // 0007 Snowflake sync expansion
+      lotNumber: buildSO('lot_number', 'Lot Number', 'text', 'synced_lot_number', 'override_lot_number'),
+      elevationType: buildSO('elevation_type', 'Elevation Type', 'text', 'synced_elevation_type', 'override_elevation_type'),
+      materialType: buildSO('material_type', 'Material Type', 'text', 'synced_material_type', 'override_material_type'),
+      isModelHome: buildSO('is_model_home', 'Model Home (1/0)', 'number', 'synced_is_model_home', 'override_is_model_home', '1'),
     },
 
     relations: {
@@ -448,7 +458,7 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
       promoText: s(r.promo_text),
       availabilityText: s(r.availability_text),
       virtualTourUrl: s(r.virtual_tour_url),
-      moveInDate: s(r.move_in_date),
+      moveInDate: s(effectiveValue(r.synced_move_in_date, r.override_move_in_date)),
       selfTourAvailable: Boolean(r.self_tour_available),
       availableNow: Boolean(r.available_now),
       floorPlanImage: customFields['floor_plan_image'] ?? '',

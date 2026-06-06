@@ -148,13 +148,13 @@ export function mapQmi(r: AirtableRecord): QmiMapResult {
     upgrades: str(x['Upgrades']),
     incentive: str(x['Incentive']),
     virtual_tour_url: str(x['Virtual Tour URL']),
-    elevation_type: str(x['Elevation Type']),
+    synced_elevation_type: str(x['Elevation Type']),
     mls_id: str(x['MLS ID']),
     mls_number: str(x['mls_number']),
-    lot_number: str(x['Lot Number']),
+    synced_lot_number: str(x['Lot Number']),
     year_built: int(x['Year Built']),
     lot_size_sqft: int(x['Lot Size (sqft)']),
-    move_in_date: str(x['Move-In Date']),
+    synced_move_in_date: str(x['Move-In Date']),
     hers_score: int(x['hers_score']),
     arm_rate: str(x['ARM Rate']),
     promo_text: str(x['promo_text']),
@@ -214,7 +214,7 @@ export function mapCommunity(r: AirtableRecord): { row: Row; cityId: string | nu
   const row: Row = {
     id: r.id,
     // the ONLY synced community field
-    square_footage_range: str(x['Square Footage']),
+    synced_square_footage_range: str(x['Square Footage']),
 
     name: str(x['Name']),
     slug: str(x['Slug']),
@@ -229,9 +229,9 @@ export function mapCommunity(r: AirtableRecord): { row: Row; cityId: string | nu
     master_planned: boolInt(x['Master Planned Community?']),
     coming_soon: boolInt(x['Coming Soon']),
 
-    price_from: num(x['Price Rng']),
-    bed_count: str(x['Bed Count']),
-    bath_count: str(x['Bath Count']),
+    synced_price_from: num(x['Price Rng']),
+    synced_bed_count: str(x['Bed Count']),
+    synced_bath_count: str(x['Bath Count']),
 
     description: str(x['Copy Content']),
     amenities: str(x['Amenities']),
@@ -369,18 +369,18 @@ export function mapFloorPlan(r: AirtableRecord): Row {
     slug: str(x['slug']),
     published,
     collection: str(x['collection'] ?? x['Collection']),
-    starting_price: num(x['starting_price']),
+    synced_starting_price: num(x['starting_price']),
     // Live Airtable uses bedroom_count_minimum/maximum + bathroom_count_minimum/maximum
     // (the bedroom_min / 'Bedrooms (Min)' variants don't exist on this base). Keep the
     // legacy names first so a future schema rename still resolves.
-    bedroom_min: int(x['bedroom_min'] ?? x['bedroom_count_minimum'] ?? x['Bedrooms (Min)']),
-    bedroom_max: int(x['bedroom_max'] ?? x['bedroom_count_maximum'] ?? x['Bedrooms (Max)']),
-    bathroom_min: num(x['bathroom_min'] ?? x['bathroom_count_minimum'] ?? x['Bathrooms (Min)']),
-    bathroom_max: num(x['bathroom_max'] ?? x['bathroom_count_maximum'] ?? x['Bathrooms (Max)']),
+    synced_bedroom_min: int(x['bedroom_min'] ?? x['bedroom_count_minimum'] ?? x['Bedrooms (Min)']),
+    synced_bedroom_max: int(x['bedroom_max'] ?? x['bedroom_count_maximum'] ?? x['Bedrooms (Max)']),
+    synced_bathroom_min: num(x['bathroom_min'] ?? x['bathroom_count_minimum'] ?? x['Bathrooms (Min)']),
+    synced_bathroom_max: num(x['bathroom_max'] ?? x['bathroom_count_maximum'] ?? x['Bathrooms (Max)']),
     car_garage_count: int(x['car_garage_count'] ?? x['Garage']),
     stories_count: int(x['stories_count'] ?? x['Stories']),
-    living_square_footage: int(x['living_square_footage'] ?? x['Living SqFt']),
-    total_square_footage: int(x['total_square_footage'] ?? x['Total SqFt']),
+    synced_living_square_footage: int(x['living_square_footage'] ?? x['Living SqFt']),
+    synced_total_square_footage: int(x['total_square_footage'] ?? x['Total SqFt']),
     master_bed_location: str(x['master_bed_location'] ?? x['Master Bed Location']),
     hers_score: int(x['hers_score'] ?? x['HERS Score']),
 

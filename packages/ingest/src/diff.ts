@@ -16,9 +16,13 @@
 // when an id resolves. Both behaviors are preserved here.
 // =============================================================================
 
-import type { SnowflakeQmiRow, SnowflakeCommunityRow } from './snowflake.js';
-import { squareFootageRange } from './snowflake.js';
-import type { SyncedQmiValues } from './synced.js';
+import type {
+  SnowflakeQmiRow,
+  SnowflakeCommunityRow,
+  SnowflakeFloorPlanRow,
+} from './snowflake.js';
+import { squareFootageRange, countRange } from './snowflake.js';
+import type { SyncedQmiValues, SyncedCommunityValues, SyncedFloorPlanValues } from './synced.js';
 import { snowflakeKey } from './synced.js';
 
 // -- queue message contract --
@@ -49,13 +53,21 @@ export interface CommunityUpsertMessage {
   kind: 'community.upsert';
   /** Community D1 row id (resolved by name). */
   communityId: string;
-  values: { squareFootageRange: string | null };
+  values: SyncedCommunityValues;
+}
+
+export interface FloorPlanUpsertMessage {
+  kind: 'floorplan.upsert';
+  /** Floor plan D1 row id (resolved by name). */
+  floorPlanId: string;
+  values: SyncedFloorPlanValues;
 }
 
 export type SyncMessage =
   | QmiUpsertMessage
   | QmiUnpublishMessage
-  | CommunityUpsertMessage;
+  | CommunityUpsertMessage
+  | FloorPlanUpsertMessage;
 
 // -- the minimal D1 snapshot the diff needs (read by the cron handler) --
 
@@ -76,6 +88,14 @@ export interface ExistingQmi {
   synced_total_square_footage: number | null;
   synced_elevation: string | null;
   synced_construction_stage: string | null;
+  synced_move_in_date: string | null;
+  synced_lot_number: string | null;
+  synced_elevation_type: string | null;
+  synced_material_type: string | null;
+  synced_is_model_home: number | null;
+  synced_start_type: string | null;
+  synced_construction_stage_index: number | null;
+  synced_estimated_settlement_date: string | null;
   synced_city_id: string | null;
   synced_city_name: string | null;
   synced_community_id: string | null;
@@ -84,6 +104,28 @@ export interface ExistingQmi {
   synced_price: number | null;
   last_synced_price: number | null;
   mark_job_number: string | null;
+}
+
+/** Existing community synced values (change detection — avoid queue/framer churn). */
+export interface ExistingCommunity {
+  id: string;
+  synced_square_footage_range: string | null;
+  synced_bed_count: string | null;
+  synced_bath_count: string | null;
+  synced_price_from: number | null;
+}
+
+/** Existing floor plan synced values (matched by lowercased name). */
+export interface ExistingFloorPlan {
+  id: string;
+  name: string | null;
+  synced_bedroom_min: number | null;
+  synced_bedroom_max: number | null;
+  synced_bathroom_min: number | null;
+  synced_bathroom_max: number | null;
+  synced_living_square_footage: number | null;
+  synced_total_square_footage: number | null;
+  synced_starting_price: number | null;
 }
 
 /** Lookups: lowercased name → D1 row id; plus the set of valid singleSelect names. */
@@ -104,6 +146,7 @@ export interface DiffResult {
     qmisUnpublished: number;
     qmisInSnowflake: number;
     communitiesUpdated: number;
+    floorPlansUpdated: number;
     unresolvedLinks: number;
   };
 }
@@ -141,6 +184,16 @@ export function buildQmiSyncedValues(
   if (row.halfBathroomCount != null) values.halfBathroomCount = row.halfBathroomCount; // 0 allowed
   if (W(row.livingSquareFootage)) values.livingSquareFootage = row.livingSquareFootage!;
   if (W(row.totalSquareFootage)) values.totalSquareFootage = row.totalSquareFootage!;
+
+  // 0007 expansion — partial-update guards mirror the legacy `if (value)` style.
+  if (row.moveInDate) values.moveInDate = row.moveInDate;
+  if (row.lotNumber) values.lotNumber = row.lotNumber;
+  if (row.elevationType) values.elevationType = row.elevationType;
+  if (row.materialType) values.materialType = row.materialType;
+  values.isModelHome = row.isModelHome; // 0|1 — always known
+  if (row.startType) values.startType = row.startType;
+  if (row.constructionStageIndex != null) values.constructionStageIndex = row.constructionStageIndex;
+  if (row.estimatedSettlementDate) values.estimatedSettlementDate = row.estimatedSettlementDate;
 
   // City: singleSelect name (option-gated) + link-by-id (always when resolves)
   if (row.city) {
@@ -190,6 +243,14 @@ export function qmiSyncedChanged(values: SyncedQmiValues, existing: ExistingQmi)
     eq(values.totalSquareFootage, existing.synced_total_square_footage) &&
     eq(values.elevation, existing.synced_elevation) &&
     eq(values.constructionStage, existing.synced_construction_stage) &&
+    eq(values.moveInDate, existing.synced_move_in_date) &&
+    eq(values.lotNumber, existing.synced_lot_number) &&
+    eq(values.elevationType, existing.synced_elevation_type) &&
+    eq(values.materialType, existing.synced_material_type) &&
+    eq(values.isModelHome, existing.synced_is_model_home) &&
+    eq(values.startType, existing.synced_start_type) &&
+    eq(values.constructionStageIndex, existing.synced_construction_stage_index) &&
+    eq(values.estimatedSettlementDate, existing.synced_estimated_settlement_date) &&
     eq(values.cityId, existing.synced_city_id) &&
     eq(values.cityName, existing.synced_city_name) &&
     eq(values.communityId, existing.synced_community_id) &&
@@ -215,7 +276,12 @@ export function diff(
   snowflakeQmis: SnowflakeQmiRow[],
   snowflakeCommunities: SnowflakeCommunityRow[],
   existingQmis: ExistingQmi[],
-  lookups: Lookups
+  lookups: Lookups,
+  // 0007 expansion (optional for compatibility with pre-0007 callers/tests):
+  snowflakeFloorPlans: SnowflakeFloorPlanRow[] = [],
+  existingCommunities: ExistingCommunity[] = [],
+  existingFloorPlans: ExistingFloorPlan[] = [],
+  communityPriceFrom: Map<string, number> = new Map()
 ): DiffResult {
   const messages: SyncMessage[] = [];
   const stats = {
@@ -224,8 +290,13 @@ export function diff(
     qmisUnpublished: 0,
     qmisInSnowflake: snowflakeQmis.length,
     communitiesUpdated: 0,
+    floorPlansUpdated: 0,
     unresolvedLinks: 0,
   };
+  const existingCommById = new Map(existingCommunities.map((c) => [c.id, c]));
+  const existingFpByName = new Map(
+    existingFloorPlans.filter((f) => f.name).map((f) => [f.name!.toLowerCase(), f])
+  );
 
   const existingByEci = new Map<string, ExistingQmi>();
   const existingByHnCommunity = new Map<string, ExistingQmi>();
@@ -295,23 +366,90 @@ export function diff(
     }
   }
 
-  // Communities: square_footage_range
+  // Communities: sqft range + bed/bath ranges + price_from (0007), with change
+  // detection so an unchanged community emits NO message (no queue/framer churn).
   for (const c of snowflakeCommunities) {
-    const id = lookups.communityByName.get(c.communityName.toLowerCase());
+    const key = c.communityName.toLowerCase();
+    const id = lookups.communityByName.get(key);
     if (!id) {
       stats.unresolvedLinks++;
       continue;
     }
-    const range = squareFootageRange(c.minSqft, c.maxSqft);
-    messages.push({
-      kind: 'community.upsert',
-      communityId: id,
-      values: { squareFootageRange: range },
-    });
+    const values: SyncedCommunityValues = {
+      squareFootageRange: squareFootageRange(c.minSqft, c.maxSqft),
+      bedCountRange: countRange(c.minBeds, c.maxBeds),
+      bathCountRange: countRange(c.minBaths, c.maxBaths),
+    };
+    const priceFrom = communityPriceFrom.get(key);
+    if (priceFrom != null) values.priceFrom = priceFrom;
+
+    const existing = existingCommById.get(id);
+    if (existing && !communitySyncedChanged(values, existing)) continue;
+    messages.push({ kind: 'community.upsert', communityId: id, values });
     stats.communitiesUpdated++;
   }
 
+  // Floor Plans (0007): DM_FLOOR_PLAN aggregates matched to D1 rows by name.
+  // Unmatched models are counted as unresolved links (visible in sync_log).
+  for (const f of snowflakeFloorPlans) {
+    const existing = existingFpByName.get(f.modelName.toLowerCase());
+    if (!existing) {
+      stats.unresolvedLinks++;
+      continue;
+    }
+    const values: SyncedFloorPlanValues = {};
+    if (f.bedroomMin != null) values.bedroomMin = f.bedroomMin;
+    if (f.bedroomMax != null) values.bedroomMax = f.bedroomMax;
+    if (f.bathroomMin != null) values.bathroomMin = f.bathroomMin;
+    if (f.bathroomMax != null) values.bathroomMax = f.bathroomMax;
+    if (f.livingSquareFootage != null) values.livingSquareFootage = f.livingSquareFootage;
+    if (f.totalSquareFootage != null) values.totalSquareFootage = f.totalSquareFootage;
+    if (f.startingPrice != null) values.startingPrice = f.startingPrice;
+    if (!floorPlanSyncedChanged(values, existing)) continue;
+    messages.push({ kind: 'floorplan.upsert', floorPlanId: existing.id, values });
+    stats.floorPlansUpdated++;
+  }
+
   return { messages, stats };
+}
+
+/** Has any synced community value actually changed vs the existing D1 row? */
+export function communitySyncedChanged(
+  values: SyncedCommunityValues,
+  existing: ExistingCommunity
+): boolean {
+  const eq = (a: unknown, b: unknown) => {
+    if (a === undefined) return true;
+    if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) < 0.001;
+    return (a ?? null) === (b ?? null);
+  };
+  return !(
+    eq(values.squareFootageRange, existing.synced_square_footage_range) &&
+    eq(values.bedCountRange, existing.synced_bed_count) &&
+    eq(values.bathCountRange, existing.synced_bath_count) &&
+    eq(values.priceFrom, existing.synced_price_from)
+  );
+}
+
+/** Has any synced floor-plan value actually changed vs the existing D1 row? */
+export function floorPlanSyncedChanged(
+  values: SyncedFloorPlanValues,
+  existing: ExistingFloorPlan
+): boolean {
+  const eq = (a: unknown, b: unknown) => {
+    if (a === undefined) return true;
+    if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) < 0.001;
+    return (a ?? null) === (b ?? null);
+  };
+  return !(
+    eq(values.bedroomMin, existing.synced_bedroom_min) &&
+    eq(values.bedroomMax, existing.synced_bedroom_max) &&
+    eq(values.bathroomMin, existing.synced_bathroom_min) &&
+    eq(values.bathroomMax, existing.synced_bathroom_max) &&
+    eq(values.livingSquareFootage, existing.synced_living_square_footage) &&
+    eq(values.totalSquareFootage, existing.synced_total_square_footage) &&
+    eq(values.startingPrice, existing.synced_starting_price)
+  );
 }
 
 /**

@@ -24,7 +24,14 @@ import {
   blogs,
   testimonials,
 } from '@esperanza/db';
-import { QMI_OVERRIDABLE_FIELDS, type QmiOverridableField } from '@esperanza/db/override';
+import {
+  QMI_OVERRIDABLE_FIELDS,
+  COMMUNITY_OVERRIDABLE_FIELDS,
+  FLOOR_PLAN_OVERRIDABLE_FIELDS,
+  type QmiOverridableField,
+  type OverridableField,
+  type OverridableEntity,
+} from '@esperanza/db/override';
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 
 /** The 9 admin entity keys — identical to framer-push CollectionKey. */
@@ -137,4 +144,23 @@ export const QMI_OVERRIDE_FIELDS: ReadonlySet<QmiOverridableField> = new Set(QMI
 
 export function isQmiOverrideField(field: string): field is QmiOverridableField {
   return QMI_OVERRIDE_FIELDS.has(field as QmiOverridableField);
+}
+
+/** Per-entity overridable-field classifier (0007 — communities + floor plans
+ *  joined QMI in carrying synced_/override_ pairs). */
+const OVERRIDABLE_BY_ENTITY: Partial<Record<EntityKey, ReadonlySet<string>>> = {
+  qmi: new Set<string>(QMI_OVERRIDABLE_FIELDS),
+  communities: new Set<string>(COMMUNITY_OVERRIDABLE_FIELDS),
+  floor_plans: new Set<string>(FLOOR_PLAN_OVERRIDABLE_FIELDS),
+};
+
+export function isOverrideField(entity: EntityKey, field: string): field is OverridableField {
+  return OVERRIDABLE_BY_ENTITY[entity]?.has(field) ?? false;
+}
+
+/** Narrow an EntityKey to the audit_log entity for override writes. */
+export function asOverridableEntity(entity: EntityKey): OverridableEntity | null {
+  return entity === 'qmi' || entity === 'communities' || entity === 'floor_plans'
+    ? entity
+    : null;
 }

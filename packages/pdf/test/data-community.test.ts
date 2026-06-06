@@ -18,7 +18,7 @@ describe('loadCommunityData', () => {
   it('returns published community plans grouped by collection (QMI-derived)', async () => {
     const raw = db();
     raw.exec(`INSERT INTO communities (id,name,slug,published) VALUES ('recC','Anaqua','anaqua',1)`);
-    raw.exec(`INSERT INTO floor_plans (id,name,collection,starting_price,bedroom_max,bathroom_max,car_garage_count,stories_count,total_square_footage,image_url,published)
+    raw.exec(`INSERT INTO floor_plans (id,name,collection,synced_starting_price,synced_bedroom_max,synced_bathroom_max,car_garage_count,stories_count,synced_total_square_footage,image_url,published)
       VALUES ('fpH','Hickory','Hearth',314990,3,2.5,2,1,1797,'https://x/hickory.jpg',1)`);
     raw.exec(`INSERT INTO qmi (id,published,synced_community_id,synced_floor_plan_id) VALUES ('q1',1,'recC','fpH')`);
     const data = await loadCommunityData(d1FromSqlite(raw), 'recC');
@@ -30,7 +30,7 @@ describe('loadCommunityData', () => {
   it('groups a floor plan with NULL collection under "Other"', async () => {
     const raw = db();
     raw.exec(`INSERT INTO communities (id,name,slug,published) VALUES ('recD','Paloma','paloma',1)`);
-    raw.exec(`INSERT INTO floor_plans (id,name,collection,starting_price,published)
+    raw.exec(`INSERT INTO floor_plans (id,name,collection,synced_starting_price,published)
       VALUES ('fpN','Nogal',NULL,299990,1)`);
     raw.exec(`INSERT INTO qmi (id,published,synced_community_id,synced_floor_plan_id) VALUES ('q2',1,'recD','fpN')`);
     const data = await loadCommunityData(d1FromSqlite(raw), 'recD');

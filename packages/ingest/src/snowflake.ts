@@ -39,6 +39,9 @@ export const COMMUNITY_NAME_MAP: Record<string, string> = {
   Cascada: 'Cascada at Tres Lagos',
   'Villas on Freddy': 'Villas On Freddy',
   'Retama Village at Bentsen Palm': 'Retama Village (55+) at Bentsen Palm',
+  // Development registry name for the Aquero community (no DM_HOUSE rows yet as
+  // of 2026-06-06; pre-mapped so houses link up the day they appear).
+  'Aquero V': 'Aquero',
 };
 
 export function normalizeCommunityName(raw: string): string {
@@ -124,20 +127,54 @@ WHERE HOUSE_CITY IN (${cityList}) AND DEVELOPMENT_NAME IS NOT NULL
 GROUP BY DEVELOPMENT_NAME, HOUSE_CITY`;
 }
 
-/** QUERY 2 — QMIs / spec homes, DM_HOUSE LEFT JOIN FCT_HOUSESALES (worker.js:347-362). */
+/** QUERY 2 — QMIs / spec homes, DM_HOUSE LEFT JOIN FCT_HOUSESALES (worker.js:347-362;
+ *  0007 expansion adds r[16..23]: elevation/material type, model flag, start type,
+ *  stage index, buyer-sign-off + est-settlement dates, lot number). */
 export function qmisSql(env: SnowflakeEnv): string {
   return `SELECT h.ECI_KEY, h.JOB_NUMBER, h.HOUSENUMBER, h.HOUSE_STREET, h.HOUSE_CITY, h.HOUSE_ZIP,
        h.DEVELOPMENT_NAME, h.MODEL_NAME, h.ELEVATION_NAME,
        h.LIVING_SQUAREFOOTAGE, h.TOTAL_SQUAREFOOTAGE,
        h.BASE_BEDROOMS, h.BASE_BATHROOMS, h.BASE_HALFBATHROOMS,
        h.CONSTRUCTION_STAGE,
-       s.RATIFIED_SALES_PRICE
+       s.RATIFIED_SALES_PRICE,
+       h.ELEVATION_TYPE, h.MATERIAL_TYPE, h.RHODES_MODEL_FLAG, h.START_TYPE,
+       h.CONSTRUCTION_STAGE_INDEX, h.ESTIMATED_BUYER_SIGN_OFF,
+       s.ESTIMATED_SETTLEMENT_DATE, s.LOTNUMBER
 FROM ${FQ(env)}.DM_HOUSE h
 LEFT JOIN ${FQ(env)}.FCT_HOUSESALES s
   ON h.HOUSE_ID = s.HOUSE_ID AND s.TRANSACTION_TYPE = 'Spec Home Inventory'
 WHERE h.RHODES_SPEC_FLAG = 'Yes'
   AND h.SETTLEMENT_COMPLETION_FLAG != 'Completed'
   AND h.HOUSE_CITY IN (${cityList})`;
+}
+
+/** QUERY 3 — Floor Plans aggregate from DM_FLOOR_PLAN (0007). One row per model
+ *  across all Esperanza developments: bed/bath min-max across elevation variants,
+ *  base-configuration sqft (MIN), and "starting at" price (MIN of positive prices). */
+export function floorPlansSql(env: SnowflakeEnv): string {
+  return `SELECT f.FLOORPLAN_MODEL_NAME,
+       MIN(CASE WHEN f.FLOORPLAN_BASE_BEDROOMS > 0 THEN f.FLOORPLAN_BASE_BEDROOMS END),
+       MAX(f.FLOORPLAN_BASE_BEDROOMS),
+       MIN(CASE WHEN f.FLOORPLAN_BASE_BATHROOMS > 0 THEN f.FLOORPLAN_BASE_BATHROOMS END),
+       MAX(f.FLOORPLAN_BASE_BATHROOMS),
+       MIN(CASE WHEN f.FLOORPLAN_LIVING_SQUAREFOOTAGE > 0 THEN f.FLOORPLAN_LIVING_SQUAREFOOTAGE END),
+       MIN(CASE WHEN f.FLOORPLAN_TOTAL_SQUAREFOOTAGE > 0 THEN f.FLOORPLAN_TOTAL_SQUAREFOOTAGE END),
+       MIN(CASE WHEN f.FLOORPLAN_SALESPRICE > 0 THEN f.FLOORPLAN_SALESPRICE END)
+FROM ${FQ(env)}.DM_FLOOR_PLAN f
+JOIN ${FQ(env)}.DM_COMPANY_DEVELOPMENT d ON f.DEVELOPMENT_ID = d.DEVELOPMENT_ID
+WHERE d.COMPANY_NAME ILIKE '%esperanza%'
+  AND f.FLOORPLAN_MODEL_NAME IS NOT NULL AND f.FLOORPLAN_MODEL_NAME != 'UNKNOWN'
+GROUP BY f.FLOORPLAN_MODEL_NAME`;
+}
+
+/** QUERY 4 — Communities "price from" = MIN base price per development (0007). */
+export function communityPriceFromSql(env: SnowflakeEnv): string {
+  return `SELECT d.DEVELOPMENT_NAME,
+       MIN(CASE WHEN f.FLOORPLAN_SALESPRICE > 0 THEN f.FLOORPLAN_SALESPRICE END)
+FROM ${FQ(env)}.DM_FLOOR_PLAN f
+JOIN ${FQ(env)}.DM_COMPANY_DEVELOPMENT d ON f.DEVELOPMENT_ID = d.DEVELOPMENT_ID
+WHERE d.COMPANY_NAME ILIKE '%esperanza%' AND d.DEVELOPMENT_NAME IS NOT NULL
+GROUP BY d.DEVELOPMENT_NAME`;
 }
 
 // -- positional rowset → normalized records (the only place r[N] indexing lives) --
@@ -160,6 +197,30 @@ export interface SnowflakeQmiRow {
   halfBathroomCount: number | null;
   constructionStage: string;
   ratifiedSalesPrice: number | null;
+  // 0007 expansion
+  elevationType: string | null; // null when UNKNOWN/UNDECIDED
+  materialType: string | null; // null when UNKNOWN/UNDECIDED
+  isModelHome: number; // RHODES_MODEL_FLAG === 'Model' → 1
+  startType: string | null; // 'SPEC' | 'Pre-Sold'
+  constructionStageIndex: number | null;
+  moveInDate: string | null; // ESTIMATED_BUYER_SIGN_OFF → YYYY-MM-DD
+  estimatedSettlementDate: string | null; // FCT est. settlement → YYYY-MM-DD
+  lotNumber: string | null; // FCT LOTNUMBER
+}
+
+/** Snowflake REST returns DATE columns as epoch-day integers (worker.js:377). */
+export function epochDaysToIsoDate(v: unknown): string | null {
+  if (v === null || v === undefined || v === '') return null;
+  const days = parseInt(String(v), 10);
+  if (Number.isNaN(days)) return null;
+  return new Date(days * 86400 * 1000).toISOString().slice(0, 10);
+}
+
+/** Treat MarkSystems UNKNOWN sentinels as absent (never show on the site). */
+function knownOrNull(v: unknown): string | null {
+  const t = String(v ?? '').trim();
+  if (t === '' || t.toUpperCase().startsWith('UNKNOWN')) return null;
+  return t;
 }
 
 function num(v: unknown): number | null {
@@ -203,6 +264,15 @@ export function parseQmiRows(rowset: unknown[][]): SnowflakeQmiRow[] {
       halfBathroomCount: halfRaw != null ? Math.round(halfRaw) : null,
       constructionStage: String(r[14] ?? '').trim(),
       ratifiedSalesPrice: num(r[15]),
+      // 0007 expansion — r[16..23]
+      elevationType: knownOrNull(r[16]),
+      materialType: knownOrNull(r[17]),
+      isModelHome: String(r[18] ?? '').trim() === 'Model' ? 1 : 0,
+      startType: knownOrNull(r[19]),
+      constructionStageIndex: num(r[20]) != null ? Math.round(num(r[20])!) : null,
+      moveInDate: epochDaysToIsoDate(r[21]),
+      estimatedSettlementDate: epochDaysToIsoDate(r[22]),
+      lotNumber: knownOrNull(r[23]),
     });
   }
   return out;
@@ -214,6 +284,11 @@ export interface SnowflakeCommunityRow {
   city: string;
   minSqft: number | null;
   maxSqft: number | null;
+  // 0007 expansion — previously selected by the aggregate but discarded
+  minBeds: number | null;
+  maxBeds: number | null;
+  minBaths: number | null;
+  maxBaths: number | null;
 }
 
 /** Map Communities aggregate rowset r[0..10] (worker.js:292-305). */
@@ -228,6 +303,10 @@ export function parseCommunityRows(rowset: unknown[][]): SnowflakeCommunityRow[]
       city: String(r[1] ?? '').trim(),
       minSqft: num(r[5]),
       maxSqft: num(r[6]),
+      minBeds: num(r[7]) != null ? Math.round(num(r[7])!) : null,
+      maxBeds: num(r[8]) != null ? Math.round(num(r[8])!) : null,
+      minBaths: num(r[9]) != null ? parseFloat(num(r[9])!.toFixed(1)) : null,
+      maxBaths: num(r[10]) != null ? parseFloat(num(r[10])!.toFixed(1)) : null,
     });
   }
   return out;
@@ -237,8 +316,7 @@ export function parseCommunityRows(rowset: unknown[][]): SnowflakeCommunityRow[]
  * Build the Communities "Square Footage" range string (worker.js:323-335).
  * min===max (or only one present) → single value; else "min - max". Values use
  * US thousands separators ("1,436 - 2,960") to match the human-entered
- * convention on the site. Bed/bath ranges are deliberately NOT produced
- * (singleSelect, never written).
+ * convention on the site. Bed/bath ranges (0007) use countRange below.
  */
 export function squareFootageRange(
   minSqft: number | null,
@@ -250,4 +328,65 @@ export function squareFootageRange(
   if (maxSqft == null) return fmt(minSqft);
   if (minSqft === maxSqft) return fmt(minSqft);
   return `${fmt(minSqft)} - ${fmt(maxSqft)}`;
+}
+
+// -- 0007: DM_FLOOR_PLAN aggregate parsing --
+
+export interface SnowflakeFloorPlanRow {
+  modelName: string;
+  bedroomMin: number | null;
+  bedroomMax: number | null;
+  bathroomMin: number | null;
+  bathroomMax: number | null;
+  livingSquareFootage: number | null; // MIN — base configuration
+  totalSquareFootage: number | null; // MIN — base configuration
+  startingPrice: number | null; // MIN of positive prices
+}
+
+/** Map floorPlansSql rowset r[0..7]. Skips empty model names. */
+export function parseFloorPlanRows(rowset: unknown[][]): SnowflakeFloorPlanRow[] {
+  const out: SnowflakeFloorPlanRow[] = [];
+  for (const r of rowset) {
+    const model = String(r[0] ?? '').trim();
+    if (model === '') continue;
+    const round = (v: unknown) => (num(v) != null ? Math.round(num(v)!) : null);
+    const bath = (v: unknown) => (num(v) != null ? parseFloat(num(v)!.toFixed(1)) : null);
+    out.push({
+      modelName: model,
+      bedroomMin: round(r[1]),
+      bedroomMax: round(r[2]),
+      bathroomMin: bath(r[3]),
+      bathroomMax: bath(r[4]),
+      livingSquareFootage: round(r[5]),
+      totalSquareFootage: round(r[6]),
+      startingPrice: num(r[7]),
+    });
+  }
+  return out;
+}
+
+/** Map communityPriceFromSql rowset → normalized name → MIN base price. */
+export function parseCommunityPriceFromRows(rowset: unknown[][]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const r of rowset) {
+    const dev = String(r[0] ?? '').trim();
+    const price = num(r[1]);
+    if (dev === '' || price == null || !(price > 0)) continue;
+    out.set(normalizeCommunityName(dev).toLowerCase(), price);
+  }
+  return out;
+}
+
+/**
+ * Build a bed/bath "min - max" range string (0007 — matches the human-entered
+ * Communities convention: "3 - 4", "2 - 2.5", single value when min === max).
+ * Decimals print only when present (2.5 keeps .5; 3.0 → "3").
+ */
+export function countRange(min: number | null, max: number | null): string | null {
+  const fmt = (n: number) => (Number.isInteger(n) ? String(n) : String(n));
+  if (min == null && max == null) return null;
+  if (min == null) return fmt(max as number);
+  if (max == null) return fmt(min);
+  if (min === max) return fmt(min);
+  return `${fmt(min)} - ${fmt(max)}`;
 }

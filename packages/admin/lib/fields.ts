@@ -134,8 +134,9 @@ export function coerceForColumn(entity: EntityKey, field: string, raw: string): 
   const map = columnMapForEntity(entity);
   let dataType = map[field]?.dataType;
 
-  if (!dataType && entity === 'qmi') {
-    dataType = qmiOverrideFieldType(field);
+  // 0007: communities + floor_plans carry override pairs too — same resolution.
+  if (!dataType && (entity === 'qmi' || entity === 'communities' || entity === 'floor_plans')) {
+    dataType = overrideFieldType(entity, field);
   }
 
   switch (dataType) {
@@ -151,11 +152,11 @@ export function coerceForColumn(entity: EntityKey, field: string, raw: string): 
 }
 
 /**
- * The JS type of a QMI override field, by inspecting the matching synced_<field>
+ * The JS type of an override field, by inspecting the matching synced_<field>
  * column. (override_<field> and synced_<field> share a type in the schema.)
  */
-function qmiOverrideFieldType(field: string): ColumnInfo['dataType'] {
-  const cols = getTableColumns(ENTITIES.qmi.table) as Record<string, Column>;
+function overrideFieldType(entity: EntityKey, field: string): ColumnInfo['dataType'] {
+  const cols = getTableColumns(ENTITIES[entity].table) as Record<string, Column>;
   const syncedName = `synced_${field}`;
   for (const col of Object.values(cols)) {
     if (col.name === syncedName) return dataTypeOf(col);

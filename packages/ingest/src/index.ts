@@ -23,11 +23,22 @@ import {
   snowflakeQuery,
   communitiesSql,
   qmisSql,
+  floorPlansSql,
+  communityPriceFromSql,
   parseQmiRows,
   parseCommunityRows,
+  parseFloorPlanRows,
+  parseCommunityPriceFromRows,
   type SnowflakeEnv,
 } from './snowflake.js';
-import { diff, type ExistingQmi, type Lookups, type SyncMessage } from './diff.js';
+import {
+  diff,
+  type ExistingQmi,
+  type ExistingCommunity,
+  type ExistingFloorPlan,
+  type Lookups,
+  type SyncMessage,
+} from './diff.js';
 import { handleQueueBatch, writeSyncLog, type ConsumerEnv, type D1Like } from './consumer.js';
 
 export interface Env extends SnowflakeEnv, ConsumerEnv {
@@ -53,6 +64,9 @@ async function loadExistingQmis(db: D1Like): Promise<ExistingQmi[]> {
               synced_bathroom_count, synced_half_bathroom_count,
               synced_living_square_footage, synced_total_square_footage,
               synced_elevation, synced_construction_stage,
+              synced_move_in_date, synced_lot_number, synced_elevation_type,
+              synced_material_type, synced_is_model_home, synced_start_type,
+              synced_construction_stage_index, synced_estimated_settlement_date,
               synced_city_id, synced_city_name, synced_community_id,
               synced_floor_plan_id, synced_floor_plan_name,
               synced_price, last_synced_price, mark_job_number
@@ -60,6 +74,31 @@ async function loadExistingQmis(db: D1Like): Promise<ExistingQmi[]> {
     )
     .bind()
     .all<ExistingQmi>();
+  return results;
+}
+
+async function loadExistingCommunities(db: D1Like): Promise<ExistingCommunity[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, synced_square_footage_range, synced_bed_count, synced_bath_count,
+              synced_price_from
+       FROM communities`
+    )
+    .bind()
+    .all<ExistingCommunity>();
+  return results;
+}
+
+async function loadExistingFloorPlans(db: D1Like): Promise<ExistingFloorPlan[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, name, synced_bedroom_min, synced_bedroom_max, synced_bathroom_min,
+              synced_bathroom_max, synced_living_square_footage,
+              synced_total_square_footage, synced_starting_price
+       FROM floor_plans`
+    )
+    .bind()
+    .all<ExistingFloorPlan>();
   return results;
 }
 
@@ -158,20 +197,35 @@ export async function runIngest(env: Env): Promise<void> {
     const token = await snowflakeLogin(env);
     await snowflakeQuery(token, env, `USE WAREHOUSE ${env.SNOWFLAKE_WAREHOUSE}`);
 
-    const [qmiRowset, commRowset] = await Promise.all([
+    const [qmiRowset, commRowset, fpRowset, priceFromRowset] = await Promise.all([
       snowflakeQuery(token, env, qmisSql(env)),
       snowflakeQuery(token, env, communitiesSql(env)),
+      snowflakeQuery(token, env, floorPlansSql(env)),
+      snowflakeQuery(token, env, communityPriceFromSql(env)),
     ]);
 
     const snowflakeQmis = parseQmiRows(qmiRowset);
     const snowflakeCommunities = parseCommunityRows(commRowset);
+    const snowflakeFloorPlans = parseFloorPlanRows(fpRowset);
+    const communityPriceFrom = parseCommunityPriceFromRows(priceFromRowset);
 
-    const [existingQmis, lookups] = await Promise.all([
+    const [existingQmis, lookups, existingCommunities, existingFloorPlans] = await Promise.all([
       loadExistingQmis(env.DB),
       loadLookups(env.DB),
+      loadExistingCommunities(env.DB),
+      loadExistingFloorPlans(env.DB),
     ]);
 
-    const { messages, stats } = diff(snowflakeQmis, snowflakeCommunities, existingQmis, lookups);
+    const { messages, stats } = diff(
+      snowflakeQmis,
+      snowflakeCommunities,
+      existingQmis,
+      lookups,
+      snowflakeFloorPlans,
+      existingCommunities,
+      existingFloorPlans,
+      communityPriceFrom
+    );
 
     if (messages.length > 0) await enqueue(env, messages);
 
@@ -188,6 +242,7 @@ export async function runIngest(env: Env): Promise<void> {
       qmisUnpublished: stats.qmisUnpublished,
       qmisInSnowflake: stats.qmisInSnowflake,
       communitiesUpdated: stats.communitiesUpdated,
+      floorPlansUpdated: stats.floorPlansUpdated,
       unresolvedLinks: stats.unresolvedLinks,
       notes: `producer enqueued ${messages.length} message(s)`,
     });

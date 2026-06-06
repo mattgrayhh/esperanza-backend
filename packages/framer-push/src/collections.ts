@@ -298,8 +298,12 @@ const QMI_PROJECTION = `
   q.available_now, q.self_tour_available, q.include_in_xml_feed,
   q.image_url, q.og_image_url, q.page_url, q.dynamic_pdf,
   q.featured_image, q.image_2, q.image_3, q.image_4, q.image_5,
-  q.description, q.upgrades, q.incentive, q.virtual_tour_url, q.elevation_type,
-  q.mls_id, q.mls_number, q.lot_number, q.year_built, q.lot_size_sqft, q.move_in_date,
+  q.description, q.upgrades, q.incentive, q.virtual_tour_url,
+  COALESCE(q.override_elevation_type, q.synced_elevation_type) AS elevation_type,
+  q.mls_id, q.mls_number,
+  COALESCE(q.override_lot_number, q.synced_lot_number) AS lot_number,
+  q.year_built, q.lot_size_sqft,
+  COALESCE(q.override_move_in_date, q.synced_move_in_date) AS move_in_date,
   q.hers_score, q.arm_rate, q.promo_text, q.availability_text, q.nter_now, q.cities,
   q.posted, q.publish_date, q.last_modified_time,
   q.custom_fields, -- Phase C: custom-field VALUES (emitted by emitCustomFields)
@@ -307,16 +311,16 @@ const QMI_PROJECTION = `
   -- 100-col limit; mirrors v_public_qmi's LEFT JOIN). Same output names so the
   -- mapper below is unchanged. fp_image / fp_additional_images carry attachment
   -- JSON and live on floor_plans.
-  fp.bedroom_min            AS fp_bedrooms_min,
-  fp.bedroom_max            AS fp_bedrooms_max,
-  fp.bathroom_max           AS fp_bathrooms_max,
+  COALESCE(fp.override_bedroom_min, fp.synced_bedroom_min)   AS fp_bedrooms_min,
+  COALESCE(fp.override_bedroom_max, fp.synced_bedroom_max)   AS fp_bedrooms_max,
+  COALESCE(fp.override_bathroom_max, fp.synced_bathroom_max) AS fp_bathrooms_max,
   fp.car_garage_count       AS fp_garage,
-  fp.living_square_footage  AS fp_living_sqft,
-  fp.total_square_footage   AS fp_total_sqft,
+  COALESCE(fp.override_living_square_footage, fp.synced_living_square_footage) AS fp_living_sqft,
+  COALESCE(fp.override_total_square_footage,  fp.synced_total_square_footage)  AS fp_total_sqft,
   fp.description            AS fp_description,
   fp.fp_image               AS fp_image,
   fp.fp_additional_images   AS fp_additional_images,
-  fp.starting_price         AS fp_starting_price,
+  COALESCE(fp.override_starting_price, fp.synced_starting_price) AS fp_starting_price,
   fp.virtual_tour_url       AS fp_virtual_tour,
   fp.plan_viewer_url        AS fp_plan_viewer,
   fp.collection             AS fp_collection,
@@ -356,8 +360,24 @@ const floorPlans: CollectionDef = {
   key: 'floor_plans',
   defaultCollectionName: 'Floor Plans',
   collectionEnvVar: 'FRAMER_COLLECTION_FLOOR_PLANS',
-  selectByIdSql: `SELECT * FROM floor_plans WHERE id = ?`,
-  selectAllSql: `SELECT * FROM floor_plans`,
+  selectByIdSql: `SELECT *,
+    COALESCE(override_starting_price, synced_starting_price) AS starting_price,
+    COALESCE(override_bedroom_min,  synced_bedroom_min)  AS bedroom_min,
+    COALESCE(override_bedroom_max,  synced_bedroom_max)  AS bedroom_max,
+    COALESCE(override_bathroom_min, synced_bathroom_min) AS bathroom_min,
+    COALESCE(override_bathroom_max, synced_bathroom_max) AS bathroom_max,
+    COALESCE(override_living_square_footage, synced_living_square_footage) AS living_square_footage,
+    COALESCE(override_total_square_footage,  synced_total_square_footage)  AS total_square_footage
+  FROM floor_plans WHERE id = ?`,
+  selectAllSql: `SELECT *,
+    COALESCE(override_starting_price, synced_starting_price) AS starting_price,
+    COALESCE(override_bedroom_min,  synced_bedroom_min)  AS bedroom_min,
+    COALESCE(override_bedroom_max,  synced_bedroom_max)  AS bedroom_max,
+    COALESCE(override_bathroom_min, synced_bathroom_min) AS bathroom_min,
+    COALESCE(override_bathroom_max, synced_bathroom_max) AS bathroom_max,
+    COALESCE(override_living_square_footage, synced_living_square_footage) AS living_square_footage,
+    COALESCE(override_total_square_footage,  synced_total_square_footage)  AS total_square_footage
+  FROM floor_plans`,
   map(row) {
     const id = String(row['id']);
     const slug =
@@ -512,8 +532,18 @@ const communities: CollectionDef = {
   key: 'communities',
   defaultCollectionName: 'Communities',
   collectionEnvVar: 'FRAMER_COLLECTION_COMMUNITIES',
-  selectByIdSql: `SELECT * FROM communities WHERE id = ?`,
-  selectAllSql: `SELECT * FROM communities`,
+  selectByIdSql: `SELECT *,
+    COALESCE(override_square_footage_range, synced_square_footage_range) AS square_footage_range,
+    COALESCE(override_bed_count,  synced_bed_count)  AS bed_count,
+    COALESCE(override_bath_count, synced_bath_count) AS bath_count,
+    COALESCE(override_price_from, synced_price_from) AS price_from
+  FROM communities WHERE id = ?`,
+  selectAllSql: `SELECT *,
+    COALESCE(override_square_footage_range, synced_square_footage_range) AS square_footage_range,
+    COALESCE(override_bed_count,  synced_bed_count)  AS bed_count,
+    COALESCE(override_bath_count, synced_bath_count) AS bath_count,
+    COALESCE(override_price_from, synced_price_from) AS price_from
+  FROM communities`,
   map(row) {
     const id = String(row['id']);
     const slug =

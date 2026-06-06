@@ -247,10 +247,15 @@ describe('resolveFieldConfig — parity with static field-config (seeded field_d
     expect(status.options).toEqual(['', 'Live', 'Draft']);
   });
 
-  it('communities: the read-only synced field stays bucket=synced', async () => {
+  it('communities: the Snowflake-fed fields are override pairs (0007)', async () => {
     const derived = await resolveFieldConfig('communities');
     const sqft = derived.fields.find((f) => f.field === 'square_footage_range')!;
-    expect(sqft.bucket).toBe('synced');
+    expect(sqft.bucket).toBe('override');
+    expect(sqft.widget).toBe('syncedOverride');
+    for (const f of ['bed_count', 'bath_count', 'price_from']) {
+      const fc = derived.fields.find((x) => x.field === f)!;
+      expect(fc.bucket).toBe('override');
+    }
   });
 
   // [P1] redundancy cleanup: the publish state is owned by the header Status control, so

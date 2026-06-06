@@ -36,9 +36,47 @@ export const QMI_OVERRIDABLE_FIELDS = [
   'community_id',
   'floor_plan_id',
   'price',
+  // 0007 Snowflake sync expansion
+  'move_in_date',
+  'lot_number',
+  'elevation_type',
+  'material_type',
+  'is_model_home',
 ] as const;
 
 export type QmiOverridableField = (typeof QMI_OVERRIDABLE_FIELDS)[number];
+
+/** The Communities columns that carry a synced_/override_ pair (0007). */
+export const COMMUNITY_OVERRIDABLE_FIELDS = [
+  'square_footage_range',
+  'bed_count',
+  'bath_count',
+  'price_from',
+] as const;
+
+export type CommunityOverridableField = (typeof COMMUNITY_OVERRIDABLE_FIELDS)[number];
+
+/** The Floor Plans columns that carry a synced_/override_ pair (0007). */
+export const FLOOR_PLAN_OVERRIDABLE_FIELDS = [
+  'bedroom_min',
+  'bedroom_max',
+  'bathroom_min',
+  'bathroom_max',
+  'living_square_footage',
+  'total_square_footage',
+  'starting_price',
+] as const;
+
+export type FloorPlanOverridableField = (typeof FLOOR_PLAN_OVERRIDABLE_FIELDS)[number];
+
+/** Any overridable field name across the three synced entities. */
+export type OverridableField =
+  | QmiOverridableField
+  | CommunityOverridableField
+  | FloorPlanOverridableField;
+
+/** Entities that carry synced_/override_ pairs (audit_log entity values). */
+export type OverridableEntity = 'qmi' | 'communities' | 'floor_plans';
 
 /** Treat empty string the same as null/undefined for "is this set?" purposes. */
 function isBlank(v: unknown): boolean {
@@ -78,7 +116,7 @@ export interface OverrideWriteOptions {
  * call-site symmetry with buildOverrideAudit; only `value` affects the patch.
  */
 export function buildOverrideWrite(
-  field: QmiOverridableField,
+  field: OverridableField,
   value: unknown,
   _opts: OverrideWriteOptions
 ): Record<string, unknown> {
@@ -93,7 +131,7 @@ export function buildOverrideWrite(
  * every override set/revert is recorded (Plan v2: every admin write logs audit_log).
  */
 export interface OverrideAuditRow {
-  entity: 'qmi';
+  entity: OverridableEntity;
   entity_id: string;
   field: string;
   action: 'override_set' | 'override_revert';
@@ -104,19 +142,22 @@ export interface OverrideAuditRow {
 }
 
 export function buildOverrideAudit(
-  qmiId: string,
-  field: QmiOverridableField,
+  entityId: string,
+  field: OverridableField,
   previousOverride: unknown,
   value: unknown,
-  opts: OverrideWriteOptions
+  opts: OverrideWriteOptions,
+  /** Which synced entity the audit row belongs to (defaults to 'qmi' for the
+   *  pre-0007 call sites). */
+  entity: OverridableEntity = 'qmi'
 ): OverrideAuditRow {
   const at = opts.at ?? new Date().toISOString();
   const reverting = isBlank(value);
   const toStr = (v: unknown): string | null =>
     v === null || v === undefined ? null : String(v);
   return {
-    entity: 'qmi',
-    entity_id: qmiId,
+    entity,
+    entity_id: entityId,
     field,
     action: reverting ? 'override_revert' : 'override_set',
     old_value: toStr(previousOverride),

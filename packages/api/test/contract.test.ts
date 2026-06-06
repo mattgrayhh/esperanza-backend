@@ -217,9 +217,9 @@ function seedFloorPlan(db: Database.Database) {
   // FP: Starting Price, and FP: Image (fp_image carries the attachment OBJECT as a
   // single-element JSON array so the serializer reproduces [{...}]).
   db.prepare(
-    `INSERT INTO floor_plans (id, name, slug, published, collection, starting_price,
-       bedroom_min, bedroom_max, bathroom_min, bathroom_max, car_garage_count,
-       living_square_footage, total_square_footage, master_bed_location, description,
+    `INSERT INTO floor_plans (id, name, slug, published, collection, synced_starting_price,
+       synced_bedroom_min, synced_bedroom_max, synced_bathroom_min, synced_bathroom_max, car_garage_count,
+       synced_living_square_footage, synced_total_square_footage, master_bed_location, description,
        plan_viewer_url, image_url, fp_image)
      VALUES ('rec698U5KYhZWy6ap','Indigo','indigo',1,'Haven Collection',215990,
        3,3,2,2,2,1234,1652,'Down','The Indigo, part of our Haven Collection...',
@@ -232,7 +232,7 @@ function seedCommunity(db: Database.Database) {
   // `draft` column dropped in migration 0005; published is the single gate.
   db.prepare(
     `INSERT INTO communities (id, name, slug, town, published, address,
-       map_coordinates, price_from, square_footage_range, bed_count, bath_count,
+       map_coordinates, synced_price_from, synced_square_footage_range, synced_bed_count, synced_bath_count,
        description, amenities, coming_soon, featured_image_url, secondary_image_url, city_id)
      VALUES (@id,@name,@slug,@town,1,@addr,@coords,@pf,@sqft,@beds,@baths,@desc,@amen,0,
        @img,@simg,@city)`
@@ -260,7 +260,7 @@ function seedCommunity(db: Database.Database) {
 // gate, so "hidden" is now published=0.)
 function seedCommunityDraft(db: Database.Database) {
   db.prepare(
-    `INSERT INTO communities (id, name, slug, town, published, price_from)
+    `INSERT INTO communities (id, name, slug, town, published, synced_price_from)
      VALUES ('recDRAFT000000000','Draft Town','draft-town','Nowhere',0,100000)`
   ).run();
 }
