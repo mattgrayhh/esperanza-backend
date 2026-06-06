@@ -237,7 +237,10 @@ export function EntityEditForm({
       </div>
 
       <form action={onSubmit}>
-        <div className={cn('grid gap-5', imageFields.length ? 'lg:grid-cols-[1fr_20rem]' : 'grid-cols-1')}>
+        {/* In preview mode, force single-column layout — the preview panel is ~350px and
+            viewport-based breakpoints (lg/sm) would otherwise trigger on the full browser
+            width, causing the 2-column grids to overflow the narrow card. */}
+        <div className={cn('grid gap-5', !preview && imageFields.length ? 'lg:grid-cols-[1fr_20rem]' : 'grid-cols-1')}>
           {/* MAIN column — one Card per field group (feedback [21][5][6]); ungrouped
               fields collapse into a single "Details" section. */}
           <div className="min-w-0 space-y-5">
@@ -246,11 +249,13 @@ export function EntityEditForm({
                 <CardHeader className="border-b">
                   <CardTitle>{section.label}</CardTitle>
                 </CardHeader>
-                {/* [32] Two-up grid: half-width fields take one column; the rest span both. */}
-                <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {/* [32] Two-up grid: half-width fields take one column; the rest span both.
+                    In preview mode use single-column to avoid overflow in the narrow panel. */}
+                <CardContent className={cn('grid grid-cols-1 gap-4', !preview && 'sm:grid-cols-2')}>
                   {section.fields.map((f) => {
-                    const span =
-                      'halfWidth' in f && f.halfWidth ? 'sm:col-span-1' : 'col-span-1 sm:col-span-2';
+                    const span = preview
+                      ? 'col-span-1'
+                      : 'halfWidth' in f && f.halfWidth ? 'sm:col-span-1' : 'col-span-1 sm:col-span-2';
                     if (f.kind === 'syncedOverride') {
                       return (
                         <div key={f.field} className={span}>

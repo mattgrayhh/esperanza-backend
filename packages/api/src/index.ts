@@ -45,6 +45,7 @@ import {
   resolveEffectivePromo,
   type PromoTargetType,
 } from '@esperanza/db/promo';
+import { buildSiteSearchPayload } from './sitesearch.js';
 
 // -----------------------------------------------------------------------------
 // Env
@@ -89,6 +90,7 @@ const TTL: Record<string, number> = {
   images: 300,
   blogs: 300,
   testimonials: 300,
+  sitesearch: 300,
 };
 
 const ENTITIES = Object.keys(TTL) as readonly string[];
@@ -162,7 +164,8 @@ interface PromoRow {
   start_date: string | null;
   end_date: string | null;
   published: number | boolean;
-  applies_to: unknown;
+  // [P2] applies_to removed (legacy label; promotion_targets drives targeting). The index
+  // signature below still tolerates the column if a stray row carries it.
   [k: string]: unknown;
 }
 
@@ -399,7 +402,6 @@ export interface PromotionPublic {
   ctaLabel: string;
   ctaLink: string;
   active: boolean;
-  appliesTo: string;
   sortOrder: number;
   image: string;
   expirationDate: string;
@@ -477,7 +479,6 @@ export function serializePromotionRow(
     ctaLink: asStr(promo.cta_url),
     // PUBLIC contract output key stays `active`; read it from the renamed gate column.
     active: asBool(promo.published),
-    appliesTo: asStr(promo.applies_to),
     sortOrder: asIntOrNull(promo.sort_order) ?? 0,
     image,
     expirationDate: asStr(promo.end_date),
@@ -770,6 +771,12 @@ async function buildPayload(
       const res = await session.prepare('SELECT * FROM v_public_testimonials').all();
       const rows = (res.results ?? []) as unknown as Row[];
       return { testimonials: rows.map(serializeTestimonialRow), ts };
+    }
+
+    case 'sitesearch': {
+      // Unified header-search index — clone of the legacy /sitesearch.json feed.
+      // See sitesearch.ts + docs/sitesearch-clone-design.md.
+      return await buildSiteSearchPayload(session);
     }
 
     default:

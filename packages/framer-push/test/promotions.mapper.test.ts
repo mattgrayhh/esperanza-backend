@@ -67,7 +67,7 @@ describe('Promotions mapper — targets, image fallback, gate', () => {
     expect(sval(f['cta_label'])).toBe('Learn more');
     expect(f['cta_link']?.type).toBe('link');
     expect(sval(f['cta_link'])).toBe('https://esperanzahomes.com/promo/spring');
-    expect(sval(f['applies_to'])).toBe('Select communities');
+    expect(f['applies_to']).toBeUndefined(); // [P2] legacy label no longer emitted (targeting via promotion_targets)
     expect(sval(f['sort_order'])).toBe(5);
     expect(sval(f['published'])).toBe(true);
     expect(sval(f['expiration_date'])).toBe('2026-06-30');

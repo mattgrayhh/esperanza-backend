@@ -159,6 +159,8 @@ export interface QmiDetailView {
     moveInDate: string;
     selfTourAvailable: boolean;
     availableNow: boolean;
+    /** Floor-plan image uploaded by the operator; stored in custom_fields JSON. */
+    floorPlanImage: string;
   };
 
   options: {
@@ -345,6 +347,20 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
     help,
   });
 
+  // Parse custom_fields JSON blob (user-added Field-Builder fields not in physical columns).
+  let customFields: Record<string, string> = {};
+  try {
+    const raw = r.custom_fields ?? r.customFields;
+    if (typeof raw === 'string' && raw.trim()) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+          customFields[k] = v == null ? '' : String(v);
+        }
+      }
+    }
+  } catch { /* malformed custom_fields → treat as empty */ }
+
   const published = Boolean(r.published);
   const comingSoon = Boolean(r.coming_soon);
 
@@ -435,6 +451,7 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
       moveInDate: s(r.move_in_date),
       selfTourAvailable: Boolean(r.self_tour_available),
       availableNow: Boolean(r.available_now),
+      floorPlanImage: customFields['floor_plan_image'] ?? '',
     },
 
     options: {

@@ -27,6 +27,10 @@ function inline(text: string): string {
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label: string, url: string) => {
     return `<a href="${url}">${label}</a>`;
   });
+  // autolinks: <https://url> — already HTML-escaped by this point, so match &lt;...&gt;
+  out = out.replace(/&lt;(https?:\/\/[^&\s<>]+)&gt;/g, (_m, url: string) => {
+    return `<a href="${url}">${url}</a>`;
+  });
   // **bold** and __bold__
   out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   out = out.replace(/__([^_]+)__/g, '<strong>$1</strong>');

@@ -117,7 +117,9 @@ SELECT
   c.features_download_url, c.resources_download_url, c.featured_video,
   c.brochure_pdf_url,
   c.office_phone, c.office_hours, c.schedule_visit, c.lending,
-  c.mine_link, c.community_map_embed, c.incentive, c.floor_plan_plaintext,
+  c.mine_link, c.community_map_embed, c.incentive,
+  -- [P2] floor_plan_plaintext dropped from the public view (legacy Airtable aiText;
+  -- the floor_plans.communities relationship is the real source). Column retained.
   c.hoa_links_json, c.city_id
 FROM communities c
 WHERE c.published = 1;   -- live publish gate (draft column dropped in 0005)
@@ -159,7 +161,7 @@ SELECT
   fp.photo_gallery_urls, fp.photo_gallery,
   fp.additional_images, fp.additional_images_gallery,
   fp.description, fp.plan_viewer_url, fp.virtual_tour_url, fp.incentive,
-  fp.brochure_pdf_url, fp.brochure_pdf,
+  fp.brochure_pdf_url, -- [P2] brochure_pdf (legacy attachment dup) dropped from view; column retained
   fp.energy_cost_low, fp.energy_cost_high, fp.energy_cost_avg,
   fp.communities, fp.community_count, fp.quick_move_in_ids, fp.promotion_ids
 FROM floor_plans fp
@@ -175,7 +177,8 @@ CREATE VIEW v_public_promotions AS
 SELECT
   p.id, p.title, p.banner_text, p.badge_text, p.copy,
   p.cta_label, p.cta_url, p.image_url,
-  p.sort_order, p.start_date, p.end_date, p.published, p.applies_to
+  -- [P2] applies_to dropped from view (legacy label; promotion_targets drives targeting). Column retained.
+  p.sort_order, p.start_date, p.end_date, p.published
 FROM promotions p
 WHERE p.published = 1;
 

@@ -235,16 +235,19 @@ export function parseCommunityRows(rowset: unknown[][]): SnowflakeCommunityRow[]
 
 /**
  * Build the Communities "Square Footage" range string (worker.js:323-335).
- * min===max (or only one present) → single value; else "min - max". Bed/bath
- * ranges are deliberately NOT produced (singleSelect, never written).
+ * min===max (or only one present) → single value; else "min - max". Values use
+ * US thousands separators ("1,436 - 2,960") to match the human-entered
+ * convention on the site. Bed/bath ranges are deliberately NOT produced
+ * (singleSelect, never written).
  */
 export function squareFootageRange(
   minSqft: number | null,
   maxSqft: number | null
 ): string | null {
+  const fmt = (n: number) => n.toLocaleString('en-US');
   if (minSqft == null && maxSqft == null) return null;
-  if (minSqft == null) return String(maxSqft);
-  if (maxSqft == null) return String(minSqft);
-  if (minSqft === maxSqft) return String(minSqft);
-  return `${minSqft} - ${maxSqft}`;
+  if (minSqft == null) return fmt(maxSqft as number);
+  if (maxSqft == null) return fmt(minSqft);
+  if (minSqft === maxSqft) return fmt(minSqft);
+  return `${fmt(minSqft)} - ${fmt(maxSqft)}`;
 }

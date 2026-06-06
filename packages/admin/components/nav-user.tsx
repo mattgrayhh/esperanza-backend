@@ -17,7 +17,7 @@ import {
 	SidebarMenuItem,
 	useSidebar,
 } from "@/components/ui/sidebar";
-import { ChevronsUpDownIcon, LogOutIcon, SlidersHorizontalIcon, BlocksIcon } from "lucide-react";
+import { ChevronsUpDownIcon, LogOutIcon, SlidersHorizontalIcon, BlocksIcon, UsersIcon } from "lucide-react";
 
 /** Server action wired up by the layout — calls the existing Auth.js signOut. */
 export type SignOutAction = () => void | Promise<void>;
@@ -99,6 +99,10 @@ export function NavUser({
 									<DropdownMenuItem render={<Link href="/settings/framer-types" />}>
 										<BlocksIcon />
 										Framer field types
+									</DropdownMenuItem>
+									<DropdownMenuItem render={<Link href="/settings/users" />}>
+										<UsersIcon />
+										Users
 									</DropdownMenuItem>
 								</DropdownMenuGroup>
 								<DropdownMenuSeparator />

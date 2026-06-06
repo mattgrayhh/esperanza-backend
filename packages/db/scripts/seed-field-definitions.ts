@@ -283,6 +283,12 @@ function buildRows(): { rows: SeedRow[]; perEntity: Record<string, number> } {
       // visible_in_form=0 so a flag-driven engine reproduces today's exact partition
       // (the gate still shows in the header, exactly as now).
       if (f.bucket === 'publish') row.visible_in_form = 0;
+      // [P1] redundancy cleanup: a field explicitly flagged `visibleInForm: false` in the
+      // static config (e.g. coming_soon / status — the header Status control owns publish
+      // state) seeds hidden. Honoring the flag here is what makes the hide DURABLE: the
+      // upsert SETs visible_in_form = excluded.visible_in_form, so without this a re-seed
+      // (run after every migration) would resurrect the field to visible_in_form = 1.
+      if (f.visibleInForm === false) row.visible_in_form = 0;
       rows.push(row);
       count++;
     });

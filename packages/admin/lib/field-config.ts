@@ -133,7 +133,7 @@ const qmi: EntityFieldConfig = {
     // ── publish ──
     { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish' },
     // coming-soon flag (migration 0005 wiring): on-site-but-not-yet-live state.
-    { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin', halfWidth: true },
+    { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin', halfWidth: true, visibleInForm: false }, // [P1] hidden from form — header Status control owns it
 
     // ── override (synced_/override_ pairs) ──
     {
@@ -295,7 +295,7 @@ const communities: EntityFieldConfig = {
     { field: 'latitude', label: 'Latitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
     { field: 'longitude', label: 'Longitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
     { field: 'master_planned', label: 'Master Planned', widget: 'boolean', bucket: 'admin', halfWidth: true },
-    { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin', halfWidth: true },
+    { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin', halfWidth: true, visibleInForm: false }, // [P1] hidden from form — header Status control owns it
     { field: 'price_from', label: 'Price From', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
     { field: 'bed_count', label: 'Bed Count', widget: 'text', bucket: 'admin', halfWidth: true },
     { field: 'bath_count', label: 'Bath Count', widget: 'text', bucket: 'admin', halfWidth: true },
@@ -358,7 +358,7 @@ const cities: EntityFieldConfig = {
   fields: [
     // publish gate + coming-soon flag added in migration 0005 (gate-all standardization).
     { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish' },
-    { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin', halfWidth: true },
+    { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin', halfWidth: true, visibleInForm: false }, // [P1] hidden from form — header Status control owns it
     { field: 'community_count', label: 'Community Count (synced)', widget: 'number', bucket: 'synced', halfWidth: true },
     { field: 'move_in_homes_count', label: 'Move-In Homes (synced)', widget: 'number', bucket: 'synced', halfWidth: true },
     { field: 'floor_plans_count', label: 'Floor Plans Count (synced)', widget: 'number', bucket: 'synced', halfWidth: true },
@@ -366,7 +366,7 @@ const cities: EntityFieldConfig = {
     { field: 'slug', label: 'Slug', widget: 'text', bucket: 'admin', halfWidth: true },
     { field: 'state', label: 'State', widget: 'text', bucket: 'admin', halfWidth: true },
     // `status` demoted to informational in migration 0005 (no longer a gate).
-    { field: 'status', label: 'Status (informational)', widget: 'text', bucket: 'admin', halfWidth: true },
+    { field: 'status', label: 'Status (informational)', widget: 'text', bucket: 'admin', halfWidth: true, visibleInForm: false }, // [P1] hidden from form — `published` is the gate
     { field: 'map_latitude', label: 'Map Latitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
     { field: 'map_longitude', label: 'Map Longitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
     { field: 'hero_image_url', label: 'Hero Image', widget: 'image', bucket: 'admin' },
@@ -447,7 +447,7 @@ const floor_plans: EntityFieldConfig = {
     { field: 'force_replace_renderings', label: 'Force Replace Renderings', widget: 'boolean', bucket: 'admin' },
     { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish' },
     // coming-soon flag (migration 0005 wiring): on-site-but-not-yet-live state.
-    { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin', halfWidth: true },
+    { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin', halfWidth: true, visibleInForm: false }, // [P1] hidden from form — header Status control owns it
     { field: 'name', label: 'Name', widget: 'text', bucket: 'admin' },
     { field: 'slug', label: 'Slug', widget: 'text', bucket: 'admin' },
     { field: 'collection', label: 'Collection', widget: 'text', bucket: 'admin' },
@@ -469,7 +469,7 @@ const floor_plans: EntityFieldConfig = {
     { field: 'plan_viewer_url', label: 'Plan Viewer URL', widget: 'text', bucket: 'admin' },
     { field: 'virtual_tour_url', label: 'Virtual Tour URL', widget: 'text', bucket: 'admin' },
     { field: 'brochure_pdf_url', label: 'Brochure PDF', widget: 'text', bucket: 'admin' },
-    { field: 'brochure_pdf', label: 'Brochure PDF', widget: 'text', bucket: 'admin' },
+    { field: 'brochure_pdf', label: 'Brochure PDF (legacy)', widget: 'text', bucket: 'admin', visibleInForm: false }, // [P2] retired dup of brochure_pdf_url — hidden; column kept
     // [34] incentive removed from the admin form (D1 column + sync unchanged).
     { field: 'energy_cost_low', label: 'Energy Cost Low', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
     { field: 'energy_cost_high', label: 'Energy Cost High', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
@@ -501,7 +501,7 @@ const promotions: EntityFieldConfig = {
     { field: 'sort_order', label: 'Sort Order', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
     { field: 'start_date', label: 'Start Date', widget: 'date', bucket: 'admin', halfWidth: true },
     { field: 'end_date', label: 'End Date', widget: 'date', bucket: 'admin', halfWidth: true },
-    { field: 'applies_to', label: 'Applies-To Label (legacy)', widget: 'text', bucket: 'admin', help: 'Informational only; does NOT drive targeting.' },
+    { field: 'applies_to', label: 'Applies-To Label (legacy)', widget: 'text', bucket: 'admin', help: 'Informational only; does NOT drive targeting.', visibleInForm: false }, // [P2] retired — targeting via Targeting Scope; hidden; column kept
     { field: 'promotion_targets', label: 'Targeting Scope', widget: 'promoScopeTag', bucket: 'target' },
   ],
 };
@@ -597,7 +597,7 @@ const testimonials: EntityFieldConfig = {
     { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish' },
     // `status` demoted to informational in migration 0005 (no longer the gate); kept as a
     // free-pick label so legacy 'Live'/'Draft' values remain visible/editable.
-    { field: 'status', label: 'Status (informational)', widget: 'select', bucket: 'admin', options: ['', 'Live', 'Draft'], help: 'Informational label only; `published` is the gate.' },
+    { field: 'status', label: 'Status (informational)', widget: 'select', bucket: 'admin', options: ['', 'Live', 'Draft'], help: 'Informational label only; `published` is the gate.', visibleInForm: false }, // [P1] hidden from form — `published` is the gate
     { field: 'person_name', label: 'Person Name', widget: 'text', bucket: 'admin' },
     { field: 'slug', label: 'Slug', widget: 'text', bucket: 'admin' },
     { field: 'date_posted', label: 'Date Posted', widget: 'date', bucket: 'admin', halfWidth: true },

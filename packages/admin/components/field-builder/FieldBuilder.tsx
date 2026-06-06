@@ -227,7 +227,7 @@ export function FieldBuilder({
         </div>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_minmax(22rem,28rem)]">
+      <div className="grid gap-5 lg:grid-cols-[1fr_3fr]">
         {/* LEFT: field list */}
         <Card className="self-start">
           <CardHeader className="flex flex-row items-center justify-between gap-2 border-b">

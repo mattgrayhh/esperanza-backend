@@ -138,7 +138,9 @@ function seedFieldDefinitions(): void {
           options_json: f.options ? JSON.stringify(f.options) : null,
           required: 0,
           system: isSystemField(def.key, f) ? 1 : 0,
-          visible_in_form: f.bucket === 'publish' ? 0 : 1,
+          // Mirror the real seed: publish-gate is header-only, and [P1] fields explicitly
+          // flagged visibleInForm:false (coming_soon / status) seed hidden too.
+          visible_in_form: f.bucket === 'publish' || f.visibleInForm === false ? 0 : 1,
           visible_in_list: listKeys.has(f.field) ? 1 : 0,
           half_width: f.halfWidth ? 1 : 0,
           framer_field_id: null,
@@ -249,6 +251,28 @@ describe('resolveFieldConfig — parity with static field-config (seeded field_d
     const derived = await resolveFieldConfig('communities');
     const sqft = derived.fields.find((f) => f.field === 'square_footage_range')!;
     expect(sqft.bucket).toBe('synced');
+  });
+
+  // [P1] redundancy cleanup: the publish state is owned by the header Status control, so
+  // these duplicate body fields are hidden from the edit form (visibleInForm:false →
+  // build-edit-view skips them). The columns + list pills are untouched.
+  it('hides the 6 redundant publish/status fields from the form, keeps everything else', async () => {
+    const hidden: Array<[EntityKey, string]> = [
+      ['qmi', 'coming_soon'],
+      ['communities', 'coming_soon'],
+      ['cities', 'coming_soon'],
+      ['cities', 'status'],
+      ['floor_plans', 'coming_soon'],
+      ['testimonials', 'status'],
+    ];
+    for (const [entity, field] of hidden) {
+      const f = (await resolveFieldConfig(entity)).fields.find((x) => x.field === field);
+      expect(f, `${entity}.${field} should still exist in the registry`).toBeDefined();
+      expect(f!.visibleInForm, `${entity}.${field} should be hidden from the form`).toBe(false);
+    }
+    // A control field that must REMAIN visible (not accidentally swept up).
+    const slug = (await resolveFieldConfig('qmi')).fields.find((x) => x.field === 'slug')!;
+    expect(slug.visibleInForm).not.toBe(false);
   });
 });
 

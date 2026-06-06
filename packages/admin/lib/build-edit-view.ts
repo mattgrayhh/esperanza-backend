@@ -188,7 +188,7 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
 
     // Custom side widgets (own actions, rendered below the form).
     if (f.widget === 'hoaLinks') {
-      sideWidgets.push({ kind: 'hoaLinks', initial: parseLinks(row['hoa_links_json']) });
+      sideWidgets.push({ kind: 'hoaLinks', initial: parseLinks(col(row, 'hoa_links_json')) });
       continue;
     }
     if (f.widget === 'promoScopeTag') {
@@ -199,8 +199,8 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
       // Two jsonBlocks config entries (copy + venue) collapse to ONE editor instance.
       // Only add it once (when we hit the copy-blocks column).
       if (f.field === 'city_copy_blocks_json') {
-        const copy = mergeKeys(CITY_COPY_BLOCK_KEYS, parseObj(row['city_copy_blocks_json']));
-        const venue = mergeKeys(CITY_VENUE_BLOCK_KEYS, parseObj(row['city_venue_blocks_json']));
+        const copy = mergeKeys(CITY_COPY_BLOCK_KEYS, parseObj(col(row, 'city_copy_blocks_json')));
+        const venue = mergeKeys(CITY_VENUE_BLOCK_KEYS, parseObj(col(row, 'city_venue_blocks_json')));
         sideWidgets.push({ kind: 'jsonBlocks', copy, venue });
       }
       continue;

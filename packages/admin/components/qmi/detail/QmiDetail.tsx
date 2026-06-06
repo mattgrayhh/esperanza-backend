@@ -344,13 +344,13 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
             </div>
           </div>
 
-          {/* RIGHT RAIL: main image (still inside the form → same saveEntity FormData). */}
+          {/* RIGHT RAIL: image uploaders (still inside the form → same saveEntity FormData). */}
           <div className="space-y-4">
             <Card className="self-start">
               <CardHeader className="border-b">
-                <CardTitle>Main image</CardTitle>
+                <CardTitle>Media</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="grid gap-5">
                 <ImageUploader
                   entity="qmi"
                   id={view.id}
@@ -358,6 +358,13 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
                   label="Main Image"
                   initialUrl={view.gallery[0]?.url ?? ''}
                   help="Home-level hero. Falls back to the floor-plan rendering when empty."
+                />
+                <ImageUploader
+                  entity="qmi"
+                  id={view.id}
+                  field="floor_plan_image"
+                  label="Floor Plan Image"
+                  initialUrl={view.admin.floorPlanImage}
                 />
               </CardContent>
             </Card>

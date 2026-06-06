@@ -392,7 +392,7 @@ const floorPlans: CollectionDef = {
       coming_soon: bool(asBool(row['coming_soon'])), // live FP (Managed) has the field (added 2026-06)
       // brochure_pdf_url MUST stay "string" (link type breaks live binding & aborts batch)
       brochure_pdf_url: sIf(row['brochure_pdf_url']),
-      brochure_pdf: sIf(row['brochure_pdf']),
+      // [P2] brochure_pdf (legacy attachment dup of brochure_pdf_url) no longer emitted.
       hers_score: nIf(row['hers_score']),
       energy_cost_esperanza_monthly: nIf(row['energy_cost_low']),
       energy_cost_preowned_monthly: nIf(row['energy_cost_high']),
@@ -552,7 +552,8 @@ const communities: CollectionDef = {
     const fieldData = compactFields({
       name: sIf(row['name']),
       slug: str(slug),
-      floor_plan_plaintext: sIf(row['floor_plan_plaintext']),
+      // [P2] floor_plan_plaintext (legacy Airtable aiText flattening) no longer emitted;
+      // the real relationship is floor_plans.communities + community_count.
       town: sIf(row['town']),
       address: sIf(row['address']),
       get_directions: linkIf(row['directions']),
@@ -740,7 +741,8 @@ const promotions: CollectionDef = {
       copy: sIf(row['copy']),
       cta_label: sIf(row['cta_label']),
       cta_link: linkIf(row['cta_url']),
-      applies_to: sIf(row['applies_to']),
+      // [P2] applies_to (legacy descriptive label) no longer emitted; targeting is
+      // driven by promotion_targets, not this field.
       sort_order: nIf(row['sort_order']),
       published: bool(asBool(row['published'])),
       expiration_date: sIf(row['end_date']),
