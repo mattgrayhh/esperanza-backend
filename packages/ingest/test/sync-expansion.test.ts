@@ -11,6 +11,7 @@ import {
   parseCommunityPriceFromRows,
   epochDaysToIsoDate,
   countRange,
+  normalizeFloorPlanName,
 } from '../src/snowflake.js';
 import {
   diff,
@@ -42,6 +43,16 @@ describe('epochDaysToIsoDate', () => {
     expect(epochDaysToIsoDate(0)).toBe('1970-01-01');
     expect(epochDaysToIsoDate(null)).toBeNull();
     expect(epochDaysToIsoDate('')).toBeNull();
+  });
+});
+
+describe('normalizeFloorPlanName', () => {
+  it('converts the dash-lowercase-L numeral convention to Roman numerals', () => {
+    expect(normalizeFloorPlanName('Acuna - ll')).toBe('Acuna II');
+    expect(normalizeFloorPlanName('Francisco - l')).toBe('Francisco I');
+    expect(normalizeFloorPlanName('Lorenzo - lll')).toBe('Lorenzo III');
+    expect(normalizeFloorPlanName('Allegrini')).toBe('Allegrini');
+    expect(normalizeFloorPlanName('Lunelli')).toBe('Lunelli'); // trailing ll INSIDE a word untouched
   });
 });
 

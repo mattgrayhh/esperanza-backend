@@ -48,6 +48,16 @@ export function normalizeCommunityName(raw: string): string {
   return COMMUNITY_NAME_MAP[raw] ?? raw;
 }
 
+/**
+ * Normalize a MarkSystems floor-plan model name to the admin convention:
+ * the warehouse writes Roman numerals as lowercase L's behind a dash
+ * ("Acuna - ll", "Francisco - l") where the admin uses "Acuna II" /
+ * "Francisco I". Other names pass through untouched.
+ */
+export function normalizeFloorPlanName(raw: string): string {
+  return raw.trim().replace(/\s*-\s*(l{1,3})$/i, (_m, ls: string) => ' ' + 'I'.repeat(ls.length));
+}
+
 const cityList = SNOWFLAKE_CITIES.map((c) => `'${c}'`).join(',');
 
 function snowflakeHost(env: SnowflakeEnv): string {
@@ -253,7 +263,7 @@ export function parseQmiRows(rowset: unknown[][]): SnowflakeQmiRow[] {
       postalCode: r[5] == null ? null : (Number.isNaN(parseInt(String(r[5]), 10)) ? null : parseInt(String(r[5]), 10)),
       developmentName: String(r[6] ?? '').trim(),
       communityName: normalizeCommunityName(String(r[6] ?? '').trim()),
-      floorPlan: model === '' || model === 'UNKNOWN' ? null : model,
+      floorPlan: model === '' || model === 'UNKNOWN' ? null : normalizeFloorPlanName(model),
       elevation: String(r[8] ?? '').trim(),
       // rounded, >0 guards applied at producer time; keep raw rounded here
       livingSquareFootage: livingRaw != null ? Math.round(livingRaw) : null,
@@ -347,7 +357,7 @@ export interface SnowflakeFloorPlanRow {
 export function parseFloorPlanRows(rowset: unknown[][]): SnowflakeFloorPlanRow[] {
   const out: SnowflakeFloorPlanRow[] = [];
   for (const r of rowset) {
-    const model = String(r[0] ?? '').trim();
+    const model = normalizeFloorPlanName(String(r[0] ?? ''));
     if (model === '') continue;
     const round = (v: unknown) => (num(v) != null ? Math.round(num(v)!) : null);
     const bath = (v: unknown) => (num(v) != null ? parseFloat(num(v)!.toFixed(1)) : null);
