@@ -3,6 +3,7 @@ import { SidebarMenuButton } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { ENTITY_LIST, type EntityKey } from "@/lib/entities";
 import {
+	CircleHelpIcon,
 	HomeIcon,
 	BuildingIcon,
 	MapPinIcon,
@@ -101,6 +102,16 @@ export const mainNavLinks: SidebarNavGroup[] = [
 				title: "PDFs",
 				path: "/pdfs",
 				icon: <BookOpenIcon />,
+			},
+		],
+	},
+	{
+		label: "Resources",
+		items: [
+			{
+				title: "Help & Docs",
+				path: "/help",
+				icon: <CircleHelpIcon />,
 			},
 		],
 	},

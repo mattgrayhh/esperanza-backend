@@ -5,6 +5,7 @@
 // renders the data, the client component only re-skins it (sort/filter/paginate).
 import { notFound } from 'next/navigation';
 import { ENTITY_LIST } from '../../lib/entities';
+import { HELP_LINKS_BY_ENTITY } from '../../lib/help-links.generated';
 import { buildListView } from '../../lib/build-list-view';
 import {
   DataTable,
@@ -48,6 +49,8 @@ export default async function EntityListPage({
     <DataTable
       segment={def.segment}
       label={def.label}
+      helpHref={HELP_LINKS_BY_ENTITY[def.key] ? `/help/${HELP_LINKS_BY_ENTITY[def.key]!.slug}` : null}
+      helpTitle={HELP_LINKS_BY_ENTITY[def.key]?.title ?? null}
       columns={columns}
       rows={rows}
       gateColumn={view.gateColumn}

@@ -50,6 +50,7 @@ import {
   Search,
   SlidersHorizontal,
   SquareArrowOutUpRight,
+  CircleHelp,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -537,7 +538,19 @@ export function QmiDataTable({ rows, truncated }: QmiDataTableProps) {
       {/* ── header: title + count + New ── */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="font-heading text-xl font-semibold text-foreground">Quick Move-Ins</h1>
+          <span className="flex items-center gap-1.5">
+            <h1 className="font-heading text-xl font-semibold text-foreground">Quick Move-Ins</h1>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6 text-muted-foreground hover:text-foreground"
+              render={<Link href="/help/how-a-new-home-appears" />}
+              aria-label="Help: how a new home appears"
+              title="Help: how a new home appears"
+            >
+              <CircleHelp className="size-4" />
+            </Button>
+          </span>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {counts.all} total
             {truncated ? ` · showing first ${rows.length}` : ""}

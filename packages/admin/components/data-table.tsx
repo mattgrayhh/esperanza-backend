@@ -38,6 +38,7 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
+  CircleHelp,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -92,6 +93,9 @@ export interface DataTableProps {
   gateColumn: string | null
   truncated: boolean
   label: string
+  /** Contextual Help & Docs link for this entity (gen:help links map), or null. */
+  helpHref?: string | null
+  helpTitle?: string | null
 }
 
 // =============================================================================
@@ -302,6 +306,8 @@ export function DataTable({
   gateColumn,
   truncated,
   label,
+  helpHref,
+  helpTitle,
 }: DataTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = React.useState("")
@@ -341,7 +347,21 @@ export function DataTable({
       {/* ── header: title + New ── */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="font-heading text-xl font-semibold text-foreground">{label}</h1>
+          <span className="flex items-center gap-1.5">
+            <h1 className="font-heading text-xl font-semibold text-foreground">{label}</h1>
+            {helpHref ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6 text-muted-foreground hover:text-foreground"
+                render={<Link href={helpHref} />}
+                aria-label={helpTitle ?? "Help"}
+                title={helpTitle ?? "Help"}
+              >
+                <CircleHelp className="size-4" />
+              </Button>
+            ) : null}
+          </span>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {filteredRows === totalRows
               ? `${totalRows} record${totalRows === 1 ? "" : "s"}`
