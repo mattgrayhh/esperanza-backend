@@ -43,3 +43,4 @@ coverage/
 # isolated worktrees + brainstorming companion artifacts
 .claude/worktrees/
 .superpowers/
+backups-d1/
