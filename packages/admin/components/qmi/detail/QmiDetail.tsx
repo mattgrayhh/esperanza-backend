@@ -288,6 +288,10 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
                 <SyncedOverrideField {...view.syncedOverride.bathroomCount} />
                 <SyncedOverrideField {...view.syncedOverride.totalSquareFootage} />
                 <SyncedOverrideField {...view.syncedOverride.elevation} />
+                <SyncedOverrideField {...view.syncedOverride.lotNumber} />
+                <SyncedOverrideField {...view.syncedOverride.elevationType} />
+                <SyncedOverrideField {...view.syncedOverride.materialType} />
+                <SyncedOverrideField {...view.syncedOverride.isModelHome} />
               </CardContent>
             </Card>
 

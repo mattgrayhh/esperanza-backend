@@ -4,8 +4,9 @@
 -- Rule (Decision-log #6): COALESCE(override_x, synced_x) ONLY where a
 -- synced_/override_ PAIR exists. Every other column is a plain mirror.
 --   * QMI: the Snowflake write-set columns are the only pairs.
---   * Communities/Cities/Floor Plans: no override pairs (their synced fields have
---     no admin-override counterpart) — plain columns throughout.
+--   * Communities (sqft range, bed/bath ranges, price_from) and Floor Plans
+--     (beds/baths/sqft/starting price) gained synced_/override_ pairs in 0007 —
+--     COALESCEd here under their original output names. Cities counts stay plain.
 --   * Promotions/Collections/Images/Blogs/Testimonials: fully admin-owned — these
 --     don't get a v_public_ view here beyond a straight passthrough where useful;
 --     promo RESOLUTION is done by the api Worker (see comment at bottom), NOT baked
@@ -30,6 +31,16 @@ SELECT
   COALESCE(q.override_total_square_footage,  q.synced_total_square_footage)  AS total_square_footage,
   COALESCE(q.override_elevation,           q.synced_elevation)           AS elevation,
   COALESCE(q.override_construction_stage,  q.synced_construction_stage)  AS construction_stage,
+  COALESCE(q.override_move_in_date,        q.synced_move_in_date)        AS move_in_date,
+  COALESCE(q.override_lot_number,          q.synced_lot_number)          AS lot_number,
+  COALESCE(q.override_elevation_type,      q.synced_elevation_type)      AS elevation_type,
+  COALESCE(q.override_material_type,       q.synced_material_type)       AS material_type,
+  COALESCE(q.override_is_model_home,       q.synced_is_model_home)       AS is_model_home,
+
+  -- 0007 synced-only operational facts (no pair)
+  q.synced_start_type                  AS start_type,
+  q.synced_construction_stage_index    AS construction_stage_index,
+  q.synced_estimated_settlement_date   AS estimated_settlement_date,
   COALESCE(q.override_city_id,             q.synced_city_id)             AS city_id,
   COALESCE(q.override_community_id,        q.synced_community_id)        AS community_id,
   COALESCE(q.override_floor_plan_id,       q.synced_floor_plan_id)       AS floor_plan_id,
@@ -51,8 +62,8 @@ SELECT
   q.available_now, q.self_tour_available, q.include_in_xml_feed,
   q.image_url, q.og_image_url, q.page_url, q.dynamic_pdf,
   q.featured_image, q.image_2, q.image_3, q.image_4, q.image_5,
-  q.description, q.upgrades, q.incentive, q.virtual_tour_url, q.elevation_type,
-  q.mls_id, q.mls_number, q.lot_number, q.year_built, q.lot_size_sqft, q.move_in_date,
+  q.description, q.upgrades, q.incentive, q.virtual_tour_url,
+  q.mls_id, q.mls_number, q.year_built, q.lot_size_sqft,
   q.hers_score, q.arm_rate, q.promo_text, q.availability_text, q.nter_now, q.cities,
   q.posted, q.publish_date, q.last_modified_time,
 
@@ -63,16 +74,16 @@ SELECT
   -- FP:* array the contract requires. NULL (no linked FP) → the serializer omits
   -- the field (sparse), exactly as before. fp_image / fp_additional_images carry
   -- attachment-object JSON and live on floor_plans.
-  fp.bedroom_min            AS fp_bedrooms_min,
-  fp.bedroom_max            AS fp_bedrooms_max,
-  fp.bathroom_max           AS fp_bathrooms_max,
+  COALESCE(fp.override_bedroom_min, fp.synced_bedroom_min)   AS fp_bedrooms_min,
+  COALESCE(fp.override_bedroom_max, fp.synced_bedroom_max)   AS fp_bedrooms_max,
+  COALESCE(fp.override_bathroom_max, fp.synced_bathroom_max) AS fp_bathrooms_max,
   fp.car_garage_count       AS fp_garage,
-  fp.living_square_footage  AS fp_living_sqft,
-  fp.total_square_footage   AS fp_total_sqft,
+  COALESCE(fp.override_living_square_footage, fp.synced_living_square_footage) AS fp_living_sqft,
+  COALESCE(fp.override_total_square_footage, fp.synced_total_square_footage)   AS fp_total_sqft,
   fp.description            AS fp_description,
   fp.fp_image               AS fp_image,
   fp.fp_additional_images   AS fp_additional_images,
-  fp.starting_price         AS fp_starting_price,
+  COALESCE(fp.override_starting_price, fp.synced_starting_price) AS fp_starting_price,
   fp.virtual_tour_url       AS fp_virtual_tour,
   fp.plan_viewer_url        AS fp_plan_viewer,
   fp.collection             AS fp_collection,
@@ -86,8 +97,8 @@ LEFT JOIN floor_plans fp
 WHERE q.published = 1;   -- live publish gate
 
 -- =============================================================================
--- v_public_communities — square_footage_range is the only synced field and has
--- NO override counterpart, so it is a plain column (no COALESCE). The `draft` column
+-- v_public_communities — sqft range / bed / bath / price_from are synced_/override_
+-- pairs since 0007 (COALESCE, original output names). The `draft` column
 -- was DROPPED in migration 0005 (all rows 0); the publish gate is now baked here
 -- (WHERE published = 1), uniform with every other v_public_ view. coming_soon is the
 -- additive on-site-but-not-yet-live flag.
@@ -96,11 +107,13 @@ DROP VIEW IF EXISTS v_public_communities;
 CREATE VIEW v_public_communities AS
 SELECT
   c.id,
-  c.square_footage_range,           -- synced, no pair → plain
+  COALESCE(c.override_square_footage_range, c.synced_square_footage_range) AS square_footage_range,
   c.name, c.slug, c.town, c.published, c.address,
   c.map_coordinates, c.latitude, c.longitude, c.lat_long,
   c.master_planned, c.coming_soon,
-  c.price_from, c.bed_count, c.bath_count,
+  COALESCE(c.override_price_from, c.synced_price_from) AS price_from,
+  COALESCE(c.override_bed_count,  c.synced_bed_count)  AS bed_count,
+  COALESCE(c.override_bath_count, c.synced_bath_count) AS bath_count,
   c.description, c.amenities,
   c.education_rich, c.design_copy_rich,
   c.exterior_construction_copy_rich, c.interior_construction_copy_rich,
@@ -149,10 +162,15 @@ CREATE VIEW v_public_floor_plans AS
 SELECT
   fp.id,
   fp.synced_image_url,              -- external-synced, no pair → plain
-  fp.name, fp.slug, fp.published, fp.coming_soon, fp.collection, fp.starting_price,
-  fp.bedroom_min, fp.bedroom_max, fp.bathroom_min, fp.bathroom_max,
+  fp.name, fp.slug, fp.published, fp.coming_soon, fp.collection,
+  COALESCE(fp.override_starting_price, fp.synced_starting_price) AS starting_price,
+  COALESCE(fp.override_bedroom_min,  fp.synced_bedroom_min)  AS bedroom_min,
+  COALESCE(fp.override_bedroom_max,  fp.synced_bedroom_max)  AS bedroom_max,
+  COALESCE(fp.override_bathroom_min, fp.synced_bathroom_min) AS bathroom_min,
+  COALESCE(fp.override_bathroom_max, fp.synced_bathroom_max) AS bathroom_max,
   fp.car_garage_count, fp.stories_count,
-  fp.living_square_footage, fp.total_square_footage,
+  COALESCE(fp.override_living_square_footage, fp.synced_living_square_footage) AS living_square_footage,
+  COALESCE(fp.override_total_square_footage,  fp.synced_total_square_footage)  AS total_square_footage,
   fp.master_bed_location, fp.hers_score,
   fp.image_url, fp.hero_image_2, fp.hero_image_3,
   fp.elevation_renderings, fp.elevation_gallery,

@@ -1,33 +1,34 @@
 'use client';
 
 // =============================================================================
-// SyncedOverrideField — the QMI synced_/override_ widget.
+// SyncedOverrideField — the synced_/override_ widget (qmi/communities/floor_plans).
 //
-// Renders the Snowflake-synced value as muted helper text and an override input.
-//   - A non-blank input PINS an admin override (survives ingest).
-//   - A BLANK input REVERTS to synced (the engine sends '' → coerced to NULL →
-//     buildOverrideWrite sets override_<field> = NULL).
+// 0007 UX: Snowflake-fed fields are LOCKED by default — the input shows the
+// synced value, disabled. Checking "Unlock to override" enables manual entry;
+// saving a non-blank value PINS an admin override (survives every ingest).
+// Re-locking (unchecking) submits '' → buildOverrideWrite sets
+// override_<field> = NULL → the field follows Snowflake again.
 //
-// The input's `name` is the QmiOverridableField logical name (e.g. `price`,
-// `floor_plan_id`); saveEntity routes it through buildOverrideWrite/buildOverrideAudit.
+// Submission contract (unchanged from the pre-0007 widget): a single value is
+// submitted under the logical field name (`price`, `lot_number`, …).
+//   - locked            → '' (revert / keep following Snowflake)
+//   - unlocked + value  → pins that override
+// The visible inputs carry no `name`; a hidden input owns the submitted value,
+// so the disabled locked state still participates in the form.
 //
 // Variants:
-//   text          — free text
-//   number        — numeric (step controls .5 vs integer)
-//   select        — pick a related record by id (floor_plan/community/city). The
-//                   muted helper shows the synced human NAME (displayLabel), not the id.
-//
-// Re-skinned with shadcn primitives (Input/Select/Label/Badge). The control stays
-// CONTROLLED (useState) so the override chip toggles live and a cleared value still
-// submits '' (revert). base-ui Select with `name` submits via a hidden input; the empty
-// option '' === "(follow Snowflake)".
+//   text   — free text
+//   number — numeric (step controls .5 vs integer)
+//   select — pick a related record by id (floor_plan/community/city). The
+//            locked display shows the synced human NAME, not the id.
 // =============================================================================
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { SelectOption } from '../../lib/select-options';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -62,12 +63,12 @@ export function SyncedOverrideField({
   help,
 }: SyncedOverrideFieldProps) {
   const [value, setValue] = useState(overrideValue);
-  const overriding = value.trim() !== '';
+  // Locked by default; an existing override arrives unlocked (it's pinned).
+  const [unlocked, setUnlocked] = useState(overrideValue.trim() !== '');
+  const checkboxId = useId();
 
-  const muted =
-    syncedDisplay.trim() === ''
-      ? 'Snowflake: (empty) — leave blank to follow Snowflake'
-      : `Snowflake: ${syncedDisplay} — leave blank to follow Snowflake`;
+  const overriding = unlocked && value.trim() !== '';
+  const syncedShown = syncedDisplay.trim() === '' ? '(empty)' : syncedDisplay;
 
   return (
     <div className="grid gap-1.5 text-sm">
@@ -80,11 +81,23 @@ export function SyncedOverrideField({
           >
             override
           </Badge>
-        ) : null}
+        ) : (
+          <Badge
+            variant="secondary"
+            className="ml-1 h-4 px-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase"
+          >
+            synced
+          </Badge>
+        )}
       </Label>
 
-      {variant === 'select' ? (
-        <Select name={field} value={value} onValueChange={(v) => setValue((v as string) ?? '')}>
+      {/* The submitted value: '' while locked (revert/follow), override when unlocked. */}
+      <input type="hidden" name={field} value={unlocked ? value : ''} />
+
+      {!unlocked ? (
+        <Input value={syncedShown} disabled aria-label={`${label} (synced, locked)`} />
+      ) : variant === 'select' ? (
+        <Select value={value} onValueChange={(v) => setValue((v as string) ?? '')}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="(follow Snowflake)" />
           </SelectTrigger>
@@ -99,16 +112,33 @@ export function SyncedOverrideField({
         </Select>
       ) : (
         <Input
-          name={field}
           type={variant === 'number' ? 'number' : 'text'}
           step={variant === 'number' ? (step ?? 'any') : undefined}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder="blank = follow Snowflake"
+          autoFocus
         />
       )}
 
-      <span className="text-xs text-muted-foreground">{muted}</span>
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id={checkboxId}
+          checked={unlocked}
+          onCheckedChange={(checked) => {
+            const on = checked === true;
+            setUnlocked(on);
+            if (!on) setValue(''); // re-lock → revert to Snowflake on save
+          }}
+        />
+        <Label htmlFor={checkboxId} className="text-xs font-normal text-muted-foreground">
+          {unlocked ? 'Unlocked — manual value overrides Snowflake' : 'Unlock to override'}
+        </Label>
+      </div>
+
+      <span className="text-xs text-muted-foreground">
+        {unlocked ? `Snowflake: ${syncedShown} — re-lock to follow` : 'Locked to Snowflake sync'}
+      </span>
       {help ? <span className="text-xs text-muted-foreground">{help}</span> : null}
     </div>
   );

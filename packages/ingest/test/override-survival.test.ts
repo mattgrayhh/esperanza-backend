@@ -95,7 +95,16 @@ describe('override survival across a full ingest cycle', () => {
       bathroomCount: 2.5,
       halfBathroomCount: 1,
       constructionStage: 'Hang Drywall',
-      ratifiedSalesPrice: 365000, // changed 350000 → 365000
+      ratifiedSalesPrice: 365000,
+      elevationType: null,
+      materialType: null,
+      isModelHome: 0,
+      startType: null,
+      constructionStageIndex: null,
+      moveInDate: null,
+      estimatedSettlementDate: null,
+      lotNumber: null,
+ // changed 350000 → 365000
     };
 
     const existing = readExistingQmis(db);
@@ -153,6 +162,15 @@ describe('override survival across a full ingest cycle', () => {
       halfBathroomCount: null,
       constructionStage: '',
       ratifiedSalesPrice: 0,
+      elevationType: null,
+      materialType: null,
+      isModelHome: 0,
+      startType: null,
+      constructionStageIndex: null,
+      moveInDate: null,
+      estimatedSettlementDate: null,
+      lotNumber: null,
+
     };
     const { messages } = diff([sfRow], [], readExistingQmis(db), emptyLookups());
     for (const m of messages) await applyMessage(env, m);

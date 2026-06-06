@@ -38,6 +38,18 @@ export const QMI_SYNCED_COLUMNS = {
   synced_elevation: 'elevation',
   synced_construction_stage: 'constructionStage',
 
+  // 0007 sync expansion — converted/new pairs
+  synced_move_in_date: 'moveInDate',
+  synced_lot_number: 'lotNumber',
+  synced_elevation_type: 'elevationType',
+  synced_material_type: 'materialType',
+  synced_is_model_home: 'isModelHome',
+
+  // 0007 synced-only operational facts (no override pair)
+  synced_start_type: 'startType',
+  synced_construction_stage_index: 'constructionStageIndex',
+  synced_estimated_settlement_date: 'estimatedSettlementDate',
+
   // link-by-id (Decision #11) + legacy singleSelect name mirror
   synced_city_id: 'cityId',
   synced_city_name: 'cityName',
@@ -63,9 +75,12 @@ export const QMI_SYNCED_COLUMN_NAMES = Object.freeze(
   Object.keys(QMI_SYNCED_COLUMNS)
 ) as ReadonlyArray<keyof typeof QMI_SYNCED_COLUMNS>;
 
-/** The ONLY Communities column ingest may write (Decision #6: 1 synced field). */
+/** The Communities columns ingest may write (0007: 4 synced_/override_ pairs). */
 export const COMMUNITY_SYNCED_COLUMNS = {
-  square_footage_range: 'squareFootageRange',
+  synced_square_footage_range: 'squareFootageRange',
+  synced_bed_count: 'bedCountRange',
+  synced_bath_count: 'bathCountRange',
+  synced_price_from: 'priceFrom',
 } as const;
 
 export const COMMUNITY_SYNCED_COLUMN_NAMES = Object.freeze(
@@ -84,6 +99,14 @@ export interface SyncedQmiValues {
   totalSquareFootage?: number | null;
   elevation?: string | null;
   constructionStage?: string | null;
+  moveInDate?: string | null;
+  lotNumber?: string | null;
+  elevationType?: string | null;
+  materialType?: string | null;
+  isModelHome?: number | null;
+  startType?: string | null;
+  constructionStageIndex?: number | null;
+  estimatedSettlementDate?: string | null;
   cityId?: string | null;
   cityName?: string | null;
   communityId?: string | null;
@@ -99,6 +122,34 @@ export interface SyncedQmiValues {
 
 export interface SyncedCommunityValues {
   squareFootageRange?: string | null;
+  bedCountRange?: string | null;
+  bathCountRange?: string | null;
+  priceFrom?: number | null;
+}
+
+/** The ONLY Floor Plans columns ingest may write (0007: DM_FLOOR_PLAN feed). */
+export const FLOOR_PLAN_SYNCED_COLUMNS = {
+  synced_bedroom_min: 'bedroomMin',
+  synced_bedroom_max: 'bedroomMax',
+  synced_bathroom_min: 'bathroomMin',
+  synced_bathroom_max: 'bathroomMax',
+  synced_living_square_footage: 'livingSquareFootage',
+  synced_total_square_footage: 'totalSquareFootage',
+  synced_starting_price: 'startingPrice',
+} as const;
+
+export const FLOOR_PLAN_SYNCED_COLUMN_NAMES = Object.freeze(
+  Object.keys(FLOOR_PLAN_SYNCED_COLUMNS)
+) as ReadonlyArray<keyof typeof FLOOR_PLAN_SYNCED_COLUMNS>;
+
+export interface SyncedFloorPlanValues {
+  bedroomMin?: number | null;
+  bedroomMax?: number | null;
+  bathroomMin?: number | null;
+  bathroomMax?: number | null;
+  livingSquareFootage?: number | null;
+  totalSquareFootage?: number | null;
+  startingPrice?: number | null;
 }
 
 /**
@@ -125,7 +176,7 @@ export function applySynced(values: SyncedQmiValues): Record<string, unknown> {
   return patch;
 }
 
-/** Communities variant — only square_footage_range can ever be produced. */
+/** Communities variant — only the 0007 synced community columns can be produced. */
 export function applySyncedCommunity(
   values: SyncedCommunityValues
 ): Record<string, unknown> {
@@ -145,6 +196,30 @@ export function applySyncedCommunity(
  */
 const QMI_ALLOWED = new Set<string>(QMI_SYNCED_COLUMN_NAMES);
 const COMMUNITY_ALLOWED = new Set<string>(COMMUNITY_SYNCED_COLUMN_NAMES);
+const FLOOR_PLAN_ALLOWED = new Set<string>(FLOOR_PLAN_SYNCED_COLUMN_NAMES);
+
+/** Floor Plans variant — only the DM_FLOOR_PLAN synced columns can be produced. */
+export function applySyncedFloorPlan(
+  values: SyncedFloorPlanValues
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  for (const column of FLOOR_PLAN_SYNCED_COLUMN_NAMES) {
+    const key = FLOOR_PLAN_SYNCED_COLUMNS[column];
+    const v = values[key];
+    if (v !== undefined) patch[column] = v;
+  }
+  return patch;
+}
+
+export function assertFloorPlanPatchAllowed(patch: Record<string, unknown>): void {
+  for (const col of Object.keys(patch)) {
+    if (!FLOOR_PLAN_ALLOWED.has(col)) {
+      throw new Error(
+        `ingest write-set violation: column "${col}" is not in the Floor Plans synced allow-list`
+      );
+    }
+  }
+}
 
 export function assertQmiPatchAllowed(patch: Record<string, unknown>): void {
   for (const col of Object.keys(patch)) {

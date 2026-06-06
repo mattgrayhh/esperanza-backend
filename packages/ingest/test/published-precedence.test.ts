@@ -62,6 +62,15 @@ const liveRow = (): SnowflakeQmiRow => ({
   halfBathroomCount: 0,
   constructionStage: 'Complete',
   ratifiedSalesPrice: 0,
+  elevationType: null,
+  materialType: null,
+  isModelHome: 0,
+  startType: null,
+  constructionStageIndex: null,
+  moveInDate: null,
+  estimatedSettlementDate: null,
+  lotNumber: null,
+
 });
 
 describe('published precedence (ingest may force =0 only, never =1)', () => {

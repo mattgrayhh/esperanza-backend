@@ -12,7 +12,7 @@ function db() {
   const d = new Database(':memory:');
   readdirSync(join(DB,'migrations')).filter(f=>f.endsWith('.sql')).sort().forEach(f=>d.exec(readFileSync(join(DB,'migrations',f),'utf8')));
   d.exec(readFileSync(join(DB,'views.sql'),'utf8'));
-  d.exec(`INSERT INTO floor_plans (id,name,published,description,total_square_footage,bedroom_max,elevation_gallery) VALUES ('fpE','Elm',1,'Elm desc',2571,4,'["https://x/e1.jpg"]')`);
+  d.exec(`INSERT INTO floor_plans (id,name,published,description,synced_total_square_footage,synced_bedroom_max,elevation_gallery) VALUES ('fpE','Elm',1,'Elm desc',2571,4,'["https://x/e1.jpg"]')`);
   d.exec(`INSERT INTO qmi (id,published,synced_address,synced_floor_plan_id,override_price) VALUES ('q1',1,'6529 Anaqua Loop','fpE',379990)`);
   return d1FromSqlite(d);
 }

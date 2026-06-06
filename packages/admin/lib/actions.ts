@@ -40,14 +40,13 @@ import {
 import {
   buildOverrideWrite,
   buildOverrideAudit,
-  type QmiOverridableField,
 } from '@esperanza/db/override';
 import type { PromoTargetType } from '@esperanza/db/promo';
 import { affectedRenderKeys } from '@esperanza/db/pdf-invalidate';
 import { ensurePdfRender } from '@esperanza/db/pdf-ensure';
 import { getDb, idColumn, type Db } from './db';
 import { getCurrentUser, isAdmin } from './auth';
-import { getEntity, isQmiOverrideField, type EntityKey } from './entities';
+import { getEntity, isOverrideField, asOverridableEntity, type EntityKey } from './entities';
 import { columnMapForEntity, coerceForColumn, toDrizzlePatch } from './fields';
 import { publishGateColumn } from './field-config';
 import { statusGate, statusPatch, deriveStatus } from './status';
@@ -296,14 +295,15 @@ export async function saveEntity(
     // Only accept fields we know how to map to a column.
     const col = colMap[field];
 
-    // --- QMI synced write-set: route through override.ts ---
-    if (def.key === 'qmi' && isQmiOverrideField(field)) {
-      const ofield = field as QmiOverridableField;
+    // --- synced write-sets (qmi / communities / floor_plans): route through override.ts ---
+    const overridableEntity = asOverridableEntity(def.key);
+    if (overridableEntity && isOverrideField(def.key, field)) {
+      const ofield = field;
       const value = rawValue === '' ? null : coerceForColumn(def.key, ofield, rawValue);
       const prevOverride = row[`override_${ofield}`];
       const writePatch = buildOverrideWrite(ofield, value, { actor, at });
       Object.assign(patch, writePatch);
-      const auditRow = buildOverrideAudit(id, ofield, prevOverride, value, { actor, at });
+      const auditRow = buildOverrideAudit(id, ofield, prevOverride, value, { actor, at }, overridableEntity);
       audits.push({
         entity: auditRow.entity,
         entityId: auditRow.entity_id,

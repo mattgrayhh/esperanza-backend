@@ -5,10 +5,13 @@
 // Worker share one set of types. The SQL migration is the source of truth for
 // the live DB; this file is the typed mirror (kept in lockstep).
 //
-// Buckets:
-//   synced_/override_ pairs  → QMI Snowflake write-set only (price is the one
-//                              also anchored by last_synced_price).
-//   square_footage_range     → the only synced Communities field (no pair).
+// Buckets (0007 expanded the synced_/override_ pattern across entities):
+//   synced_/override_ pairs  → Snowflake write-sets on QMI, Communities (sqft
+//                              range, bed/bath ranges, price_from) and Floor
+//                              Plans (beds/baths/sqft/starting price). QMI price
+//                              is additionally anchored by last_synced_price.
+//   QMI synced-only          → start_type, construction_stage_index,
+//                              estimated_settlement_date (no override pair).
 //   cities counts            → synced pricing/availability (no pair).
 //   floor_plans.syncedImageUrl → external-synced (OneDrive→R2, no pair).
 //   everything else          → plain admin-owned columns.
@@ -69,6 +72,23 @@ export const qmi = sqliteTable(
 
     syncedConstructionStage: text('synced_construction_stage'),
     overrideConstructionStage: text('override_construction_stage'),
+
+    // 0007 Snowflake sync expansion — converted/new pairs
+    syncedMoveInDate: text('synced_move_in_date'), // ESTIMATED_BUYER_SIGN_OFF
+    overrideMoveInDate: text('override_move_in_date'),
+    syncedLotNumber: text('synced_lot_number'), // FCT_HOUSESALES.LOTNUMBER
+    overrideLotNumber: text('override_lot_number'),
+    syncedElevationType: text('synced_elevation_type'), // Tuscan/Traditional/…
+    overrideElevationType: text('override_elevation_type'),
+    syncedMaterialType: text('synced_material_type'), // Stucco/Hardie/Brick
+    overrideMaterialType: text('override_material_type'),
+    syncedIsModelHome: integer('synced_is_model_home'), // RHODES_MODEL_FLAG='Model'
+    overrideIsModelHome: integer('override_is_model_home'), // NULL = follow Snowflake
+
+    // 0007 synced-only operational facts (no override pair)
+    syncedStartType: text('synced_start_type'), // 'SPEC' | 'Pre-Sold'
+    syncedConstructionStageIndex: integer('synced_construction_stage_index'),
+    syncedEstimatedSettlementDate: text('synced_estimated_settlement_date'),
 
     // link-by-id (Plan v2 #11) + legacy singleSelect name mirror
     syncedCityId: text('synced_city_id'),
@@ -144,13 +164,10 @@ export const qmi = sqliteTable(
     upgrades: text('upgrades'),
     incentive: text('incentive'),
     virtualTourUrl: text('virtual_tour_url'),
-    elevationType: text('elevation_type'),
     mlsId: text('mls_id'),
     mlsNumber: text('mls_number'),
-    lotNumber: text('lot_number'),
     yearBuilt: integer('year_built'),
     lotSizeSqft: integer('lot_size_sqft'),
-    moveInDate: text('move_in_date'),
     hersScore: integer('hers_score'),
     armRate: text('arm_rate'),
     promoText: text('promo_text'),
@@ -194,8 +211,9 @@ export const communities = sqliteTable(
   {
     id: text('id').primaryKey(),
 
-    // the ONLY synced community field (no override pair)
-    squareFootageRange: text('square_footage_range'),
+    // 0007: every Snowflake-fed community field is a synced_/override_ pair
+    syncedSquareFootageRange: text('synced_square_footage_range'),
+    overrideSquareFootageRange: text('override_square_footage_range'),
 
     name: text('name'),
     slug: text('slug'),
@@ -209,9 +227,12 @@ export const communities = sqliteTable(
     masterPlanned: integer('master_planned', { mode: 'boolean' }).notNull().default(false),
     comingSoon: integer('coming_soon', { mode: 'boolean' }).notNull().default(false),
 
-    priceFrom: real('price_from'),
-    bedCount: text('bed_count'),
-    bathCount: text('bath_count'),
+    syncedPriceFrom: real('synced_price_from'), // MIN(base price) per development
+    overridePriceFrom: real('override_price_from'),
+    syncedBedCount: text('synced_bed_count'), // "min - max" range string
+    overrideBedCount: text('override_bed_count'),
+    syncedBathCount: text('synced_bath_count'),
+    overrideBathCount: text('override_bath_count'),
 
     description: text('description'),
     amenities: text('amenities'),
@@ -331,15 +352,23 @@ export const floorPlans = sqliteTable(
     // tri-state status: published + coming_soon → Draft / Coming Soon / Live (migration 0003)
     comingSoon: integer('coming_soon', { mode: 'boolean' }).notNull().default(false),
     collection: text('collection'),
-    startingPrice: real('starting_price'),
-    bedroomMin: integer('bedroom_min'),
-    bedroomMax: integer('bedroom_max'),
-    bathroomMin: real('bathroom_min'),
-    bathroomMax: real('bathroom_max'),
+    // 0007: DM_FLOOR_PLAN-fed synced_/override_ pairs (first Snowflake-synced FP fields)
+    syncedStartingPrice: real('synced_starting_price'), // MIN(FLOORPLAN_SALESPRICE) per model
+    overrideStartingPrice: real('override_starting_price'),
+    syncedBedroomMin: integer('synced_bedroom_min'),
+    overrideBedroomMin: integer('override_bedroom_min'),
+    syncedBedroomMax: integer('synced_bedroom_max'),
+    overrideBedroomMax: integer('override_bedroom_max'),
+    syncedBathroomMin: real('synced_bathroom_min'),
+    overrideBathroomMin: real('override_bathroom_min'),
+    syncedBathroomMax: real('synced_bathroom_max'),
+    overrideBathroomMax: real('override_bathroom_max'),
+    syncedLivingSquareFootage: integer('synced_living_square_footage'),
+    overrideLivingSquareFootage: integer('override_living_square_footage'),
+    syncedTotalSquareFootage: integer('synced_total_square_footage'),
+    overrideTotalSquareFootage: integer('override_total_square_footage'),
     carGarageCount: integer('car_garage_count'),
     storiesCount: integer('stories_count'),
-    livingSquareFootage: integer('living_square_footage'),
-    totalSquareFootage: integer('total_square_footage'),
     masterBedLocation: text('master_bed_location'),
     hersScore: integer('hers_score'),
 

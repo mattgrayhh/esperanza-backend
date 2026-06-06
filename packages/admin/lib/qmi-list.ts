@@ -76,11 +76,11 @@ const QMI_LIST_SQL = `
     COALESCE(q.override_floor_plan_id, q.synced_floor_plan_id) AS floor_plan_id,
     COALESCE(c.name,  q.synced_community_name)                 AS community_name,
     COALESCE(fp.name, q.synced_floor_plan_name)                AS floor_plan_name,
-    fp.starting_price                                          AS fp_starting_price,
+    COALESCE(fp.override_starting_price, fp.synced_starting_price) AS fp_starting_price,
     COALESCE(q.override_price, q.synced_price)                 AS price,
     q.override_price                                           AS override_price,
     fp.fp_image                                                AS fp_image,
-    q.move_in_date                                             AS move_in_date,
+    COALESCE(q.override_move_in_date, q.synced_move_in_date)  AS move_in_date,
     q.available_now                                            AS available_now,
     q.published                                                AS published,
     q.last_modified_time                                       AS last_modified_time

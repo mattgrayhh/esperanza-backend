@@ -39,8 +39,8 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
       name: 'Kestrel',
       slug: 'kestrel',
       published: 1,
-      total_square_footage: 2450, // → FP: Total SqFt fallback
-      starting_price: 389000, // → FP: Starting Price
+      synced_total_square_footage: 2450, // → FP: Total SqFt fallback
+      synced_starting_price: 389000, // → FP: Starting Price
       fp_image: '[{"url":"https://media.esperanzahomes.com/fp/kestrel.jpg"}]',
     });
     insertRow(db, 'qmi', {

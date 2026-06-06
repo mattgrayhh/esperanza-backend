@@ -82,11 +82,13 @@ describe('applySynced structural allow-list', () => {
     expect(() => assertQmiPatchAllowed({ synced_address: 'x', synced_price: 1 })).not.toThrow();
   });
 
-  it('community allow-list permits only square_footage_range', () => {
-    const patch = applySyncedCommunity({ squareFootageRange: '1850 - 2400' });
-    expect(patch).toEqual({ square_footage_range: '1850 - 2400' });
+  it('community allow-list permits only the 0007 synced community columns', () => {
+    const patch = applySyncedCommunity({ squareFootageRange: '1,850 - 2,400' });
+    expect(patch).toEqual({ synced_square_footage_range: '1,850 - 2,400' });
     expect(() => assertCommunityPatchAllowed({ name: 'hacked' })).toThrowError(/write-set violation/);
-    expect(() => assertCommunityPatchAllowed({ square_footage_range: '1850' })).not.toThrow();
+    // the pre-0007 plain column no longer exists and is therefore forbidden
+    expect(() => assertCommunityPatchAllowed({ square_footage_range: '1850' })).toThrowError(/write-set violation/);
+    expect(() => assertCommunityPatchAllowed({ synced_square_footage_range: '1,850', synced_price_from: 1 })).not.toThrow();
   });
 });
 
