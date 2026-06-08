@@ -39,6 +39,11 @@ export const COMMUNITY_NAME_MAP: Record<string, string> = {
   Cascada: 'Cascada at Tres Lagos',
   'Villas on Freddy': 'Villas On Freddy',
   'Retama Village at Bentsen Palm': 'Retama Village (55+) at Bentsen Palm',
+  // Bare DEVELOPMENT_NAME → the admin community's full name (same community,
+  // confirmed by the live-site slugs tanglewood-at-bentsen-palm /
+  // retama-village-55-at-bentsen-palm). Resolves previously-unresolved dev links.
+  Tanglewood: 'Tanglewood at Bentsen Palm',
+  'Retama Village': 'Retama Village (55+) at Bentsen Palm',
   // Development registry name for the Aquero community (no DM_HOUSE rows yet as
   // of 2026-06-06; pre-mapped so houses link up the day they appear).
   'Aquero V': 'Aquero',
