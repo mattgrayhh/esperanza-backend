@@ -54,6 +54,15 @@ describe('normalizeFloorPlanName', () => {
     expect(normalizeFloorPlanName('Allegrini')).toBe('Allegrini');
     expect(normalizeFloorPlanName('Lunelli')).toBe('Lunelli'); // trailing ll INSIDE a word untouched
   });
+
+  it('maps Snowflake-only name variants to the existing admin record name', () => {
+    expect(normalizeFloorPlanName('Lorenzo')).toBe('San Lorenzo');
+    expect(normalizeFloorPlanName('Lorenzo II')).toBe('San Lorenzo II');
+    expect(normalizeFloorPlanName('Lorenzo - ll')).toBe('San Lorenzo II'); // roman rule THEN alias
+    expect(normalizeFloorPlanName('RV Dlx Coach')).toBe('RV Deluxe Coach House');
+    expect(normalizeFloorPlanName('Cenizo - RV')).toBe('Cenizo');
+    expect(normalizeFloorPlanName('Lorenzo III')).toBe('Lorenzo III'); // no III record → unchanged
+  });
 });
 
 describe('countRange', () => {

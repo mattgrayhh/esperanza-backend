@@ -54,8 +54,21 @@ export function normalizeCommunityName(raw: string): string {
  * ("Acuna - ll", "Francisco - l") where the admin uses "Acuna II" /
  * "Francisco I". Other names pass through untouched.
  */
+// Snowflake model names that don't match the admin floor-plan record name. Each
+// maps a normalized Snowflake name → the existing admin record's name so the link
+// resolves (verified same plan by specs + shared communities + asset filenames:
+// e.g. admin "San Lorenzo" stores LORENZO_*/Lorenzo_I_* assets and serves
+// Aqualina at Tres Lagos + Sapphire at La Sienna — exactly the SF Lorenzo homes).
+const FLOOR_PLAN_ALIASES: Record<string, string> = {
+  'lorenzo': 'San Lorenzo',
+  'lorenzo ii': 'San Lorenzo II',
+  'rv dlx coach': 'RV Deluxe Coach House',
+  'cenizo - rv': 'Cenizo',
+};
+
 export function normalizeFloorPlanName(raw: string): string {
-  return raw.trim().replace(/\s*-\s*(l{1,3})$/i, (_m, ls: string) => ' ' + 'I'.repeat(ls.length));
+  const n = raw.trim().replace(/\s*-\s*(l{1,3})$/i, (_m, ls: string) => ' ' + 'I'.repeat(ls.length));
+  return FLOOR_PLAN_ALIASES[n.toLowerCase()] ?? n;
 }
 
 const cityList = SNOWFLAKE_CITIES.map((c) => `'${c}'`).join(',');
