@@ -44,7 +44,7 @@ jobs:
         id: changes
         run: |
           set -euo pipefail
-          ALL="admin api ingest framer-push renderings pdf"
+          ALL="admin api ingest framer-push pdf"
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.deploy_all }}" = "true" ]; then
             echo "pkgs=$ALL" >> "$GITHUB_OUTPUT"; exit 0
