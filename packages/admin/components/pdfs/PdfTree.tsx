@@ -28,20 +28,32 @@ import type { PdfCityNode, PdfLeaf } from '@/lib/pdf-tree';
 // =============================================================================
 // Status dot
 // =============================================================================
+// Display model: four buckets — Live, Rendering, Missing, Error.
+// DB statuses fold in: 'stale' → Live (a stale PDF still exists & serves),
+// 'not_built' → Missing.
 const STATUS_DOT: Record<string, string> = {
   live: 'bg-green-500',
-  stale: 'bg-amber-400',
+  stale: 'bg-green-500',
+  rendering: 'bg-blue-500',
   not_built: 'bg-muted-foreground/40',
   error: 'bg-red-500',
-  rendering: 'bg-blue-500',
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  live: 'Live',
+  stale: 'Live',
+  rendering: 'Rendering',
+  not_built: 'Missing',
+  error: 'Error',
 };
 
 function StatusDot({ status }: { status: string }) {
+  const label = STATUS_LABEL[status] ?? 'Missing';
   return (
     <span
       className={cn('inline-block size-2 shrink-0 rounded-full', STATUS_DOT[status] ?? 'bg-muted-foreground/40')}
-      title={status}
-      aria-label={status}
+      title={label}
+      aria-label={label}
     />
   );
 }
@@ -288,9 +300,8 @@ export function PdfTree({
         <span className="font-medium">Status:</span>
         {[
           { key: 'live', label: 'Live' },
-          { key: 'stale', label: 'Stale' },
           { key: 'rendering', label: 'Rendering' },
-          { key: 'not_built', label: 'Not built' },
+          { key: 'not_built', label: 'Missing' },
           { key: 'error', label: 'Error' },
         ].map(({ key, label }) => (
           <span key={key} className="flex items-center gap-1">

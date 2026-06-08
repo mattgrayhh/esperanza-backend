@@ -447,8 +447,11 @@ function AssetTile({
       {/* Meta + actions */}
       <div className="flex items-start gap-1 p-2.5">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium text-foreground" title={asset.filename}>
-            {asset.filename}
+          <div
+            className="truncate text-sm font-medium text-foreground"
+            title={asset.caption || asset.filename}
+          >
+            {asset.caption || asset.filename}
           </div>
           <div className="truncate text-xs text-muted-foreground">
             {asset.planName || asset.elevation || asset.slug || '—'}

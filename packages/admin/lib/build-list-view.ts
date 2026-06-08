@@ -50,6 +50,18 @@ function selectSqlFor(key: EntityKey): string {
       ORDER BY last_modified_time DESC
       LIMIT ${LIMIT}`;
   }
+  if (key === 'floor_plans') {
+    // The list config references effective columns (starting_price, bedroom_min/max) that
+    // don't exist as bare columns — only synced_/override_ pairs do (Snowflake DM_FLOOR_PLAN
+    // sync, migration 0007). Project the COALESCE(override, synced) effective values, same
+    // as QMI, so the columns render instead of showing blank.
+    return `SELECT *,
+        COALESCE(override_starting_price, synced_starting_price) AS starting_price,
+        COALESCE(override_bedroom_min,    synced_bedroom_min)    AS bedroom_min,
+        COALESCE(override_bedroom_max,    synced_bedroom_max)    AS bedroom_max
+      FROM floor_plans
+      LIMIT ${LIMIT}`;
+  }
   return `SELECT * FROM ${tableName(key)} LIMIT ${LIMIT}`;
 }
 
@@ -113,6 +125,35 @@ async function loadCityNameMap(): Promise<Map<string, string>> {
   return m;
 }
 
+/** [12][13] Live per-city rollups for the /cities list, replacing the Snowflake-synced
+ *  community_count / move_in_homes_count display values:
+ *   • communities — ALL communities in the city (published or not).
+ *   • moveIns     — QMIs in the city that are available NOW (available_now=1).
+ *  Both key on cities.id; communities.city_id and qmi COALESCE(override_city_id,
+ *  synced_city_id) reference it (verified: 31/33 communities, 45/45 available QMIs map). */
+async function loadCityRollups(): Promise<{ communities: Map<string, number>; moveIns: Map<string, number> }> {
+  const db = getReadDb();
+  const communities = new Map<string, number>();
+  const moveIns = new Map<string, number>();
+
+  const cRows = await db.all<{ cid: unknown; n: unknown }>(
+    sql.raw(`SELECT city_id AS cid, COUNT(*) AS n FROM communities
+             WHERE city_id IS NOT NULL AND city_id <> '' GROUP BY city_id`),
+  );
+  for (const r of cRows) communities.set(String(r.cid), Number(r.n) || 0);
+
+  const qRows = await db.all<{ cid: unknown; n: unknown }>(
+    sql.raw(`SELECT COALESCE(NULLIF(override_city_id, ''), synced_city_id) AS cid, COUNT(*) AS n
+             FROM qmi
+             WHERE available_now = 1
+               AND COALESCE(NULLIF(override_city_id, ''), synced_city_id) IS NOT NULL
+             GROUP BY cid`),
+  );
+  for (const r of qRows) moveIns.set(String(r.cid), Number(r.n) || 0);
+
+  return { communities, moveIns };
+}
+
 export async function buildListView(key: EntityKey): Promise<ListView> {
   // ENGINE SWAP: list columns now come from field_definitions (D1), with a SAFE FALLBACK
   // to the static lib/field-config.ts when the entity has zero rows. Same `listColumns`
@@ -129,6 +170,9 @@ export async function buildListView(key: EntityKey): Promise<ListView> {
       ? await loadCityNameMap()
       : null;
 
+  // [12][13] /cities shows LIVE rollups, not the synced count columns.
+  const cityRollups = key === 'cities' ? await loadCityRollups() : null;
+
   const sg = statusGate(key);
   const now = new Date().toISOString();
   const rows: ListRow[] = raw.map((r) => ({
@@ -138,6 +182,12 @@ export async function buildListView(key: EntityKey): Promise<ListView> {
         const cid = r['city_id'];
         const resolved = cid == null || cid === '' ? '' : (cityNames.get(String(cid)) ?? String(cid));
         return { field: c.field, value: resolved, kind: c.kind };
+      }
+      if (cityRollups && c.field === 'community_count') {
+        return { field: c.field, value: fmt(cityRollups.communities.get(String(r['id'])) ?? 0, c.kind), kind: c.kind };
+      }
+      if (cityRollups && c.field === 'move_in_homes_count') {
+        return { field: c.field, value: fmt(cityRollups.moveIns.get(String(r['id'])) ?? 0, c.kind), kind: c.kind };
       }
       return {
         field: c.field,

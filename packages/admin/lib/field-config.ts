@@ -288,7 +288,6 @@ const communities: EntityFieldConfig = {
     { field: 'published', label: 'Published', kind: 'publish' },
     { field: 'coming_soon', label: 'Coming Soon', kind: 'boolean' },
     { field: 'price_from', label: 'Price From', kind: 'currency' },
-    { field: 'city_id', label: 'City' },
   ],
   fields: [
     { field: 'square_footage_range', label: 'Sq Ft Range', widget: 'syncedOverride', bucket: 'override', halfWidth: true },

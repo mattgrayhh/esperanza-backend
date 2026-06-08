@@ -189,10 +189,10 @@ function AddressCell({ row }: { row: QmiRow }) {
         <button
           type="button"
           onClick={copy}
-          title="Copy Housemaster number"
+          title="Copy House ID"
           className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
-          <span className="tabular-nums">Housemaster {row.housenumber}</span>
+          <span className="tabular-nums">House ID: {row.housenumber}</span>
           {copied ? (
             <Check className="size-3 text-status-published" />
           ) : (
@@ -489,19 +489,8 @@ export function QmiDataTable({ rows, truncated }: QmiDataTableProps) {
 
   const columns = React.useMemo(buildColumns, [])
 
-  // Tab filter is applied to the data BEFORE the table (cheap, keeps counts honest).
+  // Tab filter is applied to the data BEFORE the table (cheap).
   const tabRows = React.useMemo(() => rows.filter((r) => matchesTab(r, tab)), [rows, tab])
-
-  // Per-tab counts for the tab labels.
-  const counts = React.useMemo(
-    () => ({
-      all: rows.length,
-      published: rows.filter((r) => r.published).length,
-      draft: rows.filter((r) => !r.published).length,
-      available: rows.filter((r) => r.availableNow).length,
-    }),
-    [rows],
-  )
 
   const table = useReactTable({
     data: tabRows,
@@ -551,10 +540,11 @@ export function QmiDataTable({ rows, truncated }: QmiDataTableProps) {
               <CircleHelp className="size-4" />
             </Button>
           </span>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {counts.all} total
-            {truncated ? ` · showing first ${rows.length}` : ""}
-          </p>
+          {truncated ? (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Showing first {rows.length}
+            </p>
+          ) : null}
         </div>
         <Button render={<Link href={`/${SEGMENT}/new`} />}>
           <Plus className="size-4" />
@@ -568,12 +558,6 @@ export function QmiDataTable({ rows, truncated }: QmiDataTableProps) {
           {TABS.map((t) => (
             <TabsTrigger key={t.value} value={t.value}>
               {t.label}
-              <Badge
-                variant="secondary"
-                className="ml-1 h-4 px-1 text-[10px] leading-none tabular-nums"
-              >
-                {counts[t.value]}
-              </Badge>
             </TabsTrigger>
           ))}
         </TabsList>
@@ -586,7 +570,7 @@ export function QmiDataTable({ rows, truncated }: QmiDataTableProps) {
           <Input
             value={globalFilter}
             onChange={(e) => setGlobalFilter(e.target.value)}
-            placeholder="Search address, housemaster, community…"
+            placeholder="Search address, community…"
             className="pl-8"
             aria-label="Search quick move-ins"
           />
