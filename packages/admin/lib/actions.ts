@@ -369,6 +369,75 @@ export async function saveEntity(
 }
 
 // =============================================================================
+// matchAndRenderQmi — assign a floor plan (+ optional synced-field overrides) to an
+// unmatched draft and kick off the brochure PDF render. Reuses saveEntity for the
+// write, so floor_plan_id routes through buildOverrideWrite, gets audited, enqueues
+// the Framer push, and (via postWrite) ensures the pdf_renders row + enqueues a render
+// — all unchanged. Then it flags that render 'pending' so the UI shows in-flight
+// status. It does NOT publish; that stays the dedicated togglePublished step.
+// =============================================================================
+export async function matchAndRenderQmi(
+  qmiId: string,
+  input: { floorPlanId: string; overrides?: Record<string, string> }
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!qmiId) return { ok: false, error: 'Missing record id' };
+  if (!input.floorPlanId || input.floorPlanId.trim() === '') {
+    return { ok: false, error: 'Choose a floor plan first' };
+  }
+
+  const fd = new FormData();
+  fd.set('floor_plan_id', input.floorPlanId);
+  for (const [k, v] of Object.entries(input.overrides ?? {})) {
+    fd.set(k, v);
+  }
+
+  const res = await saveEntity('qmi', qmiId, fd);
+  if (!res.ok) return res;
+
+  // postWrite already ensured the pdf_renders row and enqueued a render. Flag it
+  // 'pending' so the UI reflects an in-flight render (the PDF worker moves it to
+  // 'rendering' then 'live'; in environments without RENDER_Q it simply stays
+  // 'pending' rather than erroring).
+  try {
+    const d1 = getCloudflareContext().env.DB as unknown as D1Database | undefined;
+    await d1
+      ?.prepare(
+        `UPDATE pdf_renders SET status='pending' WHERE type='qmi' AND entity_id=? AND status NOT IN ('rendering','live')`
+      )
+      .bind(qmiId)
+      .run();
+  } catch (e) {
+    console.error('[matchAndRenderQmi:pending]', e);
+  }
+
+  revalidatePath('/qmi/new');
+  revalidatePath('/qmi');
+  return { ok: true };
+}
+
+// Read-only: poll a QMI's brochure render status (drives the "Pending → link" UI on the
+// match page). Returns the pdf_renders status and the stable dynamic_pdf URL.
+export async function getQmiRenderStatus(
+  qmiId: string
+): Promise<{ status: string | null; url: string | null }> {
+  try {
+    const d1 = getCloudflareContext().env.DB as unknown as D1Database | undefined;
+    if (!d1) return { status: null, url: null };
+    const pr = (await d1
+      .prepare(`SELECT status FROM pdf_renders WHERE type='qmi' AND entity_id=? LIMIT 1`)
+      .bind(qmiId)
+      .first()) as { status: string | null } | null;
+    const q = (await d1
+      .prepare(`SELECT dynamic_pdf AS url FROM qmi WHERE id=? LIMIT 1`)
+      .bind(qmiId)
+      .first()) as { url: string | null } | null;
+    return { status: pr?.status ?? null, url: q?.url ?? null };
+  } catch {
+    return { status: null, url: null };
+  }
+}
+
+// =============================================================================
 // Custom-field (custom_fields JSON) value helpers for saveEntity.
 //
 //   parseCustomFieldsBlob — read the row's custom_fields TEXT into a flat object (tolerant
