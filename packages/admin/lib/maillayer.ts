@@ -25,6 +25,10 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 const DEFAULT_MAILLAYER_URL = 'https://mailer.hazardhouse.ai/api/transactional/send';
 
+// Esperanza Homes logo, hosted on the public R2 bucket (emails need an absolute URL;
+// SVG is unreliable across mail clients, so this is a 150x58 PNG).
+const LOGO_URL = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/brand/esperanza-logo.png';
+
 /**
  * Read MailLayer config. In the deployed Worker, wrangler [vars] + secrets live on
  * getCloudflareContext().env (the convention across this package — see actions.ts /
@@ -83,6 +87,7 @@ function buildHtml(input: PasswordEmailInput): string {
         <td align="center">
           <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;padding:32px;max-width:480px;">
             <tr><td>
+              <img src="${LOGO_URL}" alt="Esperanza Homes" width="150" height="58" style="display:block;margin:0 0 16px;height:auto;border:0;" />
               <h1 style="margin:0 0 16px;font-size:20px;font-weight:700;">Esperanza Homes Admin</h1>
               <p style="margin:0 0 12px;font-size:15px;line-height:1.5;">Hi ${greetingName},</p>
               <p style="margin:0 0 20px;font-size:15px;line-height:1.5;">${intro}</p>
@@ -109,17 +114,23 @@ export async function sendPasswordEmail(input: PasswordEmailInput): Promise<Send
     return { ok: false, error: 'MAILLAYER_API_KEY is not configured' };
   }
   const url = apiUrl?.trim() || DEFAULT_MAILLAYER_URL;
-  const subject = input.isReset
-    ? 'Your Esperanza Homes admin password was reset'
-    : 'Your Esperanza Homes admin password';
+
+  // First-name for the template subject `Let's get you logged in, {{firstName}} | …`.
+  const firstName = input.name?.trim().split(/\s+/)[0] || input.to.split('@')[0] || 'there';
 
   try {
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      // NO `from` — MailLayer binds the sender server-side. `content` is the full HTML
-      // body (overrides the template body); `subject` overrides the template subject.
-      body: JSON.stringify({ apiKey, to: input.to, subject, content: buildHtml(input) }),
+      // NO `from` — MailLayer binds the sender server-side. The Esperanza/Rhodes template
+      // owns the subject (`Let's get you logged in, {{firstName}} | Rhodes Enterprises`)
+      // and its body is a `{{Html}}` passthrough, so we DON'T override `subject`/`content`
+      // — we fill those template variables instead (firstName → subject, Html → body).
+      body: JSON.stringify({
+        apiKey,
+        to: input.to,
+        variables: { firstName, Html: buildHtml(input) },
+      }),
     });
 
     let payload: { success?: boolean; messageId?: string; message?: string } = {};
