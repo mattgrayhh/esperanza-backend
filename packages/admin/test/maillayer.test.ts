@@ -38,7 +38,7 @@ afterEach(() => {
 });
 
 describe('sendPasswordEmail', () => {
-  it('POSTs apiKey/to/subject/content (no `from`) to the default endpoint and returns ok', async () => {
+  it('POSTs apiKey/to/variables (firstName + Html; no from/subject/content) and returns ok', async () => {
     fetchMock.mockResolvedValue(okResponse({ success: true, messageId: 'm_123' }));
 
     const result = await sendPasswordEmail({
@@ -59,14 +59,30 @@ describe('sendPasswordEmail', () => {
     const body = JSON.parse(init.body);
     expect(body.apiKey).toBe('txn_test_key');
     expect(body.to).toBe('newuser@example.com');
-    expect(typeof body.subject).toBe('string');
-    expect(body.subject.length).toBeGreaterThan(0);
-    expect(body.content).toContain('hunter2-abc'); // the password is in the HTML body
-    expect(body.content).toContain('https://esperanza-admin.example.workers.dev'); // sign-in link
+    // The template owns the subject via {{firstName}}; the body is its {{Html}} var.
+    expect(body.variables.firstName).toBe('New'); // first word of "New User"
+    expect(body.variables.Html).toContain('hunter2-abc'); // the password
+    expect(body.variables.Html).toContain('https://esperanza-admin.example.workers.dev'); // sign-in link
     expect('from' in body).toBe(false); // MailLayer binds the sender server-side
+    expect('subject' in body).toBe(false); // template owns the subject — do NOT override
+    expect('content' in body).toBe(false); // body flows through the {{Html}} variable
   });
 
-  it('uses a reset-specific subject when isReset is true', async () => {
+  it('derives firstName from the email local-part when no name is given', async () => {
+    fetchMock.mockResolvedValue(okResponse({ success: true }));
+
+    await sendPasswordEmail({
+      to: 'dana@example.com',
+      password: 'p',
+      loginUrl: 'https://x.workers.dev',
+      isReset: false,
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body);
+    expect(body.variables.firstName).toBe('dana');
+  });
+
+  it('puts reset-specific copy in the Html body when isReset is true', async () => {
     fetchMock.mockResolvedValue(okResponse({ success: true, messageId: 'm_456' }));
 
     await sendPasswordEmail({
@@ -77,7 +93,7 @@ describe('sendPasswordEmail', () => {
     });
 
     const body = JSON.parse(fetchMock.mock.calls[0]![1].body);
-    expect(body.subject.toLowerCase()).toContain('reset');
+    expect(body.variables.Html.toLowerCase()).toContain('reset');
   });
 
   it('honors MAILLAYER_API_URL override', async () => {

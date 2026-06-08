@@ -109,17 +109,23 @@ export async function sendPasswordEmail(input: PasswordEmailInput): Promise<Send
     return { ok: false, error: 'MAILLAYER_API_KEY is not configured' };
   }
   const url = apiUrl?.trim() || DEFAULT_MAILLAYER_URL;
-  const subject = input.isReset
-    ? 'Your Esperanza Homes admin password was reset'
-    : 'Your Esperanza Homes admin password';
+
+  // First-name for the template subject `Let's get you logged in, {{firstName}} | …`.
+  const firstName = input.name?.trim().split(/\s+/)[0] || input.to.split('@')[0] || 'there';
 
   try {
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      // NO `from` — MailLayer binds the sender server-side. `content` is the full HTML
-      // body (overrides the template body); `subject` overrides the template subject.
-      body: JSON.stringify({ apiKey, to: input.to, subject, content: buildHtml(input) }),
+      // NO `from` — MailLayer binds the sender server-side. The Esperanza/Rhodes template
+      // owns the subject (`Let's get you logged in, {{firstName}} | Rhodes Enterprises`)
+      // and its body is a `{{Html}}` passthrough, so we DON'T override `subject`/`content`
+      // — we fill those template variables instead (firstName → subject, Html → body).
+      body: JSON.stringify({
+        apiKey,
+        to: input.to,
+        variables: { firstName, Html: buildHtml(input) },
+      }),
     });
 
     let payload: { success?: boolean; messageId?: string; message?: string } = {};
