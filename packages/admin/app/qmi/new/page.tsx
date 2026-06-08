@@ -1,51 +1,24 @@
 // =============================================================================
-// BESPOKE QMI "new record" route: /qmi/new.
+// BESPOKE QMI "new record" route: /qmi/new — the match-and-create surface.
 //
 // The bespoke static /qmi segment (app/qmi/page.tsx + app/qmi/[id]/page.tsx) SHADOWS
-// the dynamic /[entity] route for `qmi`. Without this file, /qmi/new would fall through
-// to /qmi/[id] with id="new" → buildQmiDetailView('new') returns null → 404. The QMI
-// list's "New" button links to /qmi/new, so this thin wrapper is required so that path
-// does not 404.
+// the dynamic /[entity] route for `qmi`, so this file owns /qmi/new (without it the
+// path would fall through to /qmi/[id] with id="new" → 404).
 //
-// It reuses the EXISTING createEntity server action (no new write path) exactly like the
-// generic app/[entity]/new/page.tsx, then redirects into the bespoke /qmi/{id} editor.
+// SERVER COMPONENT. Loads the unmatched Snowflake drafts (ingest-created, no floor plan
+// linked) + the floor-plan options, computes a suggested floor plan per house, and hands
+// them to the client form. The form matches a house to its floor plan and triggers the
+// brochure render via matchAndRenderQmi (reusing the existing write path). A blank-create
+// escape hatch (createEntity) lives inside the form. No data fetching on the client.
 // =============================================================================
-import { redirect } from 'next/navigation';
-import { createEntity } from '../../../lib/actions';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { loadOptions } from '../../../lib/select-options';
+import { loadUnmatchedHouses } from '../../../lib/qmi-match';
+import { QmiCreateMatch } from '@/components/qmi/qmi-create-match';
 
 export const dynamic = 'force-dynamic';
 
-export default function NewQmiPage() {
-  async function create() {
-    'use server';
-    const res = await createEntity('qmi');
-    if (res.ok) redirect(`/qmi/${res.id}`);
-    throw new Error(res.error);
-  }
-
-  return (
-    <Card size="default" className="mx-auto max-w-lg">
-      <CardHeader>
-        <CardTitle className="text-xl">New Quick Move-In</CardTitle>
-        <CardDescription>
-          Creates a blank QMI record (unpublished draft). You can assign a floor plan, fill in
-          fields, and publish it from the editor.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form action={create} className="flex gap-3">
-          <Button type="submit">Create record</Button>
-          <Button render={<a href="/qmi">Cancel</a>} variant="outline" />
-        </form>
-      </CardContent>
-    </Card>
-  );
+export default async function NewQmiPage() {
+  const floorPlans = await loadOptions('floor_plans');
+  const houses = await loadUnmatchedHouses(floorPlans);
+  return <QmiCreateMatch houses={houses} floorPlans={floorPlans} />;
 }
