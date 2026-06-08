@@ -11,13 +11,36 @@
 // =============================================================================
 
 import { revalidatePath } from 'next/cache';
+import { headers } from 'next/headers';
 import { eq, sql } from 'drizzle-orm';
 import { adminUsers, type AdminUser } from '@esperanza/db';
 import { getDb } from './db';
 import { getCurrentUserOrNull, isAdmin } from './auth';
 import { hashPassword, generatePassword } from './password';
+import { sendPasswordEmail } from './maillayer';
 
 const SETTINGS_PATH = '/settings/users';
+
+/**
+ * Absolute URL of the admin sign-in page, for the password email. Derived from the
+ * incoming request Host (consistent with the app's trustHost posture — no hardcoded
+ * URL), falling back to ADMIN_PUBLIC_URL when no request scope is available. Returns
+ * '' if neither is known; the email still sends (the link just won't render usefully).
+ */
+async function deriveLoginUrl(): Promise<string> {
+  try {
+    const h = await headers();
+    const host = h.get('host');
+    if (host) {
+      const proto = h.get('x-forwarded-proto') ?? 'https';
+      return `${proto}://${host}/login`;
+    }
+  } catch {
+    /* not in a request scope (e.g. unit test without next/headers) */
+  }
+  const fallback = process.env.ADMIN_PUBLIC_URL?.trim();
+  return fallback ? `${fallback.replace(/\/$/, '')}/login` : '';
+}
 
 // =============================================================================
 // List
@@ -41,6 +64,10 @@ export interface CreateUserResult {
   error?: string;
   /** Cleartext password — shown once. Null on error. */
   password?: string;
+  /** True if the password was emailed to the user via MailLayer (best-effort). */
+  emailed?: boolean;
+  /** Reason the email failed, when emailed is false. */
+  emailError?: string;
 }
 
 /**
@@ -80,8 +107,19 @@ export async function createAdminUser(data: {
     return { error: 'Failed to create user. Please try again.' };
   }
 
+  // Best-effort: email the generated password to the new user. A send failure never
+  // turns this into an error result — the cleartext is still returned for the admin to
+  // relay manually, and the on-screen one-time password remains the fallback.
+  const send = await sendPasswordEmail({
+    to: email,
+    name,
+    password,
+    loginUrl: await deriveLoginUrl(),
+    isReset: false,
+  });
+
   revalidatePath(SETTINGS_PATH);
-  return { password };
+  return { password, emailed: send.ok, emailError: send.ok ? undefined : send.error };
 }
 
 // =============================================================================
@@ -127,6 +165,10 @@ export async function updateAdminUser(
 export interface ResetPasswordResult {
   error?: string;
   password?: string;
+  /** True if the new password was emailed to the user via MailLayer (best-effort). */
+  emailed?: boolean;
+  /** Reason the email failed, when emailed is false. */
+  emailError?: string;
 }
 
 /** Generate + store a new random password. Returns the cleartext once. */
@@ -142,12 +184,21 @@ export async function resetAdminUserPassword(email: string): Promise<ResetPasswo
     .update(adminUsers)
     .set({ passwordHash })
     .where(eq(sql`lower(${adminUsers.email})`, normalEmail))
-    .returning({ email: adminUsers.email });
+    .returning({ email: adminUsers.email, name: adminUsers.name });
 
   if (updated.length === 0) return { error: 'User not found.' };
 
+  // Best-effort: email the new password to the user (see createAdminUser).
+  const send = await sendPasswordEmail({
+    to: updated[0]!.email,
+    name: updated[0]!.name ?? undefined,
+    password,
+    loginUrl: await deriveLoginUrl(),
+    isReset: true,
+  });
+
   revalidatePath(SETTINGS_PATH);
-  return { password };
+  return { password, emailed: send.ok, emailError: send.ok ? undefined : send.error };
 }
 
 // =============================================================================
