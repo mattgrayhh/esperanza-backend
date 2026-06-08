@@ -18,7 +18,7 @@ Cloudflare Workers. To force a redeploy without a code change, use the workflow'
 
 ## What gets deployed
 
-The monorepo has six deployable Workers:
+The monorepo has five deployable Workers:
 
 | Package | Worker | Deploy command |
 | --- | --- | --- |
@@ -26,11 +26,13 @@ The monorepo has six deployable Workers:
 | `packages/api` | `esperanza-api` | `wrangler deploy` |
 | `packages/ingest` | `esperanza-ingest` | `wrangler deploy` |
 | `packages/framer-push` | `esperanza-framer-push` | `wrangler deploy` |
-| `packages/renderings` | `esperanza-renderings` | `wrangler deploy` |
 | `packages/pdf` | `esperanza-pdf` | `wrangler deploy` |
 
+> `packages/renderings` (MS Graph OneDrive→R2 floor-plan renderings) is **descoped** —
+> it has no `src/` entry point and is intentionally NOT deployed by CI.
+
 CI deploys only the Workers whose package changed in the merge. A change to shared
-code (`packages/db`, the root lockfile/manifest, or `tsconfig`) redeploys all six.
+code (`packages/db`, the root lockfile/manifest, or `tsconfig`) redeploys all five.
 
 ## Required GitHub Actions secrets
 
