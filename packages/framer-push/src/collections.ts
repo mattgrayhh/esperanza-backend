@@ -247,6 +247,25 @@ const ftIf = (v: unknown) => {
   return html === '' ? undefined : formattedText(html);
 };
 const galIf = (urls: string[]) => (urls.length ? galleryArray(urls) : undefined);
+// The QMI detail page's availability badge ("/new-homes/available/:slug/") is bound
+// to the managed `move_in_date` field behind a static "AVAILABLE " prefix, so it was
+// rendering the raw ISO date — "AVAILABLE 2026-11-23". The listing cards instead show
+// a two-month window sourced from `availability_text` ("Available JUN/JUL 2026" /
+// "Available Now"). To make the detail badge match the listing WITHOUT a Framer canvas
+// rebind, push the de-prefixed availability_text as the move_in_date display value:
+//   "Available JUN/JUL 2026" -> "JUN/JUL 2026"  (badge -> "AVAILABLE JUN/JUL 2026")
+//   "Available Now"          -> "Now"           (badge -> "AVAILABLE NOW")
+// availability_text is the single source of truth (admin/ingest-authored); fall back to
+// the raw move_in_date only when it's absent. This managed field is consumed solely by
+// that badge — the cards read `availability_text` from the API and the XML feed reads D1.
+const availabilityBadgeValue = (availabilityText: unknown, moveInDate: unknown) => {
+  const at = asString(availabilityText);
+  if (at !== undefined) {
+    const stripped = at.replace(/^available\s*/i, '').trim();
+    return stripped === '' ? undefined : str(stripped);
+  }
+  return sIf(moveInDate);
+};
 
 // =============================================================================
 // Collection definition
@@ -504,7 +523,9 @@ const qmi: CollectionDef = {
       lot_number: sIf(row['lot_number']),
       year_built: nIf(row['year_built']),
       lot_size_sqft: nIf(row['lot_size_sqft']),
-      move_in_date: sIf(row['move_in_date']),
+      // Display value for the "AVAILABLE …" badge — de-prefixed availability_text
+      // ("JUN/JUL 2026" / "Now"), falling back to the raw date. See helper above.
+      move_in_date: availabilityBadgeValue(row['availability_text'], row['move_in_date']),
       estimated_monthly_payment: nIf(row['estimated_monthly_payment']),
       published: bool(asBool(row['published'])),
       coming_soon: bool(asBool(row['coming_soon'])), // live QMI (Managed) has the field (added 2026-06)
