@@ -93,6 +93,30 @@ function CopyablePassword({ password }: { password: string }) {
 }
 
 // =============================================================================
+// Email-delivery status line (shown beneath a generated password)
+// =============================================================================
+
+function EmailStatusLine({
+  status,
+  to,
+}: {
+  status: { emailed: boolean; emailError?: string };
+  to: string;
+}) {
+  if (status.emailed) {
+    return <p className="text-sm text-green-700">✓ Emailed to {to}</p>;
+  }
+  return (
+    <div className="space-y-0.5">
+      <p className="text-sm text-amber-700">⚠ Couldn't email it automatically — copy and share manually.</p>
+      {status.emailError && (
+        <p className="text-xs text-muted-foreground">{status.emailError}</p>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
 // Role badge
 // =============================================================================
 
@@ -131,6 +155,10 @@ export function UsersPage({ users: initialUsers, currentEmail }: UsersPageProps)
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [shownPassword, setShownPassword] = useState<string | null>(null);
+  // Outcome of the best-effort MailLayer send that accompanies a generated password.
+  const [emailStatus, setEmailStatus] = useState<{ emailed: boolean; emailError?: string } | null>(
+    null
+  );
 
   // Form state for Add / Edit dialogs
   const [formEmail, setFormEmail] = useState('');
@@ -143,6 +171,7 @@ export function UsersPage({ users: initialUsers, currentEmail }: UsersPageProps)
     setFormRole('editor');
     setError(null);
     setShownPassword(null);
+    setEmailStatus(null);
     setDialog({ kind: 'add' });
   }
 
@@ -156,6 +185,7 @@ export function UsersPage({ users: initialUsers, currentEmail }: UsersPageProps)
   function openReset(user: AdminUser) {
     setError(null);
     setShownPassword(null);
+    setEmailStatus(null);
     setDialog({ kind: 'reset', user });
   }
 
@@ -172,6 +202,7 @@ export function UsersPage({ users: initialUsers, currentEmail }: UsersPageProps)
     setDialog(null);
     setError(null);
     setShownPassword(null);
+    setEmailStatus(null);
   }
 
   // -----------------------------------------------------------------------
@@ -201,6 +232,7 @@ export function UsersPage({ users: initialUsers, currentEmail }: UsersPageProps)
       };
       setUsers((prev) => [...prev, newUser]);
       setShownPassword(result.password ?? null);
+      setEmailStatus({ emailed: !!result.emailed, emailError: result.emailError });
     });
   }
 
@@ -238,6 +270,7 @@ export function UsersPage({ users: initialUsers, currentEmail }: UsersPageProps)
         return;
       }
       setShownPassword(result.password ?? null);
+      setEmailStatus({ emailed: !!result.emailed, emailError: result.emailError });
     });
   }
 
@@ -367,12 +400,20 @@ export function UsersPage({ users: initialUsers, currentEmail }: UsersPageProps)
               <DialogHeader>
                 <DialogTitle>User created</DialogTitle>
                 <DialogDescription>
-                  Share this password with the new user. It won't be shown again.
+                  {emailStatus?.emailed
+                    ? "We've emailed this password to the user. It won't be shown again."
+                    : "Share this password with the new user. It won't be shown again."}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-1.5">
                 <Label>One-time password</Label>
                 <CopyablePassword password={shownPassword} />
+                {emailStatus && (
+                  <EmailStatusLine
+                    status={emailStatus}
+                    to={dialog?.kind === 'add' ? formEmail.trim().toLowerCase() : ''}
+                  />
+                )}
               </div>
               <DialogFooter>
                 <Button onClick={closeDialog}>Done</Button>
@@ -503,14 +544,30 @@ export function UsersPage({ users: initialUsers, currentEmail }: UsersPageProps)
               <DialogHeader>
                 <DialogTitle>Password reset</DialogTitle>
                 <DialogDescription>
-                  Share this new password with{' '}
-                  {dialog?.kind === 'reset' ? dialog.user.email : 'the user'}. It won't be shown
-                  again.
+                  {emailStatus?.emailed ? (
+                    <>
+                      We've emailed the new password to{' '}
+                      {dialog?.kind === 'reset' ? dialog.user.email : 'the user'}. It won't be shown
+                      again.
+                    </>
+                  ) : (
+                    <>
+                      Share this new password with{' '}
+                      {dialog?.kind === 'reset' ? dialog.user.email : 'the user'}. It won't be shown
+                      again.
+                    </>
+                  )}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-1.5">
                 <Label>New password</Label>
                 <CopyablePassword password={shownPassword} />
+                {emailStatus && (
+                  <EmailStatusLine
+                    status={emailStatus}
+                    to={dialog?.kind === 'reset' ? dialog.user.email : ''}
+                  />
+                )}
               </div>
               <DialogFooter>
                 <Button onClick={closeDialog}>Done</Button>

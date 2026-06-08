@@ -55,6 +55,8 @@ export default async function EntityListPage({
       rows={rows}
       gateColumn={view.gateColumn}
       truncated={view.truncated}
+      groupByField={def.segment === 'communities' ? 'town' : undefined}
+      groupByLabel={def.segment === 'communities' ? 'Town' : undefined}
     />
   );
 }

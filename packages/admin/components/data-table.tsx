@@ -96,6 +96,10 @@ export interface DataTableProps {
   /** Contextual Help & Docs link for this entity (gen:help links map), or null. */
   helpHref?: string | null
   helpTitle?: string | null
+  /** When set, offers a "Group by <label>" toggle that renders rows under headings for
+   *  this field's value (e.g. communities grouped by Town). */
+  groupByField?: string
+  groupByLabel?: string
 }
 
 // =============================================================================
@@ -299,6 +303,12 @@ function numericSort(
 // =============================================================================
 // DataTable
 // =============================================================================
+// Per-entity default sort (column id = field name). Promotions sort low→high by their
+// manual sort_order so the list mirrors the published ordering (feedback item 17).
+const DEFAULT_SORT: Record<string, SortingState> = {
+  promotions: [{ id: "sort_order", desc: false }],
+}
+
 export function DataTable({
   segment,
   columns,
@@ -308,10 +318,13 @@ export function DataTable({
   label,
   helpHref,
   helpTitle,
+  groupByField,
+  groupByLabel,
 }: DataTableProps) {
-  const [sorting, setSorting] = React.useState<SortingState>([])
+  const [sorting, setSorting] = React.useState<SortingState>(DEFAULT_SORT[segment] ?? [])
   const [globalFilter, setGlobalFilter] = React.useState("")
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
+  const [grouped, setGrouped] = React.useState(false)
 
   const columnDefs = React.useMemo(
     () => buildColumns(segment, columns, gateColumn),
@@ -335,6 +348,17 @@ export function DataTable({
   const colSpan = columnDefs.length
   const totalRows = rows.length
   const filteredRows = table.getFilteredRowModel().rows.length
+
+  const isGrouped = Boolean(grouped && groupByField)
+  // When grouped, render ALL filtered rows (no pagination) sorted by the group field so the
+  // section headings are contiguous; otherwise use the paginated/sorted row model.
+  const bodyRows = isGrouped
+    ? [...table.getFilteredRowModel().rows].sort((a, b) =>
+        String(a.original.values[groupByField as string] ?? "").localeCompare(
+          String(b.original.values[groupByField as string] ?? ""),
+        ),
+      )
+    : table.getRowModel().rows
 
   // Map ColumnDef id -> label for the visibility menu.
   const labelFor = (id: string): string => {
@@ -387,6 +411,19 @@ export function DataTable({
             aria-label={`Filter ${label}`}
           />
         </div>
+        <div className="flex items-center gap-2">
+        {groupByField ? (
+          <Button
+            variant={grouped ? "default" : "outline"}
+            size="sm"
+            onClick={() => setGrouped((v) => !v)}
+            aria-pressed={grouped}
+            title={`Group by ${groupByLabel ?? groupByField}`}
+          >
+            <SlidersHorizontal className="size-3.5" />
+            {grouped ? `Grouped by ${groupByLabel ?? groupByField}` : `Group by ${groupByLabel ?? groupByField}`}
+          </Button>
+        ) : null}
         <DropdownMenu>
           <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
             <SlidersHorizontal className="size-3.5" />
@@ -413,6 +450,7 @@ export function DataTable({
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       </div>
 
       {/* ── table ── */}
@@ -445,16 +483,40 @@ export function DataTable({
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} className="hover:bg-accent/40">
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className="px-3 py-2">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
+            {bodyRows.length ? (
+              (() => {
+                const out: React.ReactNode[] = []
+                let lastGroup: string | null = null
+                for (const row of bodyRows) {
+                  if (isGrouped) {
+                    const g =
+                      String(row.original.values[groupByField as string] ?? "").trim() || "—"
+                    if (g !== lastGroup) {
+                      lastGroup = g
+                      out.push(
+                        <TableRow key={`grp-${g}`} className="bg-muted/50 hover:bg-muted/50">
+                          <TableCell
+                            colSpan={colSpan}
+                            className="px-3 py-1.5 text-xs font-semibold tracking-wide text-muted-foreground"
+                          >
+                            {g}
+                          </TableCell>
+                        </TableRow>,
+                      )
+                    }
+                  }
+                  out.push(
+                    <TableRow key={row.id} className="hover:bg-accent/40">
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id} className="px-3 py-2">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
+                    </TableRow>,
+                  )
+                }
+                return out
+              })()
             ) : (
               <TableRow>
                 <TableCell
@@ -470,7 +532,7 @@ export function DataTable({
       </div>
 
       {/* ── pagination ── */}
-      {table.getPageCount() > 1 ? (
+      {!isGrouped && table.getPageCount() > 1 ? (
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">
             Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}

@@ -80,6 +80,12 @@ PDF_PUBLIC_BASE_URL = "https://esperanza-pdf.round-base-ed8c.workers.dev"
 # Public fallback for framer-push POST /schema when the FRAMER_PUSH service binding is
 # unavailable. The action prefers the binding; this URL + WEBHOOK_TOKEN is the backstop.
 FRAMER_PUSH_URL = "https://esperanza-framer-push.round-base-ed8c.workers.dev"
+# MailLayer transactional-email endpoint. lib/maillayer.ts emails a generated password
+# to a user on create / reset. Defaulted in code; override here only if it ever changes.
+MAILLAYER_API_URL = "https://mailer.hazardhouse.ai/api/transactional/send"
+# Optional: absolute base URL used to build the sign-in link in the password email when
+# no request Host is available (the action normally derives it from headers()). e.g.
+# ADMIN_PUBLIC_URL = "https://esperanza-admin.<account>.workers.dev"
 
 # === REQUIRED SECRETS (set via `wrangler secret put`, NOT here) ===
 #   AUTH_SECRET — Auth.js v5 JWT signing secret. The deployed Worker WILL NOT
@@ -101,3 +107,11 @@ FRAMER_PUSH_URL = "https://esperanza-framer-push.round-base-ed8c.workers.dev"
 #                   WEBHOOK_TOKEN secret. Set with:
 #                     wrangler secret put WEBHOOK_TOKEN --config packages/admin/wrangler.toml
 #                   (locally, put WEBHOOK_TOKEN=... in packages/admin/.dev.vars).
+#
+#   MAILLAYER_API_KEY — the ENABLED Esperanza MailLayer template's `txn_…` key. Used by
+#                   lib/maillayer.ts to email a generated password to a user on create /
+#                   reset. Sending is best-effort: if this is unset the action still
+#                   succeeds and the one-time password is shown on screen for manual
+#                   relay. Set with:
+#                     wrangler secret put MAILLAYER_API_KEY --config packages/admin/wrangler.toml
+#                   (locally, put MAILLAYER_API_KEY=... in packages/admin/.dev.vars).

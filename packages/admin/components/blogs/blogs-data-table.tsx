@@ -320,15 +320,6 @@ export function BlogsDataTable({ rows }: { rows: BlogRow[] }) {
 
   const tabRows = React.useMemo(() => rows.filter((r) => matchesTab(r, tab)), [rows, tab])
 
-  const counts = React.useMemo(
-    () => ({
-      all: rows.length,
-      published: rows.filter((r) => r.published).length,
-      draft: rows.filter((r) => !r.published).length,
-    }),
-    [rows],
-  )
-
   const table = useReactTable({
     data: tabRows,
     columns,
@@ -364,12 +355,6 @@ export function BlogsDataTable({ rows }: { rows: BlogRow[] }) {
           {TABS.map((t) => (
             <TabsTrigger key={t.value} value={t.value}>
               {t.label}
-              <Badge
-                variant="secondary"
-                className="ml-1 h-4 px-1 text-[10px] leading-none tabular-nums"
-              >
-                {counts[t.value]}
-              </Badge>
             </TabsTrigger>
           ))}
         </TabsList>

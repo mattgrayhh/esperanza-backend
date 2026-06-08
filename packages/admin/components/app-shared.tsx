@@ -3,8 +3,10 @@ import { SidebarMenuButton } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { ENTITY_LIST, type EntityKey } from "@/lib/entities";
 import {
+	ActivityIcon,
 	CircleHelpIcon,
 	HomeIcon,
+	LayoutDashboardIcon,
 	BuildingIcon,
 	MapPinIcon,
 	LayoutTemplateIcon,
@@ -93,6 +95,21 @@ const marketingKeys = ENTITY_LIST.filter(
 ).map((e) => e.key);
 
 export const mainNavLinks: SidebarNavGroup[] = [
+	{
+		label: "Home",
+		items: [
+			{
+				title: "Dashboard",
+				path: "/",
+				icon: <LayoutDashboardIcon />,
+			},
+			{
+				title: "Activity",
+				path: "/activity",
+				icon: <ActivityIcon />,
+			},
+		],
+	},
 	{ label: "Listings", items: listingsKeys.map(entityItem) },
 	{ label: "Marketing", items: marketingKeys.map(entityItem) },
 	{

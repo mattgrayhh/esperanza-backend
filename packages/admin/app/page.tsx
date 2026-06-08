@@ -4,11 +4,21 @@
 // SERVER COMPONENT. Reads real counts + recent audit activity directly from D1
 // via getReadDb() (first-primary session — read-your-writes). NO client-side
 // data fetching: every number on this page is computed here on the server and
-// passed as props into presentational shadcn Card primitives.
+// passed into presentational primitives.
 //
-// Re-skin only: this replaces the old plain-link grid with purposeful shadcn
-// cards. It does NOT touch auth, server actions, the config-driven engine, or
-// the synced/override + promo-scope semantics — it only READS.
+// Reframed from "scoreboard" to "worklist". The page leads with a Needs-attention
+// band (what the operator should DO next), then a compact at-a-glance status, then
+// humanized recent activity + collection nav. It only READS — it does NOT touch
+// auth, server actions, the engine, or synced/override + promo-scope semantics.
+//
+// Readiness (the heart of the Needs-attention band) follows the team's real
+// publish gate for a Quick Move-In:
+//   G1  matched to a house number          → qmi.housenumber present
+//   G2  linked to a COMPLETE floor plan     → fp published + image/type/sqft/
+//                                             price/beds/baths/garage all filled
+//   G3  PDFs rendered                       → pdf_renders.status = 'live'
+// A draft passing all three is "ready to publish"; otherwise it sits in one of
+// three buckets (unmatched → plan gaps → awaiting PDF), which is a clean funnel.
 // =============================================================================
 
 import Link from 'next/link';
@@ -25,39 +35,41 @@ import {
   QuoteIcon,
   PlusIcon,
   ArrowRightIcon,
-  PencilLineIcon,
+  RocketIcon,
+  ListChecksIcon,
+  RefreshCwIcon,
+  CircleCheckIcon,
+  TriangleAlertIcon,
   type LucideIcon,
 } from 'lucide-react';
 import { getReadDb } from '../lib/db';
 import { ENTITY_LIST, type EntityKey } from '../lib/entities';
+import {
+  type AuditRow,
+  activityPhrase,
+  actorName,
+  entityLabel,
+  entitySegment,
+  groupActivity,
+  timeAgo,
+} from '../lib/activity-format';
 import {
   Card,
   CardHeader,
   CardTitle,
   CardDescription,
   CardContent,
-  CardFooter,
   CardAction,
 } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
+import { cn } from '@/lib/utils';
 
 // Admin pages are always dynamic + auth-gated; never statically cache.
 export const dynamic = 'force-dynamic';
 
-// Per-entity presentation (icon) keyed by EntityKey — mirrors app-shared.tsx so
-// the dashboard and the sidebar agree. ENTITY_LIST stays the source of truth for
-// label/segment; this only adds an icon.
+// Per-entity icon keyed by EntityKey — mirrors app-shared.tsx so the dashboard
+// and the sidebar agree. ENTITY_LIST stays the source of truth for label/segment.
 const ENTITY_ICON: Record<EntityKey, LucideIcon> = {
   qmi: HomeIcon,
   communities: BuildingIcon,
@@ -70,40 +82,80 @@ const ENTITY_ICON: Record<EntityKey, LucideIcon> = {
   testimonials: QuoteIcon,
 };
 
-interface RecentEdit {
-  id: number;
-  entity: string;
-  entityId: string;
-  field: string | null;
-  action: string;
-  actor: string | null;
+interface QmiBreakdown {
+  total: number;
+  published: number;
+  ready: number; // unpublished, all three gates pass
+  unmatched: number; // unpublished, no house number
+  planGaps: number; // matched, floor plan incomplete
+  pdfPending: number; // matched + plan complete, PDFs not rendered
+}
+
+interface FramerSync {
+  status: string | null;
   at: string;
+  errorMessage: string | null;
 }
 
 interface DashboardData {
-  qmiTotal: number;
-  qmiPublished: number;
+  qmi: QmiBreakdown;
   communitiesTotal: number;
   communitiesPublished: number;
   promotionsTotal: number;
   promotionsActive: number;
-  recent: RecentEdit[];
+  framer: FramerSync | null;
+  framerLastOk: string | null;
+  recent: AuditRow[];
 }
 
-// One read-your-writes session; a handful of small aggregate queries. We read
-// BASE tables (so unpublished/draft rows count toward totals) and derive the
-// "published/active" subset with a filtered COUNT — matching the publish gates
-// used by the public views (qmi.published, communities.published, promotions.published).
 async function loadDashboard(): Promise<DashboardData> {
   const db = getReadDb();
 
-  const [qmi] = await db.all<{ total: number; published: number }>(
+  // ── QMI readiness funnel ────────────────────────────────────────────────
+  // One pass over qmi, LEFT JOIN the effective floor plan, and probe pdf_renders
+  // with a correlated EXISTS (avoids row fan-out). Each gate resolves to 1/0 so
+  // the outer SUMs are exhaustive: every draft lands in exactly one bucket.
+  const [qmiRow] = await db.all<{
+    total: number;
+    published: number;
+    ready: number;
+    unmatched: number;
+    plan_gaps: number;
+    pdf_pending: number;
+  }>(
     sql.raw(
-      `SELECT COUNT(*) AS total,
-              COALESCE(SUM(CASE WHEN published = 1 THEN 1 ELSE 0 END), 0) AS published
-       FROM qmi`
+      `SELECT
+         COUNT(*) AS total,
+         COALESCE(SUM(CASE WHEN q.published = 1 THEN 1 ELSE 0 END), 0) AS published,
+         COALESCE(SUM(CASE WHEN q.published = 0 AND g1 = 1 AND g2 = 1 AND g3 = 1 THEN 1 ELSE 0 END), 0) AS ready,
+         COALESCE(SUM(CASE WHEN q.published = 0 AND g1 = 0 THEN 1 ELSE 0 END), 0) AS unmatched,
+         COALESCE(SUM(CASE WHEN q.published = 0 AND g1 = 1 AND g2 = 0 THEN 1 ELSE 0 END), 0) AS plan_gaps,
+         COALESCE(SUM(CASE WHEN q.published = 0 AND g1 = 1 AND g2 = 1 AND g3 = 0 THEN 1 ELSE 0 END), 0) AS pdf_pending
+       FROM (
+         SELECT
+           q.published,
+           CASE WHEN q.housenumber IS NOT NULL AND q.housenumber <> '' THEN 1 ELSE 0 END AS g1,
+           CASE WHEN fp.id IS NOT NULL
+                     AND fp.published = 1
+                     AND fp.fp_image IS NOT NULL AND fp.fp_image NOT IN ('', '[]')
+                     AND fp.collection IS NOT NULL AND fp.collection <> ''
+                     AND COALESCE(fp.override_total_square_footage, fp.synced_total_square_footage) IS NOT NULL
+                     AND COALESCE(fp.override_starting_price, fp.synced_starting_price) IS NOT NULL
+                     AND COALESCE(fp.override_bedroom_max, fp.synced_bedroom_max) IS NOT NULL
+                     AND COALESCE(fp.override_bathroom_max, fp.synced_bathroom_max) IS NOT NULL
+                     AND fp.car_garage_count IS NOT NULL
+                THEN 1 ELSE 0 END AS g2,
+           CASE WHEN EXISTS (
+                  SELECT 1 FROM pdf_renders pr
+                  WHERE pr.type = 'qmi' AND pr.entity_id = q.id AND pr.status = 'live'
+                ) THEN 1 ELSE 0 END AS g3
+         FROM qmi q
+         LEFT JOIN floor_plans fp
+           ON fp.id = COALESCE(q.override_floor_plan_id, q.synced_floor_plan_id)
+       ) q`
     )
   );
+
   const [communities] = await db.all<{ total: number; published: number }>(
     sql.raw(
       `SELECT COUNT(*) AS total,
@@ -111,7 +163,6 @@ async function loadDashboard(): Promise<DashboardData> {
        FROM communities`
     )
   );
-  // promotions gate renamed active→published in migration 0005.
   const [promotions] = await db.all<{ total: number; active: number }>(
     sql.raw(
       `SELECT COUNT(*) AS total,
@@ -119,79 +170,82 @@ async function loadDashboard(): Promise<DashboardData> {
        FROM promotions`
     )
   );
-  const recent = await db.all<RecentEdit>(
+
+  // ── Framer sync health ──────────────────────────────────────────────────
+  // framer-push writes one sync_log row per batch (source='framer'). There is no
+  // per-record push state in D1, so we surface system-level health: the latest
+  // batch outcome + the last known-good push time.
+  const [framer] = await db.all<{ status: string | null; at: string; error_message: string | null }>(
     sql.raw(
-      `SELECT id, entity, entity_id AS entityId, field, action, actor, at
+      `SELECT status, at, error_message
+       FROM sync_log
+       WHERE source = 'framer'
+       ORDER BY at DESC, id DESC
+       LIMIT 1`
+    )
+  );
+  const [framerOk] = await db.all<{ last_ok: string | null }>(
+    sql.raw(
+      `SELECT MAX(at) AS last_ok FROM sync_log WHERE source = 'framer' AND status = 'success'`
+    )
+  );
+
+  // Pull a wider window than we render so adjacent same-actor edits group well.
+  const recent = await db.all<AuditRow>(
+    sql.raw(
+      `SELECT entity, field, action, actor, at
        FROM audit_log
        ORDER BY at DESC, id DESC
-       LIMIT 8`
+       LIMIT 40`
     )
   );
 
   return {
-    qmiTotal: Number(qmi?.total ?? 0),
-    qmiPublished: Number(qmi?.published ?? 0),
+    qmi: {
+      total: Number(qmiRow?.total ?? 0),
+      published: Number(qmiRow?.published ?? 0),
+      ready: Number(qmiRow?.ready ?? 0),
+      unmatched: Number(qmiRow?.unmatched ?? 0),
+      planGaps: Number(qmiRow?.plan_gaps ?? 0),
+      pdfPending: Number(qmiRow?.pdf_pending ?? 0),
+    },
     communitiesTotal: Number(communities?.total ?? 0),
     communitiesPublished: Number(communities?.published ?? 0),
     promotionsTotal: Number(promotions?.total ?? 0),
     promotionsActive: Number(promotions?.active ?? 0),
+    framer: framer ? { status: framer.status, at: framer.at, errorMessage: framer.error_message } : null,
+    framerLastOk: framerOk?.last_ok ?? null,
     recent: recent ?? [],
   };
 }
 
-function entityDef(key: EntityKey) {
-  const def = ENTITY_LIST.find((e) => e.key === key);
-  if (!def) throw new Error(`Unknown entity key: ${key}`);
-  return def;
-}
-
-function entityLabel(key: string): string {
-  return ENTITY_LIST.find((e) => e.key === key)?.label ?? key;
-}
-
-function entitySegment(key: string): string | null {
-  return ENTITY_LIST.find((e) => e.key === key)?.segment ?? null;
-}
-
-// Relative "time ago" for audit rows. `at` is an ISO string (nowIso default).
-function timeAgo(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return iso;
-  const secs = Math.round((Date.now() - then) / 1000);
-  if (secs < 60) return 'just now';
-  const mins = Math.round(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.round(hrs / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
-}
-
-function pct(part: number, whole: number): number {
-  if (whole <= 0) return 0;
-  return Math.round((part / whole) * 100);
-}
-
+// =============================================================================
+// Page
+// =============================================================================
 export default async function DashboardPage() {
-  const data = await loadDashboard();
-  const qmiPct = pct(data.qmiPublished, data.qmiTotal);
+  const d = await loadDashboard();
+  const groups = groupActivity(d.recent).slice(0, 7);
+  const drafts = d.qmi.unmatched + d.qmi.planGaps + d.qmi.pdfPending;
+
+  const syncErrored = d.framer != null && d.framer.status !== 'success';
+  const syncOk = d.framer != null && d.framer.status === 'success';
+
+  // The band is a true worklist: it lists only things the operator should act on.
+  const hasWork = d.qmi.ready > 0 || drafts > 0 || syncErrored;
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* ── Title band ───────────────────────────────────────────────── */}
-      <header className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+    <div className="flex flex-col gap-8">
+      {/* ── Title band ─────────────────────────────────────────────────── */}
+      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-col gap-1">
           <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">
             Dashboard
           </h1>
-          <p className="max-w-prose text-sm text-muted-foreground">
-            Every save writes D1 (read-your-writes), records an audit entry, and enqueues a Framer
-            push. QMI synced fields route through the override helper; the publish toggle is the only
-            path that publishes.
+          <p className="text-sm text-muted-foreground">
+            Manage Quick Move-Ins, communities, and promotions.
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <Button render={<Link href="/qmi/new" />} size="sm">
             <PlusIcon />
             New QMI
@@ -203,167 +257,170 @@ export default async function DashboardPage() {
         </div>
       </header>
 
-      {/* ── Primary row: QMI status hero (wide) + two stacked stat cards ─ */}
+      {/* ── Needs attention (the lead) ─────────────────────────────────── */}
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Needs attention
+          </h2>
+          {syncOk && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <CircleCheckIcon className="size-3.5 text-primary" />
+              Website synced {timeAgo(d.framer!.at)}
+            </span>
+          )}
+        </div>
+
+        {hasWork ? (
+          <div className="flex flex-col gap-px overflow-hidden rounded-xl border bg-border sm:flex-row">
+            {d.qmi.ready > 0 && (
+              <AttentionItem
+                href="/qmi"
+                tone="positive"
+                icon={RocketIcon}
+                count={d.qmi.ready}
+                grow={2}
+                label={d.qmi.ready === 1 ? 'home ready to publish' : 'homes ready to publish'}
+                sub="House number, floor plan, and PDFs all cleared."
+              />
+            )}
+
+            {drafts > 0 && (
+              <AttentionItem
+                href="/qmi"
+                tone="neutral"
+                icon={ListChecksIcon}
+                grow={1}
+                count={drafts}
+                label={drafts === 1 ? 'draft in progress' : 'drafts in progress'}
+                sub={[
+                  d.qmi.unmatched > 0 ? `${d.qmi.unmatched} need a house number` : null,
+                  d.qmi.planGaps > 0 ? `${d.qmi.planGaps} waiting on floor-plan data` : null,
+                  d.qmi.pdfPending > 0 ? `${d.qmi.pdfPending} awaiting PDF render` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              />
+            )}
+
+            {syncErrored && (
+              <AttentionItem
+                href="/activity"
+                tone="alert"
+                icon={TriangleAlertIcon}
+                grow={1}
+                label={`Website update ${d.framer!.status === 'partial' ? 'partly failed' : 'failed'}`}
+                timestamp={timeAgo(d.framer!.at)}
+                sub={
+                  d.framer!.errorMessage
+                    ? d.framer!.errorMessage.slice(0, 120)
+                    : d.framerLastOk
+                      ? `Last clean sync ${timeAgo(d.framerLastOk)}. Open the sync log.`
+                      : 'Open the sync log to investigate.'
+                }
+              />
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 rounded-xl border bg-secondary/40 px-4 py-3 text-sm">
+            <CircleCheckIcon className="size-4 shrink-0 text-primary" />
+            <span className="text-foreground">
+              All clear. Every draft is published or in good shape, and the last website sync succeeded.
+            </span>
+          </div>
+        )}
+      </section>
+
+      {/* ── At a glance ────────────────────────────────────────────────── */}
+      <section className="flex flex-col gap-3">
+        <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          At a glance
+        </h2>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <QmiStatusCard className="lg:col-span-2" qmi={d.qmi} draftsTotal={drafts} />
+          <div className="flex flex-col gap-4">
+            <CompactStat
+              icon={BuildingIcon}
+              label="Communities"
+              primary={d.communitiesPublished}
+              total={d.communitiesTotal}
+              href="/communities"
+            />
+            <CompactStat
+              icon={TagIcon}
+              label="Active promotions"
+              primary={d.promotionsActive}
+              total={d.promotionsTotal}
+              href="/promotions"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Activity + nav ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {/* QMI — the lead listing entity gets the prominent card with a ratio bar. */}
         <Card className="lg:col-span-2">
           <CardHeader className="border-b">
-            <CardTitle className="flex items-center gap-2">
-              <HomeIcon className="size-4 text-primary" />
-              Quick Move-Ins
-            </CardTitle>
-            <CardDescription>
-              Published homes are live on the public site. Drafts stay hidden until toggled.
-            </CardDescription>
+            <CardTitle>Recent activity</CardTitle>
+            <CardDescription>Latest changes across every collection.</CardDescription>
             <CardAction>
-              <Badge variant={qmiPct >= 50 ? 'default' : 'secondary'}>{qmiPct}% live</Badge>
+              <Button render={<Link href="/activity" />} variant="ghost" size="sm">
+                View all
+                <ArrowRightIcon />
+              </Button>
             </CardAction>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <div className="flex items-end gap-6">
-              <div className="flex flex-col">
-                <span className="font-heading text-4xl font-semibold tabular-nums leading-none text-foreground">
-                  {data.qmiPublished}
-                </span>
-                <span className="mt-1 text-xs text-muted-foreground">published</span>
-              </div>
-              <Separator orientation="vertical" className="h-10" />
-              <div className="flex flex-col">
-                <span className="font-heading text-2xl font-medium tabular-nums leading-none text-muted-foreground">
-                  {data.qmiTotal}
-                </span>
-                <span className="mt-1 text-xs text-muted-foreground">total records</span>
-              </div>
-              <div className="ml-auto flex flex-col text-right">
-                <span className="font-heading text-2xl font-medium tabular-nums leading-none text-muted-foreground">
-                  {Math.max(data.qmiTotal - data.qmiPublished, 0)}
-                </span>
-                <span className="mt-1 text-xs text-muted-foreground">draft / hidden</span>
-              </div>
-            </div>
-            {/* Published-ratio bar (purposeful, not a hero number). */}
-            <div
-              className="h-2 w-full overflow-hidden rounded-full bg-muted"
-              role="img"
-              aria-label={`${data.qmiPublished} of ${data.qmiTotal} Quick Move-Ins published`}
-            >
-              <div
-                className="h-full rounded-full bg-primary transition-all"
-                style={{ width: `${qmiPct}%` }}
-              />
-            </div>
-          </CardContent>
-          <CardFooter className="justify-end gap-2">
-            <Button render={<Link href="/qmi/new" />} variant="ghost" size="sm">
-              <PlusIcon />
-              New
-            </Button>
-            <Button render={<Link href="/qmi" />} variant="outline" size="sm">
-              Manage QMIs
-              <ArrowRightIcon />
-            </Button>
-          </CardFooter>
-        </Card>
-
-        {/* Stacked secondary stats: Communities + Active promotions. */}
-        <div className="flex flex-col gap-4">
-          <StatCard
-            icon={BuildingIcon}
-            label="Communities"
-            primary={data.communitiesPublished}
-            primaryCaption="published"
-            secondary={data.communitiesTotal}
-            secondaryCaption="total"
-            href="/communities"
-            newHref="/communities/new"
-          />
-          <StatCard
-            icon={TagIcon}
-            label="Active promotions"
-            primary={data.promotionsActive}
-            primaryCaption="active"
-            secondary={data.promotionsTotal}
-            secondaryCaption="total"
-            href="/promotions"
-            newHref="/promotions/new"
-          />
-        </div>
-      </div>
-
-      {/* ── Secondary row: recent edits (wide) + jump-to grid ──────────── */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {/* Recent edits — real audit_log rows. */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="border-b">
-            <CardTitle className="flex items-center gap-2">
-              <PencilLineIcon className="size-4 text-primary" />
-              Recent edits
-            </CardTitle>
-            <CardDescription>Latest audit-log activity across all entities.</CardDescription>
-          </CardHeader>
-          <CardContent className="px-0">
-            {data.recent.length === 0 ? (
-              <div className="px-4">
-                <Empty className="border-0">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <PencilLineIcon />
-                    </EmptyMedia>
-                    <EmptyTitle>No edits yet</EmptyTitle>
-                    <EmptyDescription>
-                      Saving any record records an audit entry — it will show up here.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              </div>
+          <CardContent className="px-2 py-2">
+            {groups.length === 0 ? (
+              <Empty className="border-0">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <ListChecksIcon />
+                  </EmptyMedia>
+                  <EmptyTitle>No activity yet</EmptyTitle>
+                  <EmptyDescription>Saving any record records an entry here.</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Entity</TableHead>
-                    <TableHead>Field</TableHead>
-                    <TableHead>Actor</TableHead>
-                    <TableHead className="text-right">When</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.recent.map((row) => {
-                    const seg = entitySegment(row.entity);
-                    const label = entityLabel(row.entity);
-                    return (
-                      <TableRow key={row.id}>
-                        <TableCell>
+              <ul className="flex flex-col">
+                {groups.map((g, i) => {
+                  const seg = entitySegment(g.entity);
+                  const Icon = ENTITY_ICON[g.entity as EntityKey] ?? ListChecksIcon;
+                  const label = entityLabel(g.entity);
+                  return (
+                    <li
+                      key={`${g.entity}-${g.action}-${g.at}-${i}`}
+                      className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-muted"
+                    >
+                      <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                        <Icon className="size-4" />
+                      </span>
+                      <div className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-sm text-foreground">
+                          {activityPhrase(g)}{' '}
+                          <span className="text-muted-foreground">on</span>{' '}
                           {seg ? (
-                            <Link
-                              href={`/${seg}/${row.entityId}`}
-                              className="font-medium text-primary hover:underline"
-                            >
+                            <Link href={`/${seg}`} className="font-medium text-primary hover:underline">
                               {label}
                             </Link>
                           ) : (
                             <span className="font-medium">{label}</span>
                           )}
-                          <span className="ml-2 text-xs text-muted-foreground">{row.action}</span>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {row.field ?? <span className="text-muted-foreground/60">—</span>}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {row.actor ?? <span className="text-muted-foreground/60">system</span>}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground tabular-nums">
-                          {timeAgo(row.at)}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                        </span>
+                        <span className="text-xs text-muted-foreground">{actorName(g.actor)}</span>
+                      </div>
+                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                        {timeAgo(g.at)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </CardContent>
         </Card>
 
-        {/* Jump-to all 9 entities — compact rows with open / + New. */}
+        {/* Jump-to all 9 entities. */}
         <Card>
           <CardHeader className="border-b">
             <CardTitle>All collections</CardTitle>
@@ -405,60 +462,165 @@ export default async function DashboardPage() {
   );
 }
 
-// Compact secondary stat card: a primary published/active count, a muted total,
-// and open / + New affordances. Used for Communities + Promotions.
-function StatCard({
+// ── Needs-attention item ────────────────────────────────────────────────────
+// One actionable cell. `count` items lead with the number; the sync item leads
+// with a timestamp instead. Tone tints only the icon + accent, never a full fill,
+// so the band stays calm even when it is dense.
+function AttentionItem({
+  href,
+  tone,
+  icon: Icon,
+  count,
+  label,
+  sub,
+  timestamp,
+  grow = 1,
+}: {
+  href: string;
+  tone: 'positive' | 'neutral' | 'alert';
+  icon: LucideIcon;
+  count?: number;
+  label: string;
+  sub?: string;
+  timestamp?: string;
+  /** flex-grow weight so tiles can share the row unevenly (e.g. 2 : 1). */
+  grow?: number;
+}) {
+  const accent =
+    tone === 'positive'
+      ? 'text-primary'
+      : tone === 'alert'
+        ? 'text-destructive'
+        : 'text-muted-foreground';
+  return (
+    <Link
+      href={href}
+      style={{ flexGrow: grow, flexBasis: 0 }}
+      className="group flex min-w-0 flex-col gap-2 bg-card p-4 transition-colors hover:bg-muted/50"
+    >
+      <div className="flex items-center justify-between">
+        <span
+          className={cn(
+            'flex size-8 items-center justify-center rounded-lg bg-muted',
+            accent
+          )}
+        >
+          <Icon className="size-4" />
+        </span>
+        <ArrowRightIcon className="size-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+      </div>
+      <div className="flex items-baseline gap-2">
+        {count != null ? (
+          <span className={cn('font-heading text-3xl font-semibold leading-none tabular-nums', accent)}>
+            {count}
+          </span>
+        ) : (
+          timestamp && (
+            <span className={cn('font-heading text-2xl font-semibold leading-none', accent)}>
+              {timestamp}
+            </span>
+          )
+        )}
+        <span className="text-sm font-medium text-foreground">{label}</span>
+      </div>
+      {sub && <p className="text-xs leading-relaxed text-muted-foreground">{sub}</p>}
+    </Link>
+  );
+}
+
+// ── QMI status card: one segmented bar, not three scattered numbers ──────────
+function QmiStatusCard({
+  qmi,
+  draftsTotal,
+  className,
+}: {
+  qmi: QmiBreakdown;
+  draftsTotal: number;
+  className?: string;
+}) {
+  const total = Math.max(qmi.total, 1);
+  const w = (n: number) => `${(n / total) * 100}%`;
+  const segments = [
+    { n: qmi.published, label: 'Published', className: 'bg-primary' },
+    { n: qmi.ready, label: 'Ready', className: 'bg-primary/45' },
+    { n: draftsTotal, label: 'In progress', className: 'bg-muted-foreground/30' },
+  ];
+  return (
+    <Card className={className}>
+      <CardHeader className="border-b">
+        <CardTitle className="flex items-center gap-2">
+          <HomeIcon className="size-4 text-primary" />
+          Quick Move-Ins
+        </CardTitle>
+        <CardDescription>
+          {qmi.published} of {qmi.total} live.
+        </CardDescription>
+        <CardAction>
+          <Button render={<Link href="/qmi" />} variant="outline" size="sm">
+            Manage QMIs
+            <ArrowRightIcon />
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted">
+          {segments.map(
+            (s) =>
+              s.n > 0 && (
+                <div
+                  key={s.label}
+                  className={cn('h-full first:rounded-l-full last:rounded-r-full', s.className)}
+                  style={{ width: w(s.n) }}
+                />
+              )
+          )}
+        </div>
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          {segments.map((s) => (
+            <div key={s.label} className="flex items-center gap-2">
+              <span className={cn('size-2.5 rounded-full', s.className)} />
+              <span className="text-sm font-medium tabular-nums text-foreground">{s.n}</span>
+              <span className="text-sm text-muted-foreground">{s.label.toLowerCase()}</span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Compact secondary stat (Communities / Promotions) ───────────────────────
+function CompactStat({
   icon: Icon,
   label,
   primary,
-  primaryCaption,
-  secondary,
-  secondaryCaption,
+  total,
   href,
-  newHref,
 }: {
   icon: LucideIcon;
   label: string;
   primary: number;
-  primaryCaption: string;
-  secondary: number;
-  secondaryCaption: string;
+  total: number;
   href: string;
-  newHref: string;
 }) {
   return (
-    <Card size="sm" className="flex-1">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-sm">
+    <Link
+      href={href}
+      className="group flex items-center justify-between rounded-xl border bg-card p-4 transition-colors hover:bg-muted/50"
+    >
+      <div className="flex flex-col gap-1">
+        <span className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Icon className="size-4 text-primary" />
           {label}
-        </CardTitle>
-        <CardAction>
-          <Button render={<Link href={newHref} />} variant="ghost" size="icon-sm" aria-label={`New ${label}`}>
-            <PlusIcon />
-          </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="flex items-end justify-between">
-        <div className="flex items-end gap-3">
-          <div className="flex flex-col">
-            <span className="font-heading text-3xl font-semibold tabular-nums leading-none text-foreground">
-              {primary}
-            </span>
-            <span className="mt-1 text-xs text-muted-foreground">{primaryCaption}</span>
-          </div>
-          <span className="pb-0.5 text-xs text-muted-foreground">
-            / {secondary} {secondaryCaption}
-          </span>
-        </div>
-        <Link
-          href={href}
-          aria-label={`Open ${label}`}
-          className="text-muted-foreground hover:text-primary"
-        >
-          <ArrowRightIcon className="size-4" />
-        </Link>
-      </CardContent>
-    </Card>
+        </span>
+        <span className="text-xs text-muted-foreground">
+          <span className="font-heading text-xl font-semibold tabular-nums text-foreground">
+            {primary}
+          </span>{' '}
+          live / {total} total
+        </span>
+      </div>
+      <ArrowRightIcon className="size-4 text-muted-foreground transition-colors group-hover:text-primary" />
+    </Link>
   );
 }

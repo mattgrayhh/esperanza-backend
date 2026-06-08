@@ -17,3 +17,9 @@ MS_GRAPH_CLIENT_SECRET=
 
 # --- Airtable one-time import (ingest, import script only) ---
 AIRTABLE_PAT=
+
+# --- MailLayer (admin — emails generated passwords on user create/reset) ---
+# The enabled Esperanza MailLayer template's `txn_...` key. Best-effort: if unset, the
+# one-time password is still shown on screen for manual relay. MAILLAYER_API_URL is
+# optional (code defaults to https://mailer.hazardhouse.ai/api/transactional/send).
+MAILLAYER_API_KEY=
