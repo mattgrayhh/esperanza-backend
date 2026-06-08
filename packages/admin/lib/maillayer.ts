@@ -25,6 +25,10 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 const DEFAULT_MAILLAYER_URL = 'https://mailer.hazardhouse.ai/api/transactional/send';
 
+// Esperanza Homes logo, hosted on the public R2 bucket (emails need an absolute URL;
+// SVG is unreliable across mail clients, so this is a 150x58 PNG).
+const LOGO_URL = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/brand/esperanza-logo.png';
+
 /**
  * Read MailLayer config. In the deployed Worker, wrangler [vars] + secrets live on
  * getCloudflareContext().env (the convention across this package — see actions.ts /
@@ -83,6 +87,7 @@ function buildHtml(input: PasswordEmailInput): string {
         <td align="center">
           <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;padding:32px;max-width:480px;">
             <tr><td>
+              <img src="${LOGO_URL}" alt="Esperanza Homes" width="150" height="58" style="display:block;margin:0 0 16px;height:auto;border:0;" />
               <h1 style="margin:0 0 16px;font-size:20px;font-weight:700;">Esperanza Homes Admin</h1>
               <p style="margin:0 0 12px;font-size:15px;line-height:1.5;">Hi ${greetingName},</p>
               <p style="margin:0 0 20px;font-size:15px;line-height:1.5;">${intro}</p>
