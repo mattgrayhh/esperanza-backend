@@ -189,6 +189,43 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
     expect(state.items.size).toBe(1);
   });
 
+  it('move_in_date carries the de-prefixed availability_text for the detail-page badge', async () => {
+    const db = freshDb();
+    // window case → badge "AVAILABLE JUN/JUL 2026" (static prefix + this value)
+    insertRow(db, 'qmi', {
+      id: 'recQMIwindow001',
+      published: 1,
+      synced_address: '1 Window Way',
+      availability_text: 'Available JUN/JUL 2026',
+      synced_move_in_date: '2026-07-15',
+    });
+    // available-now case → badge "AVAILABLE NOW"
+    insertRow(db, 'qmi', {
+      id: 'recQMInow0000001',
+      published: 1,
+      synced_address: '2 Now Now',
+      availability_text: 'Available Now',
+      synced_move_in_date: '2026-01-21',
+    });
+    // fallback: no availability_text → raw move_in_date
+    insertRow(db, 'qmi', {
+      id: 'recQMIfallback01',
+      published: 1,
+      synced_address: '3 Fallback Ln',
+      synced_move_in_date: '2026-11-23',
+    });
+    const env = consumerEnv(db) as unknown as Env;
+
+    const win = qmiDef.map((await loadRowById(env, qmiDef, 'recQMIwindow001'))!);
+    expect(sval(win.fieldData['move_in_date'])).toBe('JUN/JUL 2026');
+
+    const now = qmiDef.map((await loadRowById(env, qmiDef, 'recQMInow0000001'))!);
+    expect(sval(now.fieldData['move_in_date'])).toBe('Now');
+
+    const fb = qmiDef.map((await loadRowById(env, qmiDef, 'recQMIfallback01'))!);
+    expect(sval(fb.fieldData['move_in_date'])).toBe('2026-11-23');
+  });
+
   it('upserts by record id end-to-end and removes a vanished row as a delete', async () => {
     const db = freshDb();
     insertRow(db, 'qmi', {
