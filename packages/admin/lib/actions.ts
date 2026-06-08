@@ -66,6 +66,7 @@ import {
   type SchemaFieldRequest,
   type SchemaFieldResult,
 } from './framer-push-client';
+import { chunk, AUDIT_ROWS_PER_INSERT } from './audit-chunk';
 
 // =============================================================================
 // Shared post-write step: audit_log rows + enqueue framer push.
@@ -102,7 +103,12 @@ async function postWrite(
       newValue: a.newValue,
       actor: a.actor,
     }));
-    await db.insert(auditLog).values(rows);
+    // D1 caps bound params at 100/query; each audit row binds 7. A big multi-field
+    // save (e.g. 19 community fields = 133 params) would exceed it and throw, so insert
+    // in chunks. See lib/audit-chunk.ts.
+    for (const batch of chunk(rows, AUDIT_ROWS_PER_INSERT)) {
+      await db.insert(auditLog).values(batch);
+    }
   }
 
   const env = getCloudflareContext().env;
