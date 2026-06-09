@@ -59,7 +59,8 @@ function isImageException(field: string): boolean {
     /_pdf(_url)?$/.test(field) || // documents (rendered as a file card, not an image)
     /brochure/.test(field) ||
     /(^|_)caption/.test(field) || // image captions are copy
-    /(^|_)(video|embed|tour|map)(_|$)/.test(field) // videos / embeds / tours / maps are URLs/iframes
+    /(^|_)(video|embed|tour|map)(_|$)/.test(field) || // videos / embeds / tours / maps are URLs/iframes
+    /_json$/.test(field) // JSON columns (galleries, blocks, links) are not single images
   );
 }
 

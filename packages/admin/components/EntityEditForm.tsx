@@ -30,6 +30,7 @@ import { ImageUploader } from './fields/ImageUploader';
 import { SyncedOverrideField } from './fields/SyncedOverrideField';
 import { PublishedToggle } from './fields/PublishedToggle';
 import { HoaLinksEditor } from './fields/HoaLinksEditor';
+import { ImageGalleryEditor } from './fields/ImageGalleryEditor';
 import { JsonBlocksEditor } from './fields/JsonBlocksEditor';
 import { PromoScopeTagPicker } from './fields/PromoScopeTagPicker';
 import { CommunityFloorPlansPicker } from './fields/CommunityFloorPlansPicker';
@@ -79,6 +80,14 @@ export type FieldView =
       field: string;
       label: string;
       value: string;
+      help?: string;
+      group?: string;
+    }
+  | {
+      kind: 'imageGallery';
+      field: string;
+      label: string;
+      value: string; // serialized JSON array of URLs
       help?: string;
       group?: string;
     }
@@ -163,7 +172,8 @@ export function EntityEditForm({
     });
   }
 
-  // Split fields: image widgets go to the right rail; everything else to the main column.
+  // Split fields: single-image widgets go to the right rail; everything else (including
+  // imageGallery) to the main column.
   const imageFields = fields.filter((f) => f.kind === 'image');
   const mainFields = fields.filter((f) => f.kind !== 'image');
 
@@ -274,6 +284,20 @@ export function EntityEditForm({
                             overrideValue={f.overrideValue}
                             step={f.step}
                             options={f.options}
+                            help={f.help}
+                          />
+                        </div>
+                      );
+                    }
+                    if (f.kind === 'imageGallery') {
+                      return (
+                        <div key={f.field} className="col-span-1 sm:col-span-2">
+                          <ImageGalleryEditor
+                            entity={segment}
+                            id={id}
+                            field={f.field}
+                            label={f.label}
+                            initialValue={f.value}
                             help={f.help}
                           />
                         </div>

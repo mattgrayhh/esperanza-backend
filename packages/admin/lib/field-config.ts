@@ -43,7 +43,8 @@ export type Widget =
   | 'jsonBlocks'
   | 'hoaLinks'
   | 'promoScopeTag'
-  | 'communityFloorPlans';
+  | 'communityFloorPlans'
+  | 'imageGallery';
 
 export type Bucket = 'synced' | 'override' | 'admin' | 'publish' | 'target' | 'system';
 
@@ -329,7 +330,8 @@ const communities: EntityFieldConfig = {
     // images (R2)
     { field: 'featured_image_url', label: 'Featured Image', widget: 'image', bucket: 'admin' },
     { field: 'secondary_image_url', label: 'Secondary Image', widget: 'image', bucket: 'admin' },
-    { field: 'photo_gallery_image_url', label: 'Photo Gallery Image', widget: 'image', bucket: 'admin' },
+    { field: 'photo_gallery_image_url', label: 'Photo Gallery Image (primary)', widget: 'image', bucket: 'admin' },
+    { field: 'photo_gallery_json', label: 'Photo Gallery', widget: 'imageGallery', bucket: 'admin', help: 'All gallery images shown on the community detail page. Upload in order.' },
     { field: 'description_image_url', label: 'Description Image', widget: 'image', bucket: 'admin' },
     { field: 'community_logo_url', label: 'Community Logo', widget: 'image', bucket: 'admin' },
     { field: 'featured_image_alt', label: 'Featured Image Alt', widget: 'text', bucket: 'admin' },

@@ -338,11 +338,15 @@ function buildFieldView(
   const forceImage =
     f.bucket === 'admin' &&
     f.widget !== 'image' &&
+    f.widget !== 'imageGallery' &&
     f.widget !== 'jsonBlocks' &&
     f.widget !== 'hoaLinks' &&
     f.widget !== 'promoScopeTag' &&
     f.widget !== 'syncedOverride' &&
     isImageField(f.field);
+  if (f.widget === 'imageGallery') {
+    return { kind: 'imageGallery', field: f.field, label: f.label, value: fieldValue, help: f.help, group: f.group };
+  }
   if (f.widget === 'image' || forceImage) {
     return { kind: 'image', field: f.field, label: f.label, value: fieldValue, help: f.help, group: f.group };
   }

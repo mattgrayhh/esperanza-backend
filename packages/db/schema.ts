@@ -258,6 +258,7 @@ export const communities = sqliteTable(
     secondaryImageAlt: text('secondary_image_alt'),
     photoGalleryImageUrl: text('photo_gallery_image_url'),
     photoGalleryImageAlt: text('photo_gallery_image_alt'),
+    photoGalleryJson: text('photo_gallery_json'),
     descriptionImageUrl: text('description_image_url'),
     communityLogoUrl: text('community_logo_url'),
     communityLogoAlt: text('community_logo_alt'),

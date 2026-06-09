@@ -24,13 +24,13 @@ export async function loadQmiData(
   const floorPlanId = opts.appendFloorPlanPages ? (q.floor_plan_id ? String(q.floor_plan_id) : null) : null;
   const floorPlan = floorPlanId ? await loadFloorPlanData(db, floorPlanId) : null;
 
-  // Hero: prefer the home-specific photo, fall back to the floor-plan elevation render
-  // (most QMIs have no image_url/featured_image — fp_image is what's populated). Route through
-  // the worker's /img resizer (Cloudflare Image Resizing) so Chrome embeds a small file.
-  const heroSrc = attachmentUrl(q.featured_image) || str(q.image_url) || attachmentUrl(q.fp_image);
-  const heroImageUrl = heroSrc
-    ? (opts.imgProxyBase ? `${opts.imgProxyBase.replace(/\/$/, '')}/img?w=1000&u=${encodeURIComponent(heroSrc)}` : heroSrc)
-    : '';
+  // Hero: try image_url (reliable media CDN path), then fp_image (R2 direct URL), then
+  // featured_image last (its media.esperanzahomes.com/qmi/… path returns 404 — kept as last resort).
+  // Most QMIs only have fp_image (floor-plan elevation from R2). Route through /img proxy.
+  const heroSrc = str(q.image_url) || attachmentUrl(q.fp_image) || attachmentUrl(q.featured_image);
+  // Direct URL — Chrome running in the BrowserRenderer DO cannot reliably subrequest the same worker,
+  // so the /img proxy fails; image_url and fp_image are publicly accessible CDN/R2 URLs.
+  const heroImageUrl = heroSrc;
 
   const availabilityText = str(q.availability_text);
   const moveIn = str(q.move_in_date);

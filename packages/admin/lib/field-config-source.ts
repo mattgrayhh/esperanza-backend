@@ -91,6 +91,8 @@ function typeToWidget(type: string): Widget {
       return 'promoScopeTag';
     case 'communityFloorPlans':
       return 'communityFloorPlans';
+    case 'imageGallery':
+      return 'imageGallery';
     default:
       return 'text';
   }

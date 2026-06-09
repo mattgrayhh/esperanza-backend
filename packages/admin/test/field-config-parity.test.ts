@@ -103,6 +103,8 @@ function widgetToType(f: FieldConfig): string {
       return 'promoScopeTag';
     case 'communityFloorPlans':
       return 'communityFloorPlans';
+    case 'imageGallery':
+      return 'imageGallery';
   }
 }
 

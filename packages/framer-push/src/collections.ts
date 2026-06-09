@@ -590,7 +590,12 @@ const communities: CollectionDef = {
       }
     }
 
-    const photo = galleryUrls(row['photo_gallery_image_url']);
+    // photo_gallery_json is the authoritative multi-image gallery (JSON array of URLs).
+    // Fall back to the single photo_gallery_image_url if the array column is empty/null.
+    const galleryJson = galleryUrls(row['photo_gallery_json']);
+    const photo = galleryJson.length
+      ? galleryJson
+      : galleryUrls(row['photo_gallery_image_url']);
 
     // HOA links: stored as JSON [{title,link},...] (x7) → hoa_link_title_N + hoa_link_N
     const hoa = parseJsonArray(row['hoa_links_json']);
