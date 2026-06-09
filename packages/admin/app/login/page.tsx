@@ -14,7 +14,7 @@
 
 import { redirect } from 'next/navigation';
 import { AuthError } from 'next-auth';
-import { signIn } from '../../lib/auth';
+import { getCurrentUserOrNull, signIn } from '../../lib/auth';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,6 +35,15 @@ export default async function LoginPage({
   const sp = await searchParams;
   const callbackUrl = typeof sp.callbackUrl === 'string' ? sp.callbackUrl : '/';
   const hasError = sp.error != null;
+
+  // Already signed in? Never render the login form — send them into the app. This
+  // closes the "login box shown inside the authenticated shell" state when an
+  // authenticated user lands on /login. Only honor a same-origin relative path as
+  // the destination (avoids open-redirect); middleware-built absolute callbackUrls
+  // fall back to the dashboard.
+  if (await getCurrentUserOrNull()) {
+    redirect(callbackUrl.startsWith('/') ? callbackUrl : '/');
+  }
 
   async function authenticate(formData: FormData) {
     'use server';
