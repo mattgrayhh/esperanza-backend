@@ -101,6 +101,8 @@ function widgetToType(f: FieldConfig): string {
       return 'jsonBlocks';
     case 'promoScopeTag':
       return 'promoScopeTag';
+    case 'imageGallery':
+      return 'imageGallery';
   }
 }
 

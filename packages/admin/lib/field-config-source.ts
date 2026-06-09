@@ -89,6 +89,8 @@ function typeToWidget(type: string): Widget {
       return 'jsonBlocks';
     case 'promoScopeTag':
       return 'promoScopeTag';
+    case 'imageGallery':
+      return 'imageGallery';
     default:
       return 'text';
   }

@@ -898,6 +898,46 @@ export async function uploadBlockImage(
   return { ok: true, url };
 }
 
+// =============================================================================
+// uploadGalleryImage — upload one image to R2, returning its stable url WITHOUT
+// immediately writing a DB column.  The ImageGalleryEditor accumulates uploaded
+// URLs client-side and stores the entire JSON array via the normal saveEntity
+// form submit (photo_gallery_json column).  Key = <entity>/<id>/gallery-<index>-<file>.
+// =============================================================================
+
+export async function uploadGalleryImage(
+  entity: string,
+  id: string,
+  index: number,
+  file: File
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const def = getEntity(entity);
+  if (!def) return { ok: false, error: `Unknown entity: ${entity}` };
+  if (!id) return { ok: false, error: 'Missing record id' };
+  if (!file || file.size === 0) return { ok: false, error: 'Empty file' };
+
+  try {
+    await getCurrentUser();
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Not authenticated' };
+  }
+
+  const env = getCloudflareContext().env;
+  const safeName = sanitizeFilename(file.name);
+  const key = `${def.key}/${id}/gallery-${index}-${safeName}`;
+
+  await env.IMAGES.put(key, await file.arrayBuffer(), {
+    httpMetadata: { contentType: file.type || 'application/octet-stream' },
+  });
+
+  const base = (env.IMAGES_PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+  const url = `${base}/${key}`;
+  if (url.includes('airtableusercontent.com')) {
+    return { ok: false, error: 'Refusing to store an Airtable attachment URL' };
+  }
+  return { ok: true, url };
+}
+
 function sanitizeFilename(name: string): string {
   const cleaned = name
     .normalize('NFKD')
