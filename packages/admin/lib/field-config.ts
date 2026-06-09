@@ -473,6 +473,7 @@ const floor_plans: EntityFieldConfig = {
     { field: 'image_url', label: 'Main Image', widget: 'image', bucket: 'admin' },
     { field: 'hero_image_2', label: 'Hero Image 2', widget: 'image', bucket: 'admin' },
     { field: 'hero_image_3', label: 'Hero Image 3', widget: 'image', bucket: 'admin' },
+    { field: 'floor_plan_image', label: 'Floor Plan Image', widget: 'image', bucket: 'admin' },
     { field: 'description', label: 'Description (md)', widget: 'richtext', bucket: 'admin' },
     { field: 'plan_viewer_url', label: 'Plan Viewer URL', widget: 'text', bucket: 'admin' },
     { field: 'virtual_tour_url', label: 'Virtual Tour URL', widget: 'text', bucket: 'admin' },

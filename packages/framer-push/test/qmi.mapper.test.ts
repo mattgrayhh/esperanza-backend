@@ -42,6 +42,8 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
       synced_total_square_footage: 2450, // → FP: Total SqFt fallback
       synced_starting_price: 389000, // → FP: Starting Price
       fp_image: '[{"url":"https://media.esperanzahomes.com/fp/kestrel.jpg"}]',
+      floor_plan_image:
+        'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFPkestrel0001/floor-plan.png', // → fp_floor_plan_image (top-down layout)
     });
     insertRow(db, 'qmi', {
       id: 'recQMI0001ABCDEF',
@@ -101,6 +103,12 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
     expect(sval(f['fp_image'])).toBe('https://media.esperanzahomes.com/fp/kestrel.jpg');
     expect(sval(f['fp_starting_price'])).toBe(389000);
 
+    // floor_plan_image: top-down layout resolved from the linked floor plan via JOIN
+    expect(sval(f['floor_plan_image'])).toBe(
+      'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFPkestrel0001/floor-plan.png'
+    );
+    expect(f['floor_plan_image']?.type).toBe('image');
+
     // floor_plan_slug derived from FP name, underscored
     expect(sval(f['floor_plan_slug'])).toBe('kestrel');
   });
@@ -122,6 +130,8 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
     expect(f['year_built']).toBeUndefined();
     expect(f['total_square_footage']).toBeUndefined();
     expect(f['estimated_monthly_price']).toBeUndefined();
+    // no linked floor plan → floor_plan_image dropped (never an empty image field)
+    expect(f['floor_plan_image']).toBeUndefined();
     // booleans we deliberately always emit
     expect(sval(f['self_tour_available'])).toBe(false);
     expect(sval(f['available_now'])).toBe(false);

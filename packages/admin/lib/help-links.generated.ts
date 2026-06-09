@@ -5,6 +5,10 @@ export const HELP_LINKS_BY_ENTITY: Record<string, { slug: string; title: string 
     "slug": "how-a-new-home-appears",
     "title": "How a new home appears (and how to publish it)"
   },
+  "floor_plans": {
+    "slug": "floor-plan-layout-image",
+    "title": "Add the floor plan layout image"
+  },
   "communities": {
     "slug": "add-a-new-community",
     "title": "Add a new community"

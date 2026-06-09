@@ -88,6 +88,7 @@ SELECT
   fp.plan_viewer_url        AS fp_plan_viewer,
   fp.collection             AS fp_collection,
   fp.master_bed_location    AS fp_master_bed_location,
+  fp.floor_plan_image       AS fp_floor_plan_image,
 
   q.published,
   q.coming_soon            -- on-site-but-not-yet-live flag (surfaced; gate stays published)
@@ -175,6 +176,7 @@ SELECT
   COALESCE(fp.override_total_square_footage,  fp.synced_total_square_footage)  AS total_square_footage,
   fp.master_bed_location, fp.hers_score,
   fp.image_url, fp.hero_image_2, fp.hero_image_3,
+  fp.floor_plan_image,
   fp.elevation_renderings, fp.elevation_gallery,
   fp.photo_gallery_urls, fp.photo_gallery,
   fp.additional_images, fp.additional_images_gallery,
