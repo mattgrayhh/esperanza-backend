@@ -42,7 +42,8 @@ export type Widget =
   | 'syncedOverride'
   | 'jsonBlocks'
   | 'hoaLinks'
-  | 'promoScopeTag';
+  | 'promoScopeTag'
+  | 'communityFloorPlans';
 
 export type Bucket = 'synced' | 'override' | 'admin' | 'publish' | 'target' | 'system';
 
@@ -348,6 +349,9 @@ const communities: EntityFieldConfig = {
     // (D1 columns + sync unchanged).
     // custom widget
     { field: 'hoa_links_json', label: 'HOA Links', widget: 'hoaLinks', bucket: 'admin', help: 'Array of {title, link}; framer pushes the first 7.' },
+    // Bespoke side widget (no column): which floor plans are offered in this community.
+    // Writes the relationship onto floor_plans.communities via saveCommunityFloorPlans.
+    { field: 'community_floor_plans', label: 'Floor Plans Offered', widget: 'communityFloorPlans', bucket: 'admin', help: 'Pick the floor plans available in this community. Saved separately, below the form.' },
   ],
 };
 

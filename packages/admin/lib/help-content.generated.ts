@@ -214,6 +214,24 @@ export const HELP_ARTICLES: HelpArticle[] = [
     "html": "<p>A complete community page has:</p><h2>Essentials</h2><ul><li><code>Description</code> — the main marketing copy.</li><li><code>Featured Image</code>, <code>Secondary Image</code>, photo gallery, and the community logo.</li><li>Map coordinates (drives the map pin and <em>Get Directions</em>).</li></ul><h2>Copy blocks (each renders as a titled section)</h2><ul><li><code>Amenities</code></li><li><code>Education</code> — schools and district info.</li><li>Design / construction / energy blocks: exterior &amp; interior construction,</li></ul><p>  energy package, kitchen and bath features, conservation &amp; landscape, and<br>  the Esperanza Difference.</p><h2>Utilities</h2><ul><li><code>Electric Details</code>, <code>Water Details</code>, <code>Internet Details</code>, <code>Gas Details</code>,</li></ul><p>  <code>Security Details</code> — provider, link, phone.</p><h2>Sales info</h2><ul><li><code>Office Phone Number</code>, <code>Office Hours</code>, <code>Schedule Visit</code> link, <code>Lending</code> link.</li></ul><h2>Optional</h2><ul><li><code>Incentive</code> banner text, <code>Community Map Embed</code> (interactive lot map),</li></ul><p>  features/resources PDFs, <code>Featured Video</code>.</p><p>Tip: open an established community (e.g. a Tres Lagos one) side-by-side as a<br>reference for tone and length.</p>"
   },
   {
+    "slug": "floor-plans-per-community",
+    "title": "Set the floor plans offered in a community",
+    "category": "Communities",
+    "categorySort": 30,
+    "sort": 25,
+    "summary": "Pick which floor plans a community offers from the community's edit page.",
+    "keywords": [
+      "floor plans",
+      "community",
+      "offered plans",
+      "plans available",
+      "assign floor plan",
+      "floor plans offered"
+    ],
+    "entity": "communities",
+    "html": "<p>Each community shows a list of the floor plans you can build there. You set that<br>list from the community's own edit page.</p><h2>Steps</h2><ol><li>Open <code>Communities</code> → pick the community → scroll to the <strong>Floor Plans Offered</strong></li></ol><p>   panel (below the main form).</p><ol><li>Check every floor plan that's available in this community; uncheck any that</li></ol><p>   aren't. Use the filter box to find a plan quickly.</p><ol><li>Click <strong>Save floor plans</strong>. (This panel saves on its own — separate from the</li></ol><p>   main <em>Save</em> button at the top of the form.)</p><p>That's it. The website updates within moments: each plan you checked now lists<br>this community, and each one you unchecked drops it.</p><h2>How it actually works</h2><p>The relationship is stored <strong>on the floor plan</strong>, not the community — every floor<br>plan carries the list of communities it's offered in (and a count). Editing from<br>the community page just adds or removes <em>this</em> community's name on the plans you<br>changed. So:</p><ul><li>The same plan can belong to several communities (e.g. Marzano in Aquero,</li></ul><p>  Cielo Vista, and Villas at La Sienna).</p><ul><li>You can edit the list from here, and a plan will correctly show up under every</li></ul><p>  community it belongs to.</p><ul><li>Only the plans you actually changed are touched and re-pushed to the site —</li></ul><p>  leaving the others alone keeps things fast and avoids needless churn.</p><h2>Notes</h2><ul><li>A community needs a <strong>Name</strong> before you can link plans (the link is by name).</li><li>New floor plans you just created show up in the list immediately.</li><li>This does <strong>not</strong> publish anything — a plan still has to be Live on its own page</li></ul><p>  to appear on the site. See <em>How a new home appears</em> and <em>Statuses explained</em>.</p>"
+  },
+  {
     "slug": "create-and-publish-a-blog",
     "title": "Create and publish a blog post",
     "category": "Blogs",

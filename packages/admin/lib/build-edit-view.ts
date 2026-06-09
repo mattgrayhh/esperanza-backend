@@ -22,8 +22,9 @@ import {
 import { statusGate, deriveStatus, statusOptions } from './status';
 import { isImageField } from './image-fields';
 import { resolveFieldConfig } from './field-config-source';
-import { loadOptionSets, loadPromoScopeOptions, type SelectOption } from './select-options';
-import { promotionTargets } from '@esperanza/db';
+import { loadOptionSets, loadPromoScopeOptions, loadFloorPlanOptions, type SelectOption } from './select-options';
+import { promotionTargets, floorPlans } from '@esperanza/db';
+import { parseCommunityNames } from './community-floor-plans';
 import type {
   FieldView,
   PublishGateView,
@@ -195,6 +196,10 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
       // handled after the loop (needs a separate query); placeholder push below.
       continue;
     }
+    if (f.widget === 'communityFloorPlans') {
+      // handled after the loop (needs the floor-plan list); placeholder push below.
+      continue;
+    }
     if (f.widget === 'jsonBlocks') {
       // Two jsonBlocks config entries (copy + venue) collapse to ONE editor instance.
       // Only add it once (when we hit the copy-blocks column).
@@ -225,6 +230,22 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
       selected: { cities: pick('city'), communities: pick('community'), qmis: pick('qmi') },
       options,
     });
+  }
+
+  // Community → Floor Plans (which plans are offered here). The relationship lives on
+  // floor_plans.communities (CSV of community names); selected = plans whose CSV
+  // includes THIS community's name (case-insensitive).
+  if (cfg.fields.some((f) => f.widget === 'communityFloorPlans')) {
+    const communityName = s(col(row, 'name')).trim();
+    const options = await loadFloorPlanOptions();
+    const planRows = (await db
+      .select({ id: floorPlans.id, communities: floorPlans.communities })
+      .from(floorPlans)) as Array<{ id: string; communities: string | null }>;
+    const lc = communityName.toLowerCase();
+    const selected = planRows
+      .filter((p) => parseCommunityNames(p.communities).some((n) => n.toLowerCase() === lc))
+      .map((p) => p.id);
+    sideWidgets.push({ kind: 'communityFloorPlans', communityName, selected, options });
   }
 
   // Publish gate view model — tri-state status derived from the existing columns

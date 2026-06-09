@@ -32,6 +32,7 @@ import { PublishedToggle } from './fields/PublishedToggle';
 import { HoaLinksEditor } from './fields/HoaLinksEditor';
 import { JsonBlocksEditor } from './fields/JsonBlocksEditor';
 import { PromoScopeTagPicker } from './fields/PromoScopeTagPicker';
+import { CommunityFloorPlansPicker } from './fields/CommunityFloorPlansPicker';
 import type { SelectOption } from '../lib/select-options';
 import type { SelectOptionItem } from '../lib/field-config';
 import { cn } from '@/lib/utils';
@@ -117,7 +118,13 @@ export interface PromoScopeView {
   selected: { cities: string[]; communities: string[]; qmis: string[] };
   options: { cities: SelectOption[]; communities: SelectOption[]; qmis: SelectOption[] };
 }
-export type SideWidget = HoaLinksView | JsonBlocksView | PromoScopeView;
+export interface CommunityFloorPlansView {
+  kind: 'communityFloorPlans';
+  communityName: string;
+  selected: string[];
+  options: SelectOption[];
+}
+export type SideWidget = HoaLinksView | JsonBlocksView | PromoScopeView | CommunityFloorPlansView;
 
 export function EntityEditForm({
   entityKey,
@@ -366,6 +373,23 @@ function SideWidgetBlock({
         </CardHeader>
         <CardContent>
           <JsonBlocksEditor id={id} initialCopy={widget.copy} initialVenue={widget.venue} onResult={onResult} />
+        </CardContent>
+      </Card>
+    );
+  }
+  if (widget.kind === 'communityFloorPlans') {
+    return (
+      <Card className="mt-6">
+        <CardHeader className="border-b">
+          <CardTitle>Floor Plans Offered</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CommunityFloorPlansPicker
+            communityId={id}
+            initialSelected={widget.selected}
+            options={widget.options}
+            onResult={onResult}
+          />
         </CardContent>
       </Card>
     );

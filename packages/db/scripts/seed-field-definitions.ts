@@ -61,7 +61,8 @@ type FieldType =
   | 'syncedOverride'
   | 'hoaLinks'
   | 'jsonBlocks'
-  | 'promoScopeTag';
+  | 'promoScopeTag'
+  | 'communityFloorPlans';
 
 function widgetToType(f: FieldConfig): FieldType {
   switch (f.widget) {
@@ -95,6 +96,8 @@ function widgetToType(f: FieldConfig): FieldType {
       return 'jsonBlocks';
     case 'promoScopeTag':
       return 'promoScopeTag';
+    case 'communityFloorPlans':
+      return 'communityFloorPlans';
     default: {
       const _exhaustive: never = f.widget;
       return _exhaustive;
