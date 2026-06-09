@@ -338,6 +338,7 @@ const communities: EntityFieldConfig = {
     { field: 'community_logo_alt', label: 'Community Logo Alt', widget: 'text', bucket: 'admin' },
     { field: 'featured_video', label: 'Featured Video', widget: 'text', bucket: 'admin' },
     { field: 'community_map_embed', label: 'Map Embed', widget: 'textarea', bucket: 'admin' },
+    { field: 'nter_now', label: 'Enter Now', widget: 'text', bucket: 'admin', help: 'NterNow self-tour link (the "Enter Now" CTA). Distinct from Featured Video, which holds the Vimeo embed.' },
     { field: 'mine_link', label: 'Mine Link', widget: 'text', bucket: 'admin' },
     { field: 'features_download_url', label: 'Features Download (PDF)', widget: 'image', bucket: 'admin' },
     { field: 'resources_download_url', label: 'Resources Download (PDF)', widget: 'image', bucket: 'admin' },

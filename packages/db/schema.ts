@@ -271,6 +271,7 @@ export const communities = sqliteTable(
     scheduleVisit: text('schedule_visit'),
     lending: text('lending'),
     mineLink: text('mine_link'),
+    nterNow: text('nter_now'), // admin-owned "Enter Now" NterNow self-tour link (0009)
     communityMapEmbed: text('community_map_embed'),
     incentive: text('incentive'),
     floorPlanPlaintext: text('floor_plan_plaintext'),
