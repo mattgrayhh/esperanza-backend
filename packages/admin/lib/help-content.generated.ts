@@ -162,6 +162,25 @@ export const HELP_ARTICLES: HelpArticle[] = [
     "html": "<p>When a home completes settlement in MarkSystems, the next sync (within<br>4 hours) <strong>automatically unpublishes it</strong> — its page comes off the website and<br>it drops out of the listings. Nothing for you to do.</p><h2>Take a home down sooner</h2><p>If a home needs to come off the site right now (went under contract, listing<br>issue):</p><ol><li>Open the home in <code>Quick Move-Ins</code>.</li><li>Set <code>Status</code> to <code>Draft</code> and <code>Save</code>.</li></ol><p>It disappears from the site within moments. Note: if the home is still an<br>active spec home in MarkSystems it will NOT re-publish itself — <code>Live</code> is<br>always a human decision.</p>"
   },
   {
+    "slug": "floor-plan-layout-image",
+    "title": "Add the floor plan layout image",
+    "category": "Floor Plans",
+    "categorySort": 25,
+    "sort": 10,
+    "summary": "Upload the top-down floor plan layout that appears on the plan and on every home of that plan.",
+    "keywords": [
+      "floor plan",
+      "layout",
+      "image",
+      "blueprint",
+      "schematic",
+      "drawing",
+      "upload"
+    ],
+    "entity": "floor_plans",
+    "html": "<p>The <strong>Floor Plan Image</strong> is the top-down layout drawing (rooms, dimensions,<br>first/second floor) for a plan — not an exterior elevation or a photo.</p><ol><li>Open the plan in <code>Floor Plans</code>.</li><li>In the image controls, use <strong>Floor Plan Image</strong> to upload the layout drawing</li></ol><p>   (PNG or JPG). One image per plan.</p><ol><li><code>Save</code>.</li></ol><h2>Good to know</h2><ul><li>This image lives on the <strong>plan</strong>, so it automatically appears on **every</li></ul><p>  Quick Move-In home of that plan** — you only upload it once. You do not set a<br>  floor plan image on individual homes.</p><ul><li>It is a separate field from <code>Main Image</code> and the hero images, which are the</li></ul><p>  exterior/marketing shots. Keep the layout drawing here and the exterior shots<br>  in those fields.</p><ul><li>Uploads are stored in the central image library and served from our own CDN.</li><li>After saving, the image reaches the live site on the next publish (see</li></ul><p>  <em>How changes reach the site</em>). If a plan has no layout image yet, the plan and<br>  its homes simply omit it — nothing breaks.</p>"
+  },
+  {
     "slug": "add-a-new-community",
     "title": "Add a new community",
     "category": "Communities",
