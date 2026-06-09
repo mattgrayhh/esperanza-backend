@@ -1,15 +1,15 @@
 # Floor Plan Image — load report
 
-- Mode: DRY-RUN (no writes)
+- Mode: LIVE
 - Folders scanned: 76
-- Matched & rendered: 53
+- Matched & uploaded: 53
 - Folders with no DB record: 23
 - Matched folder but no main-floor-plan SVG: 0
 - Records with no folder: 12
 - Records WITH linked QMIs but NO image: 8
 - Hard failures: 0
 
-## Matched & rendered (53)
+## Matched & uploaded (53)
 - acuna_ii → Acuna II (recZxX5SeCh9ZlHUX)
 - agave → Agave (rec0OuuwCl7s7CeGo)
 - allegrini → Allegrini (rec2C7Gf5NWk1cSC9)
