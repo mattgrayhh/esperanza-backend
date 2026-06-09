@@ -28,9 +28,9 @@ export async function loadQmiData(
   // featured_image last (its media.esperanzahomes.com/qmi/… path returns 404 — kept as last resort).
   // Most QMIs only have fp_image (floor-plan elevation from R2). Route through /img proxy.
   const heroSrc = str(q.image_url) || attachmentUrl(q.fp_image) || attachmentUrl(q.featured_image);
-  const heroImageUrl = heroSrc
-    ? (opts.imgProxyBase ? `${opts.imgProxyBase.replace(/\/$/, '')}/img?w=1000&u=${encodeURIComponent(heroSrc)}` : heroSrc)
-    : '';
+  // Direct URL — Chrome running in the BrowserRenderer DO cannot reliably subrequest the same worker,
+  // so the /img proxy fails; image_url and fp_image are publicly accessible CDN/R2 URLs.
+  const heroImageUrl = heroSrc;
 
   const availabilityText = str(q.availability_text);
   const moveIn = str(q.move_in_date);
