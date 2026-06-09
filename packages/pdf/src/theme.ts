@@ -21,7 +21,9 @@ export const defaultTheme: Theme = {
     colors: { primary: '#1f3d2f', accent: '#b08d57', neutral: '#888888', bandText: '#ffffff', pageBg: '#ffffff', ink: '#333333' },
     fontHeading: 'Cormorant', fontBody: 'Inter', fontLabel: 'Inter',
   },
-  footer: { website: 'esperanzahomes.com', phone: '956-275-8069', salesHours: 'Mon–Sat 9:30–6:30 · Sun 12–6', showEqualHousingLogo: true, modifiedDateFormat: 'MM/DD/YYYY' },
+  // phone/salesHours wording matches the brand marketing sheets verbatim (raw-digit phone,
+  // long-form hours) — the QMI contact band must read exactly like the reference one-pager.
+  footer: { website: 'esperanzahomes.com', phone: '9562758069', salesHours: 'Monday - Saturday 9:30 AM - 6:30 PM Sunday 12:00 PM - 6:00 PM', showEqualHousingLogo: true, modifiedDateFormat: 'MM/DD/YYYY' },
   sectionLabels: { letterSpacing: '0.2em', case: 'upper', color: '#b08d57' },
   page: { size: 'Letter', marginsMm: { top: 12, right: 12, bottom: 12, left: 12 } },
   qmi: { appendFloorPlanPages: true },

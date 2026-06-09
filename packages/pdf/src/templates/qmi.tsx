@@ -39,9 +39,13 @@ const TAN_W     = '2.87in';
 const BAR_TOP   = '1.13in';
 const BAR_H     = '0.30in';
 const BAR_W     = '5.34in'; // green + gap + tan combined width
-// Content column (hero / stats / contact — x: ~260–2330px → 0.87–7.77in)
+// Hero column (x: ~260–2330px → 0.87–7.77in)
 const COL_L     = '0.87in';
 const COL_W     = '6.90in';
+// Stats + contact bands run WIDER than the hero (x: ~120–2430px → 0.40–8.10in) —
+// using the hero column here leaves slivers of the baked-in band exposed at both edges.
+const BAND_L    = '0.40in';
+const BAND_W    = '7.70in';
 // Description/footer: original text runs full-width (edge-to-edge) so use wider bounds
 const WIDE_L    = '0.23in';
 const WIDE_W    = '8.04in';
@@ -96,10 +100,10 @@ export function QmiBrochure({ theme, data }: { theme: Theme; data: QmiData }) {
         color: '#fff', textAlign: 'center', lineHeight: 1.25, gap: 1,
       }}>
         {data.statusHeadline ? (
-          <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.01em' }}>{data.statusHeadline}</div>
+          <div style={{ fontSize: 15.5, fontWeight: 700, letterSpacing: '0.01em' }}>{data.statusHeadline}</div>
         ) : null}
         {data.price != null ? (
-          <div style={{ fontSize: 21, fontWeight: 700 }}>{money(data.price)}</div>
+          <div style={{ fontSize: 18, fontWeight: 600 }}>{money(data.price)}</div>
         ) : null}
         {data.estMonthly != null ? (
           <div style={{ fontSize: 9, opacity: 0.92 }}>From {moneyCents(data.estMonthly)}*/month</div>
@@ -148,7 +152,7 @@ export function QmiBrochure({ theme, data }: { theme: Theme; data: QmiData }) {
 
       {/* ── STATS BAND ── 6-column beige band with large numbers + small-caps labels */}
       <div style={{
-        position: 'absolute', left: COL_L, top: STATS_TOP, width: COL_W, height: STATS_H,
+        position: 'absolute', left: BAND_L, top: STATS_TOP, width: BAND_W, height: STATS_H,
         background: BEIGE,
         display: 'flex', alignItems: 'center',
       }}>
@@ -166,7 +170,7 @@ export function QmiBrochure({ theme, data }: { theme: Theme; data: QmiData }) {
 
       {/* ── CONTACT BAND ── full-width dark gray band with phone + hours */}
       <div style={{
-        position: 'absolute', left: WIDE_L, top: CONTACT_TOP, width: WIDE_W, height: CONTACT_H,
+        position: 'absolute', left: BAND_L, top: CONTACT_TOP, width: BAND_W, height: CONTACT_H,
         background: MUTED,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: '#fff', textAlign: 'center', fontSize: 10.5, lineHeight: 1.4,
@@ -179,15 +183,17 @@ export function QmiBrochure({ theme, data }: { theme: Theme; data: QmiData }) {
       <div style={{
         position: 'absolute', left: WIDE_L, top: DESC_TOP, width: WIDE_W, height: DESC_H,
         background: '#fff', overflow: 'hidden',
-        padding: '4px 8px',
+        // White cover spans full width (hides the baked-in text); the content itself is
+        // inset so the text's left edge lands at ~0.78in like the reference sheet.
+        padding: '6px 0.55in 0 0.55in',
       }}>
         {data.description ? (
-          <p style={{ fontSize: 10.5, lineHeight: 1.55, color: '#333', margin: 0 }}>{data.description}</p>
+          <p style={{ fontSize: 11, lineHeight: 1.65, color: '#333', margin: 0 }}>{data.description}</p>
         ) : null}
         {data.features.length ? (
-          <div style={{ marginTop: 8 }}>
+          <div style={{ marginTop: 14 }}>
             {data.features.map((f) => (
-              <div key={f} style={{ fontSize: 10.5, lineHeight: 1.55, color: '#333' }}>- {f}</div>
+              <div key={f} style={{ fontSize: 11, lineHeight: 1.65, color: '#333', marginTop: 10 }}>- {f}</div>
             ))}
           </div>
         ) : null}

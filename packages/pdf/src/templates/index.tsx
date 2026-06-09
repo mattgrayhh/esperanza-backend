@@ -17,13 +17,13 @@ export function renderTemplate(type: PdfType, theme: Theme, data: unknown): stri
     case 'qmi': {
       const q = data as QmiData;
       // Zero margins so the full-bleed background PNG fills the page edge-to-edge.
-      // The floor plan page(s) inherit the same zero margins — acceptable trade-off for now.
+      // Page 2 mirrors the brand spec sheet: the floor-plan drawing alone on a white page.
       return wrapHtml(theme, (
         <>
           <QmiBrochure theme={theme} data={q} />
-          {q.floorPlan ? (
-            <div style={{ breakBefore: 'page' }}>
-              <FloorPlanBrochure theme={theme} data={q.floorPlan} />
+          {q.floorPlanImageUrl ? (
+            <div style={{ breakBefore: 'page', width: '8.5in', height: '11in', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+              <img src={q.floorPlanImageUrl} alt="Floor plan" style={{ maxWidth: '8.1in', maxHeight: '10.5in', objectFit: 'contain' }} />
             </div>
           ) : null}
         </>
