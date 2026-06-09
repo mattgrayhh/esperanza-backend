@@ -37,7 +37,7 @@ export const FIELD_TYPES = [
 export type FieldType = (typeof FIELD_TYPES)[number];
 
 /** Bespoke widgets the builder must never create/retype-to (system-only). */
-export const BESPOKE_TYPES = ['syncedOverride', 'hoaLinks', 'jsonBlocks', 'promoScopeTag'] as const;
+export const BESPOKE_TYPES = ['syncedOverride', 'hoaLinks', 'jsonBlocks', 'promoScopeTag', 'communityFloorPlans'] as const;
 
 export interface FieldTypeMeta {
   type: FieldType;

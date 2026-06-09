@@ -89,6 +89,8 @@ function typeToWidget(type: string): Widget {
       return 'jsonBlocks';
     case 'promoScopeTag':
       return 'promoScopeTag';
+    case 'communityFloorPlans':
+      return 'communityFloorPlans';
     default:
       return 'text';
   }
@@ -295,7 +297,7 @@ export async function resolveCustomFieldDefs(key: EntityKey): Promise<CustomFiel
 
   const colMap = columnMapForEntity(key);
   const gate = publishGateColumn(key);
-  const bespoke = new Set(['syncedOverride', 'hoaLinks', 'jsonBlocks', 'promoScopeTag']);
+  const bespoke = new Set(['syncedOverride', 'hoaLinks', 'jsonBlocks', 'promoScopeTag', 'communityFloorPlans']);
 
   const out: CustomFieldDef[] = [];
   for (const r of rows) {

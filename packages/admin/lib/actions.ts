@@ -28,6 +28,7 @@ import {
   promotionTargets,
   cities,
   communities,
+  floorPlans,
   testimonials,
   images,
   auditLog,
@@ -51,6 +52,7 @@ import { columnMapForEntity, coerceForColumn, toDrizzlePatch } from './fields';
 import { publishGateColumn } from './field-config';
 import { statusGate, statusPatch, deriveStatus } from './status';
 import { resolveCustomFieldDefs, type CustomFieldDef } from './field-config-source';
+import { applyMembership } from './community-floor-plans';
 import {
   isFieldType,
   isValidKeyShape,
@@ -778,6 +780,75 @@ export async function savePromotionTargets(
   revalidatePath(`/admin/promotions/${promoId}`);
   revalidatePath(`/admin/promotions`);
   return { ok: true };
+}
+
+// =============================================================================
+// saveCommunityFloorPlans — set which floor plans are offered in one community.
+//
+// The relationship is denormalized on the floor-plan side (floor_plans.communities
+// CSV of community NAMES + community_count) — what framer-push and the public API
+// consume. Editing from the community page therefore rewrites that CSV on each
+// AFFECTED floor-plan row: add this community's name to newly-selected plans,
+// strip it from deselected ones, leave unchanged plans alone (no churn). Each
+// changed plan is audited and enqueued to Framer via postWrite('floor_plans', …).
+// =============================================================================
+
+export async function saveCommunityFloorPlans(
+  communityId: string,
+  floorPlanIds: string[]
+): Promise<{ ok: true; changed: number } | { ok: false; error: string }> {
+  if (!communityId) return { ok: false, error: 'Missing community id' };
+
+  let actor: string;
+  try {
+    actor = await getCurrentUser();
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Not authenticated' };
+  }
+
+  const { db } = getDb();
+  const at = new Date().toISOString();
+
+  const comm = await db
+    .select({ id: communities.id, name: communities.name })
+    .from(communities)
+    .where(eq(communities.id, communityId))
+    .limit(1);
+  if (comm.length === 0) return { ok: false, error: `Community ${communityId} not found` };
+  const communityName = (comm[0]!.name ?? '').trim();
+  if (!communityName) return { ok: false, error: 'This community has no name to link plans by' };
+
+  const selected = new Set(floorPlanIds.map((s) => s.trim()).filter(Boolean));
+  const plans = (await db
+    .select({ id: floorPlans.id, communities: floorPlans.communities })
+    .from(floorPlans)) as Array<{ id: string; communities: string | null }>;
+
+  let changed = 0;
+  for (const p of plans) {
+    const res = applyMembership(p.communities, communityName, selected.has(p.id));
+    if (!res.changed) continue;
+    await db
+      .update(floorPlans)
+      .set({ communities: res.value || null, communityCount: res.count, updatedAt: at })
+      .where(eq(floorPlans.id, p.id));
+    await postWrite(db, 'floor_plans', p.id, [
+      {
+        entity: 'floor_plans',
+        entityId: p.id,
+        field: 'communities',
+        action: selected.has(p.id) ? 'community_added' : 'community_removed',
+        oldValue: p.communities ?? null,
+        newValue: res.value || null,
+        actor,
+      },
+    ]);
+    changed++;
+  }
+
+  revalidatePath(`/admin/communities/${communityId}`);
+  revalidatePath(`/admin/communities`);
+  revalidatePath(`/admin/floor_plans`);
+  return { ok: true, changed };
 }
 
 // =============================================================================

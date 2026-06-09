@@ -65,6 +65,18 @@ export async function loadOptionSets(
   return out;
 }
 
+/** All floor plans as {id,label:name}, alphabetical — for the per-community plan picker. */
+export async function loadFloorPlanOptions(): Promise<SelectOption[]> {
+  const db = getReadDb();
+  const rows = (await db
+    .select({ id: floorPlans.id, name: floorPlans.name })
+    .from(floorPlans)
+    .limit(LIMIT)) as Array<{ id: string; name: string | null }>;
+  return rows
+    .map((r) => ({ id: r.id, label: r.name?.trim() || r.id }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
 /** Cities + Communities + QMIs option lists for the promotion scope picker. */
 export async function loadPromoScopeOptions(): Promise<{
   cities: SelectOption[];
