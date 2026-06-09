@@ -9,6 +9,7 @@ const data: QmiData = {
   completion: 'Available now!', heroImageUrl: 'https://x/elm-w2000.jpg',
   totalSqft: 3057, livingSqft: 2432, beds: 4, baths: 2.5, garage: 2, stories: 2,
   description: 'The Elm is a two-story home…', features: ['Quartz Countertops', 'Covered Patio'], floorPlanId: null,
+  floorPlanImageUrl: '',
 };
 
 describe('qmi template', () => {
@@ -18,6 +19,6 @@ describe('qmi template', () => {
     expect(html).toContain('6529 Anaqua Loop');
     expect(html).toContain('3,057');
     expect(html).toContain('Quartz Countertops');
-    expect(html).toContain('956-275-8069');
+    expect(html).toContain('9562758069');
   });
 });

@@ -18,7 +18,7 @@ describe('community template', () => {
     expect(html).toContain('Anaqua at Tres Lagos');
     expect(html).toContain('Hickory');
     expect(html).toContain('$314,990');
-    expect(html).toContain('956-275-8069');
+    expect(html).toContain('9562758069');
     expect(html).toContain('@page');
   });
 });
