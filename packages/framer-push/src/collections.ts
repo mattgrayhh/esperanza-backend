@@ -344,6 +344,7 @@ const QMI_PROJECTION = `
   fp.plan_viewer_url        AS fp_plan_viewer,
   fp.collection             AS fp_collection,
   fp.master_bed_location    AS fp_master_bed_location,
+  fp.floor_plan_image       AS fp_floor_plan_image,
   q.published,
   q.coming_soon
 FROM qmi q
@@ -423,6 +424,7 @@ const floorPlans: CollectionDef = {
       image_url: imgIf(urlOf(row['image_url']) ?? urlOf(row['synced_image_url'])),
       hero_image_2: imgIf(row['hero_image_2']),
       hero_image_3: imgIf(row['hero_image_3']),
+      floor_plan_image: imgIf(row['floor_plan_image']),
       description: sIf(row['description']),
       plan_viewer_url: sIf(row['plan_viewer_url']),
       virtual_tour_url: sIf(row['virtual_tour_url']),
@@ -513,6 +515,7 @@ const qmi: CollectionDef = {
       image_3: imgIf(row['image_3']),
       image_4: imgIf(row['image_4']),
       image_5: imgIf(row['image_5']),
+      floor_plan_image: imgIf(row['fp_floor_plan_image']),
       description: sIf(row['description']),
       upgrades: sIf(row['upgrades']),
       incentive: sIf(row['incentive']),
