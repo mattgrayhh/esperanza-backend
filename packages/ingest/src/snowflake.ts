@@ -39,6 +39,11 @@ export const COMMUNITY_NAME_MAP: Record<string, string> = {
   Cascada: 'Cascada at Tres Lagos',
   'Villas on Freddy': 'Villas On Freddy',
   'Retama Village at Bentsen Palm': 'Retama Village (55+) at Bentsen Palm',
+  // Bare DEVELOPMENT_NAME → the admin community's full name (same community,
+  // confirmed by the live-site slugs tanglewood-at-bentsen-palm /
+  // retama-village-55-at-bentsen-palm). Resolves previously-unresolved dev links.
+  Tanglewood: 'Tanglewood at Bentsen Palm',
+  'Retama Village': 'Retama Village (55+) at Bentsen Palm',
   // Development registry name for the Aquero community (no DM_HOUSE rows yet as
   // of 2026-06-06; pre-mapped so houses link up the day they appear).
   'Aquero V': 'Aquero',
@@ -54,8 +59,21 @@ export function normalizeCommunityName(raw: string): string {
  * ("Acuna - ll", "Francisco - l") where the admin uses "Acuna II" /
  * "Francisco I". Other names pass through untouched.
  */
+// Snowflake model names that don't match the admin floor-plan record name. Each
+// maps a normalized Snowflake name → the existing admin record's name so the link
+// resolves (verified same plan by specs + shared communities + asset filenames:
+// e.g. admin "San Lorenzo" stores LORENZO_*/Lorenzo_I_* assets and serves
+// Aqualina at Tres Lagos + Sapphire at La Sienna — exactly the SF Lorenzo homes).
+const FLOOR_PLAN_ALIASES: Record<string, string> = {
+  'lorenzo': 'San Lorenzo',
+  'lorenzo ii': 'San Lorenzo II',
+  'rv dlx coach': 'RV Deluxe Coach House',
+  'cenizo - rv': 'Cenizo',
+};
+
 export function normalizeFloorPlanName(raw: string): string {
-  return raw.trim().replace(/\s*-\s*(l{1,3})$/i, (_m, ls: string) => ' ' + 'I'.repeat(ls.length));
+  const n = raw.trim().replace(/\s*-\s*(l{1,3})$/i, (_m, ls: string) => ' ' + 'I'.repeat(ls.length));
+  return FLOOR_PLAN_ALIASES[n.toLowerCase()] ?? n;
 }
 
 const cityList = SNOWFLAKE_CITIES.map((c) => `'${c}'`).join(',');
