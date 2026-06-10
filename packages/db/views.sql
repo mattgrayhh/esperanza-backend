@@ -62,6 +62,7 @@ SELECT
   q.available_now, q.self_tour_available, q.include_in_xml_feed,
   q.image_url, q.og_image_url, q.page_url, q.dynamic_pdf,
   q.featured_image, q.image_2, q.image_3, q.image_4, q.image_5,
+  q.photo_gallery_json,    -- 0010: per-home gallery, JSON array of {url, alt}
   q.description, q.upgrades, q.incentive, q.virtual_tour_url,
   q.mls_id, q.mls_number, q.year_built, q.lot_size_sqft,
   q.hers_score, q.arm_rate, q.promo_text, q.availability_text, q.nter_now, q.cities,

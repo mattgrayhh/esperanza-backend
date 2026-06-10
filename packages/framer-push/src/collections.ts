@@ -516,7 +516,17 @@ const qmi: CollectionDef = {
       image_4: imgIf(row['image_4']),
       image_5: imgIf(row['image_5']),
       floor_plan_image: imgIf(row['fp_floor_plan_image']),
-      description: sIf(row['description']),
+      // Floor-plan-default → QMI-override content resolution (same COALESCE the
+      // PDF renderer applies in packages/pdf/src/data/qmi.ts): the site binds this
+      // ONE plain field; an editor sets qmi.description only to override the plan
+      // copy. Empty-string counts as "unset" (asString('') → undefined → fallback).
+      // The raw FP value keeps flowing separately as fp_description below.
+      description: sIf(asString(row['description']) ?? fpScalar(row['fp_description'])),
+      // QMI's OWN photo gallery (qmi.photo_gallery_json — column added by a
+      // parallel migration; enrichRow() probes for it until the projection carries
+      // it). Deliberately NO fallback to the floor plan's gallery: null/absent →
+      // the field is dropped (pushed empty), per the content-resolution spec.
+      photo_gallery: galIf(galleryUrls(row['photo_gallery_json'])),
       upgrades: sIf(row['upgrades']),
       incentive: sIf(row['incentive']),
       virtual_tour_url: sIf(row['virtual_tour_url']),

@@ -153,13 +153,15 @@ describe('SITESEARCH_SQL against the real public views', () => {
     db.prepare(`INSERT INTO blogs (id, title, slug, published) VALUES (?,?,?,?)`)
       .run('b2', 'Draft Post', 'draft-post', 0);
 
-    // qmi: 1 published (synced address + community + lot + slug), 1 unpublished
+    // qmi: 1 published (synced address + community + lot + slug), 1 unpublished.
+    // lot_number became a synced_/override_ pair in migration 0007 (the base
+    // column was dropped); v_public_qmi exposes COALESCE(...) AS lot_number.
     db.prepare(
-      `INSERT INTO qmi (id, slug, synced_address, synced_community_name, lot_number, published)
+      `INSERT INTO qmi (id, slug, synced_address, synced_community_name, synced_lot_number, published)
        VALUES (?,?,?,?,?,?)`,
     ).run('q1', '1000-w-star-flower-st', '1000 W Star Flower St', 'Rogers Coves', '151', 1);
     db.prepare(
-      `INSERT INTO qmi (id, slug, synced_address, synced_community_name, lot_number, published)
+      `INSERT INTO qmi (id, slug, synced_address, synced_community_name, synced_lot_number, published)
        VALUES (?,?,?,?,?,?)`,
     ).run('q2', 'hidden-qmi', '999 Hidden Way', 'Rogers Coves', '999', 0);
   });

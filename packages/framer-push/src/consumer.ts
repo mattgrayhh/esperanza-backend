@@ -146,8 +146,29 @@ export async function loadAllRows(env: ConsumerEnv, def: CollectionDef): Promise
  *     first linked FP) and rename target-id csvs to floor_plan_ids/collection_ids
  *     the mapper expects.
  *   - testimonials: resolve floor_plan_image from the linked Floor Plan's render.
+ *   - qmi: tolerant probe for photo_gallery_json (column lands via a parallel
+ *     migration; the static QMI_PROJECTION can't name a column that may not exist
+ *     yet — SQLite rejects unknown columns at prepare time).
  */
 async function enrichRow(env: ConsumerEnv, key: CollectionKey, row: Row): Promise<Row> {
+  if (key === 'qmi') {
+    // Surface qmi.photo_gallery_json when (and only when) the column exists. Until
+    // the migration is applied the probe throws "no such column" and is swallowed —
+    // the mapper then drops the photo_gallery field (empty gallery, no FP fallback).
+    // Once QMI_PROJECTION itself selects the column this probe self-disables.
+    if (!('photo_gallery_json' in row)) {
+      try {
+        const r = await env.DB.prepare(`SELECT photo_gallery_json AS g FROM qmi WHERE id = ?`)
+          .bind(String(row['id']))
+          .first<{ g: unknown }>();
+        row['photo_gallery_json'] = r?.g ?? null;
+      } catch {
+        // column not migrated yet → leave absent (field dropped by the mapper)
+      }
+    }
+    return row;
+  }
+
   if (key === 'promotions') {
     const communityIds = csv(row['community_ids']);
     const floorPlanIds = csv(row['floor_plan_ids']); // (no FP target_type today → [])
