@@ -257,6 +257,7 @@ const qmi: EntityFieldConfig = {
     { field: 'include_in_xml_feed', label: 'Include in XML Feed', widget: 'boolean', bucket: 'admin' },
     { field: 'image_url', label: 'Main Image', widget: 'image', bucket: 'admin' },
     { field: 'og_image_url', label: 'OG Image', widget: 'image', bucket: 'admin' },
+    { field: 'photo_gallery_json', label: 'Photo Gallery', widget: 'imageGallery', bucket: 'admin', help: 'Per-home photos shown on the listing detail page — use this for upgraded-option photos. Upload in display order.' },
     { field: 'page_url', label: 'Page URL', widget: 'text', bucket: 'admin' },
     { field: 'dynamic_pdf', label: 'Dynamic PDF', widget: 'text', bucket: 'admin' },
     { field: 'description', label: 'Description', widget: 'textarea', bucket: 'admin' },
@@ -481,6 +482,7 @@ const floor_plans: EntityFieldConfig = {
     { field: 'hero_image_2', label: 'Hero Image 2', widget: 'image', bucket: 'admin' },
     { field: 'hero_image_3', label: 'Hero Image 3', widget: 'image', bucket: 'admin' },
     { field: 'floor_plan_image', label: 'Floor Plan Image', widget: 'image', bucket: 'admin' },
+    { field: 'interior_photos_json', label: 'Interior Photos', widget: 'imageGallery', bucket: 'admin', help: 'Ordered gallery of interior room photos for this plan (kitchen, living, baths…). Shown in the floor plan image section.' },
     { field: 'description', label: 'Description (md)', widget: 'richtext', bucket: 'admin' },
     { field: 'plan_viewer_url', label: 'Plan Viewer URL', widget: 'text', bucket: 'admin' },
     { field: 'virtual_tour_url', label: 'Virtual Tour URL', widget: 'text', bucket: 'admin' },
@@ -499,6 +501,10 @@ const floor_plans: EntityFieldConfig = {
 const promotions: EntityFieldConfig = {
   listColumns: [
     { field: 'title', label: 'Title' },
+    // Derived display column (build-list-view projects it from promotion_targets →
+    // qmi lot numbers); no field_definitions row — searchable via the list filter
+    // since Sean's sheets are organized by lot number.
+    { field: 'lot_numbers', label: 'Lot #s' },
     { field: 'published', label: 'Published', kind: 'publish' },
     { field: 'sort_order', label: 'Sort', kind: 'number' },
     { field: 'start_date', label: 'Start' },
@@ -592,6 +598,7 @@ const blogs: EntityFieldConfig = {
     { field: 'content', label: 'Content (md)', widget: 'richtext', bucket: 'admin' },
     { field: 'publish_date', label: 'Publish Date', widget: 'date', bucket: 'admin', halfWidth: true },
     { field: 'featured_image', label: 'Featured Image', widget: 'image', bucket: 'admin' },
+    { field: 'video_url', label: 'Video URL', widget: 'text', bucket: 'admin', help: 'Vimeo URL for this post (same convention as a community’s Featured Video).' },
     { field: 'seo_description', label: 'SEO Description', widget: 'textarea', bucket: 'admin' },
     { field: 'community_name', label: 'Community Name', widget: 'text', bucket: 'admin' },
   ],

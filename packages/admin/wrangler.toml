@@ -65,6 +65,17 @@ service = "esperanza-pdf"
 binding = "FRAMER_PUSH"
 service = "esperanza-framer-push"
 
+# Service binding to the ingest worker. The triggerIngestSync action (dashboard
+# "Sync now" button) calls its POST /run route via this binding (Authorization:
+# Bearer INGEST_TRIGGER_TOKEN) to run the Snowflake→D1 reconciliation on demand.
+# The Worker still authenticates the Bearer token on /run, so INGEST_TRIGGER_TOKEN
+# must be set as an admin secret (it matches ingest's INGEST_TRIGGER_TOKEN).
+# If the binding is absent, the action falls back to INGEST_URL over the public
+# internet.
+[[services]]
+binding = "INGEST"
+service = "esperanza-ingest"
+
 # Non-secret vars.
 #   IMAGES_PUBLIC_BASE_URL — public base for the R2 bucket. uploadImage() builds the
 #                            STABLE url as `${IMAGES_PUBLIC_BASE_URL}/<entity>/<id>/<file>`.
@@ -80,6 +91,10 @@ PDF_PUBLIC_BASE_URL = "https://esperanza-pdf.round-base-ed8c.workers.dev"
 # Public fallback for framer-push POST /schema when the FRAMER_PUSH service binding is
 # unavailable. The action prefers the binding; this URL + WEBHOOK_TOKEN is the backstop.
 FRAMER_PUSH_URL = "https://esperanza-framer-push.round-base-ed8c.workers.dev"
+# Public fallback for ingest POST /run (dashboard "Sync now") when the INGEST service
+# binding is unavailable. The action prefers the binding; this URL + INGEST_TRIGGER_TOKEN
+# is the backstop.
+INGEST_URL = "https://esperanza-ingest.round-base-ed8c.workers.dev"
 # MailLayer transactional-email endpoint. lib/maillayer.ts emails a generated password
 # to a user on create / reset. Defaulted in code; override here only if it ever changes.
 MAILLAYER_API_URL = "https://mailer.hazardhouse.ai/api/transactional/send"
@@ -107,6 +122,13 @@ MAILLAYER_API_URL = "https://mailer.hazardhouse.ai/api/transactional/send"
 #                   WEBHOOK_TOKEN secret. Set with:
 #                     wrangler secret put WEBHOOK_TOKEN --config packages/admin/wrangler.toml
 #                   (locally, put WEBHOOK_TOKEN=... in packages/admin/.dev.vars).
+#
+#   INGEST_TRIGGER_TOKEN — Bearer token the triggerIngestSync action (dashboard
+#                   "Sync now") sends to ingest POST /run (over the INGEST service
+#                   binding, or the public INGEST_URL fallback). Must equal the ingest
+#                   worker's INGEST_TRIGGER_TOKEN secret. Set with:
+#                     wrangler secret put INGEST_TRIGGER_TOKEN --config packages/admin/wrangler.toml
+#                   (locally, put INGEST_TRIGGER_TOKEN=... in packages/admin/.dev.vars).
 #
 #   MAILLAYER_API_KEY — the ENABLED Esperanza MailLayer template's `txn_…` key. Used by
 #                   lib/maillayer.ts to email a generated password to a user on create /

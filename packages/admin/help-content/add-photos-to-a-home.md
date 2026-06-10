@@ -12,7 +12,9 @@ entity: qmi
 1. Open the home in `Quick Move-Ins`.
 2. In the media panel, use the image controls to upload:
    - `Featured Image` — the hero shot used on cards and at the top of the page.
-   - Gallery images — additional shots in display order.
+   - `Photo Gallery` — additional shots in display order. This is also the place
+     for **upgraded-option photos**: pictures of the upgrades built into *this
+     specific home* (upgraded kitchen, flooring, elevation options…).
 3. `Save`.
 
 Uploads are stored in the central image library and served from our own CDN —

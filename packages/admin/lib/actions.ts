@@ -1903,3 +1903,37 @@ export async function applyFramerTypes(
   revalidatePath('/settings/fields');
   return { ok: true, results };
 }
+
+// =============================================================================
+// SYNC NOW — triggerIngestSync.
+//
+// Dashboard "Sync now" button (client feedback 2026-06-10: editors wanted a
+// manual trigger instead of waiting on the schedule). Calls the ingest worker's
+// POST /run (lib/ingest-client.ts), which runs the same Snowflake→D1
+// reconciliation as the 4-hour cron. The D1→Framer hop needs no trigger: every
+// ingest write and admin save already enqueues a framer push that lands within
+// seconds. Any signed-in editor may run it — it's the same reconciliation the
+// cron runs unattended, just sooner.
+// =============================================================================
+
+export async function triggerIngestSync(): Promise<
+  { ok: true } | { ok: false; error: string }
+> {
+  try {
+    await getCurrentUser();
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Not authenticated' };
+  }
+
+  const env = getCloudflareContext().env as unknown as import('./ingest-client').IngestEnv;
+  try {
+    const { postIngestRun } = await import('./ingest-client');
+    await postIngestRun(env);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Sync failed' };
+  }
+
+  // The reconciliation may have touched any entity; refresh the worklist + lists.
+  revalidatePath('/');
+  return { ok: true };
+}

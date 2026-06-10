@@ -24,3 +24,12 @@ issue):
 It disappears from the site within moments. Note: if the home is still an
 active spec home in MarkSystems it will NOT re-publish itself — `Live` is
 always a human decision.
+
+## If a sale cancels
+
+A cancellation in MarkSystems does **not** put the home back on the website by
+itself. The sync updates the home's facts (price, stage, dates), but going
+`Live` again is always a human decision: open the home in `Quick Move-Ins`,
+check its details and photos still look right, and set `Status` to `Live`.
+This is deliberate — it keeps a cancelled-and-relisted home from reappearing
+with stale pricing or photos before anyone has looked at it.

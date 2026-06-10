@@ -62,6 +62,19 @@ function selectSqlFor(key: EntityKey): string {
       FROM floor_plans
       LIMIT ${LIMIT}`;
   }
+  if (key === 'promotions') {
+    // Project the lot numbers of every QMI this promotion targets (effective
+    // COALESCE(override, synced), comma-joined) so the list shows them and the
+    // client-side filter can search by lot number. Display-only — promotions has
+    // no lot_numbers column; the relationship lives in promotion_targets.
+    return `SELECT p.*,
+        (SELECT group_concat(COALESCE(NULLIF(q.override_lot_number, ''), q.synced_lot_number), ', ')
+           FROM promotion_targets t
+           JOIN qmi q ON q.id = t.target_id
+          WHERE t.promotion_id = p.id AND t.target_type = 'qmi') AS lot_numbers
+      FROM promotions p
+      LIMIT ${LIMIT}`;
+  }
   return `SELECT * FROM ${tableName(key)} LIMIT ${LIMIT}`;
 }
 
