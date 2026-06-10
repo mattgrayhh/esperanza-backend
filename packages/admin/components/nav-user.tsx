@@ -17,7 +17,7 @@ import {
 	SidebarMenuItem,
 	useSidebar,
 } from "@/components/ui/sidebar";
-import { ChevronsUpDownIcon, LogOutIcon, SlidersHorizontalIcon, BlocksIcon, UsersIcon } from "lucide-react";
+import { ChevronsUpDownIcon, LogOutIcon, SlidersHorizontalIcon, BlocksIcon, UsersIcon, PercentIcon } from "lucide-react";
 
 /** Server action wired up by the layout — calls the existing Auth.js signOut. */
 export type SignOutAction = () => void | Promise<void>;
@@ -87,6 +87,15 @@ export function NavUser({
 									</div>
 								</div>
 							</DropdownMenuLabel>
+						</DropdownMenuGroup>
+						<DropdownMenuSeparator />
+						{/* Site settings (Mortgage Rate…) — content values, visible to EVERY
+						    signed-in editor, unlike the Full-Admin engine surfaces below. */}
+						<DropdownMenuGroup>
+							<DropdownMenuItem render={<Link href="/settings/site" />}>
+								<PercentIcon />
+								Site settings
+							</DropdownMenuItem>
 						</DropdownMenuGroup>
 						<DropdownMenuSeparator />
 						{isAdmin ? (

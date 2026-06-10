@@ -95,6 +95,10 @@ FRAMER_PUSH_URL = "https://esperanza-framer-push.round-base-ed8c.workers.dev"
 # binding is unavailable. The action prefers the binding; this URL + INGEST_TRIGGER_TOKEN
 # is the backstop.
 INGEST_URL = "https://esperanza-ingest.round-base-ed8c.workers.dev"
+# Public api worker — saveSiteSettings purges /api/public/settings?purge=1 here after a
+# save so the Framer calculators pick the new Mortgage Rate up immediately (the 5-minute
+# edge TTL is the backstop if the purge fails).
+API_PUBLIC_URL = "https://esperanza-api.round-base-ed8c.workers.dev"
 # MailLayer transactional-email endpoint. lib/maillayer.ts emails a generated password
 # to a user on create / reset. Defaulted in code; override here only if it ever changes.
 MAILLAYER_API_URL = "https://mailer.hazardhouse.ai/api/transactional/send"
