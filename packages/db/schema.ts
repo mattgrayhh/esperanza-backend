@@ -389,6 +389,10 @@ export const floorPlans = sqliteTable(
     photoGallery: text('photo_gallery'),
     additionalImages: text('additional_images'),
     additionalImagesGallery: text('additional_images_gallery'),
+    // 0011: admin-owned ordered INTERIOR photo set — JSON array of {url, alt},
+    // same shape as communities/qmi photo_gallery_json. The legacy galleries
+    // above carry Airtable-era exterior/elevation imagery.
+    interiorPhotosJson: text('interior_photos_json'),
 
     description: text('description'),
     planViewerUrl: text('plan_viewer_url'),
@@ -517,6 +521,8 @@ export const blogs = sqliteTable('blogs', {
   content: text('content'),
   publishDate: text('publish_date'),
   featuredImage: text('featured_image'),
+  // 0012: Vimeo URL, same convention as communities.featured_video.
+  videoUrl: text('video_url'),
   seoDescription: text('seo_description'),
   communityName: text('community_name'),
   published: integer('published', { mode: 'boolean' }).notNull().default(true),
