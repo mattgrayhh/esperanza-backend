@@ -406,6 +406,7 @@ const floorPlans: CollectionDef = {
     const photo = galleryUrls(row['photo_gallery']);
     const elevGallery = galleryUrls(row['elevation_gallery']);
     const addl = galleryUrls(row['additional_images_gallery']);
+    const interior = galleryUrls(row['interior_photos_json']);
     const fieldData = compactFields({
       name: sIf(row['name']),
       slug: str(slug),
@@ -445,6 +446,8 @@ const floorPlans: CollectionDef = {
       elevation_gallery: galIf(elevGallery),
       additional_images: sIf(row['additional_images']),
       additional_images_gallery: galIf(addl),
+      // 0011: admin-owned interior room photos (interior_photos_json {url,alt} array).
+      interior_photos: galIf(interior),
       quick_move_in_ids: sIf(row['quick_move_in_ids']),
       promotion_ids: sIf(row['promotion_ids']),
     });
@@ -761,6 +764,8 @@ const blogs: CollectionDef = {
       content: sIf(row['content']),
       publish_date: sIf(row['publish_date']),
       featured_image: imgIf(row['featured_image']),
+      // 0012: Vimeo URL string, same convention as communities.featured_video.
+      video_url: sIf(row['video_url']),
       seo_description: sIf(row['seo_description']),
     });
     return { id, slug, draft, fieldData };

@@ -62,3 +62,39 @@ describe('Floor Plans mapper — floor_plan_image', () => {
     expect(sval(item.fieldData['floor_plan_image'] as never)).toBeUndefined();
   });
 });
+
+describe('Floor Plans mapper — interior_photos (migration 0011)', () => {
+  const G1 = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFP4/gallery-0-kitchen.jpg';
+  const G2 = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFP4/gallery-1-living.jpg';
+
+  it('emits interior_photos as an image array from interior_photos_json ({url,alt} shape)', () => {
+    const db = freshDb();
+    insertRow(db, 'floor_plans', {
+      id: 'recFP4',
+      name: 'Cielo',
+      slug: 'cielo',
+      published: 1,
+      interior_photos_json: JSON.stringify([
+        { url: G1, alt: 'Kitchen' },
+        { url: G2, alt: 'Living room' },
+      ]),
+    });
+    const item = mapOne(db, 'recFP4');
+    const gal = item.fieldData['interior_photos'] as ArrayFieldValue;
+    expect(gal?.type).toBe('array');
+    expect(gal.value.map((v) => v.fieldData['image']?.value)).toEqual([G1, G2]);
+  });
+
+  it('drops interior_photos when the column is null/empty', () => {
+    const db = freshDb();
+    insertRow(db, 'floor_plans', {
+      id: 'recFP5',
+      name: 'Dulce',
+      slug: 'dulce',
+      published: 1,
+      interior_photos_json: null,
+    });
+    const item = mapOne(db, 'recFP5');
+    expect(item.fieldData['interior_photos']).toBeUndefined();
+  });
+});
