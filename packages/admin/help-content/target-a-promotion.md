@@ -19,6 +19,13 @@ Every promotion has a **Promotion Location** — where on the site it applies:
 Pick the targets on the promotion's page; a promotion can have several
 (e.g. two communities).
 
+## Find a promotion by lot number
+
+The promotions list shows a **Lot #s** column — the lot numbers of every home a
+promotion targets. Type a lot number into the list's search box to jump straight
+to the promotions that apply to that lot (handy when your sheet is organized by
+lot number).
+
 ## Which promotion shows when several apply?
 
 A page shows **one** promotion. The most *specific* match wins:

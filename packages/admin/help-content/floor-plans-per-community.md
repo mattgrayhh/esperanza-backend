@@ -24,12 +24,20 @@ list from the community's own edit page.
 That's it. The website updates within moments: each plan you checked now lists
 this community, and each one you unchecked drops it.
 
+## Where to edit (one place only)
+
+You set this list **only from the Community editor** — the Floor Plan editor has
+no communities picker, on purpose. If you're on a floor plan and need to change
+which communities offer it, open each of those communities and use their
+**Floor Plans Offered** panel.
+
 ## How it actually works
 
-The relationship is stored **on the floor plan**, not the community — every floor
-plan carries the list of communities it's offered in (and a count). Editing from
-the community page just adds or removes *this* community's name on the plans you
-changed. So:
+Under the hood the relationship is *stored* on the floor plan — every floor
+plan carries the list of communities it's offered in (and a count). But you
+never edit it there: editing from the community page adds or removes *this*
+community's name on the plans you changed, and the system keeps everything in
+sync automatically. So:
 
 - The same plan can belong to several communities (e.g. Marzano in Aquero,
   Cielo Vista, and Villas at La Sienna).

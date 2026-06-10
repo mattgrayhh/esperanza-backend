@@ -17,6 +17,14 @@ keywords: not showing, not updating, publish, sync, live site, troubleshoot, cac
    sync schedule — every 4 hours — then push to the site the same way.
 4. PDF brochures regenerate automatically after content changes.
 
+## Don't want to wait for the 4-hour sync?
+
+Use the **Sync now** button at the top of the Dashboard. It runs the same
+MarkSystems/Snowflake sync immediately (it takes a minute or so to finish), and
+anything it pulls in pushes to the website right after. You only need this for
+*upstream* changes — your own admin edits already reach the site in moments
+without it.
+
 ## "My change isn't showing" checklist
 
 1. **Is the record `Live`?** A `Draft` never appears, and `Coming Soon` shows
@@ -27,6 +35,6 @@ keywords: not showing, not updating, publish, sync, live site, troubleshoot, cac
    instant.
 4. **Is the field synced (lock badge)?** If you edited upstream in
    MarkSystems, it appears after the next 4-hour sync. If you need it now,
-   use `Unlock to override`.
+   hit **Sync now** on the Dashboard, or use `Unlock to override`.
 5. Still stuck after ~10 minutes? Tell a Full Admin — they can check the sync
    dashboard and re-push.

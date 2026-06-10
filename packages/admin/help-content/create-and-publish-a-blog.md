@@ -20,6 +20,8 @@ entity: blogs
 3. Write the `Content`. Use headings to break up sections; images can be
    placed inline from the library.
 4. Upload the `Featured Image` (wide/landscape — it's the card and hero).
+   If the post has a video, paste its Vimeo URL into `Video URL` — same
+   convention as a community's Featured Video.
 5. SEO: write a `SEO Description` (~155 characters, reads like a search
    result). If the post is about one community, set `Community` so the post
    cross-links.

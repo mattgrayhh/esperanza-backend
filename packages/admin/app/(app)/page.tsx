@@ -62,6 +62,7 @@ import {
   CardAction,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { SyncNowButton } from '@/components/SyncNowButton';
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import { cn } from '@/lib/utils';
 
@@ -246,6 +247,8 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {/* Manual Snowflake→D1 pull (admin saves already push to the site in seconds). */}
+          <SyncNowButton />
           <Button render={<Link href="/qmi/new" />} size="sm">
             <PlusIcon />
             New QMI
