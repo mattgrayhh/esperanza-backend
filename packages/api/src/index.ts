@@ -294,6 +294,16 @@ export function serializeQmiRow(row: Row, resolved: ResolvedPromo | null): RawAi
     if (arr !== undefined) fields[label] = arr;
   }
 
+  // Floor-plan-default → QMI-override description resolution (the same COALESCE
+  // the PDF renderer and framer-push apply): when the home carries no Description
+  // of its own (NULL or ''), serve the linked floor plan's copy so consumers bind
+  // ONE plain field with zero conditional logic. 'FP: Description' above keeps
+  // carrying the raw FP lookup, so existing component-side fallbacks still work.
+  if (fields['Description'] === undefined || fields['Description'] === '') {
+    const fp = unwrapStored(row['fp_description']);
+    if (fp != null && String(fp) !== '') fields['Description'] = String(fp);
+  }
+
   for (const [col, label] of QMI_LINKS) {
     const v = row[col];
     if (v == null || v === '') continue;

@@ -525,6 +525,29 @@ describe('/qmi — raw passthrough contract', () => {
     }
   });
 
+  it('Description resolves floor-plan-default → QMI-override', () => {
+    const r = selectQmi(db).find((x) => x['id'] === 'rec0425zwvFWu0r5v')!;
+
+    // no own description → defaults to the linked floor plan's copy
+    const rec = serializeQmiRow(r, null);
+    expect(rec.fields['Description']).toBe('The Indigo, part of our Haven Collection...');
+    // the raw lookup still flows for component-side fallbacks
+    expect(rec.fields['FP: Description']).toEqual(['The Indigo, part of our Haven Collection...']);
+
+    // own description set → the per-home override wins
+    const ov = serializeQmiRow({ ...r, description: 'Custom corner-lot copy.' }, null);
+    expect(ov.fields['Description']).toBe('Custom corner-lot copy.');
+    expect(ov.fields['FP: Description']).toEqual(['The Indigo, part of our Haven Collection...']);
+
+    // empty-string own description counts as unset → still falls back
+    const empty = serializeQmiRow({ ...r, description: '' }, null);
+    expect(empty.fields['Description']).toBe('The Indigo, part of our Haven Collection...');
+
+    // no floor plan AND no own description → Description stays omitted (sparse)
+    const noFp = selectQmi(db).find((x) => x['id'] === 'rec7vx5Pvw8899nqY')!;
+    expect('Description' in serializeQmiRow(noFp, null).fields).toBe(false);
+  });
+
   it('effective promo (community-targeted) flattens onto promo_text', () => {
     const ctx = buildPromoCtx(db);
     const r = selectQmi(db).find((x) => x['id'] === 'rec0425zwvFWu0r5v')!;

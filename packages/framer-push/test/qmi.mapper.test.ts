@@ -236,6 +236,128 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
     expect(sval(fb.fieldData['move_in_date'])).toBe('2026-11-23');
   });
 
+  it('description defaults to the linked floor plan copy, overridden per-home', async () => {
+    const db = freshDb();
+    insertRow(db, 'floor_plans', {
+      id: 'recFPdesc0000001',
+      name: 'Verbena',
+      slug: 'verbena',
+      published: 1,
+      description: 'The Verbena, part of our Haven Collection, blends light and space.',
+    });
+    // no own description → falls back to the plan copy
+    insertRow(db, 'qmi', {
+      id: 'recQMIdescFB0001',
+      published: 1,
+      synced_address: '10 Default Dr',
+      synced_floor_plan_id: 'recFPdesc0000001',
+      synced_floor_plan_name: 'Verbena',
+    });
+    // own description set → override wins
+    insertRow(db, 'qmi', {
+      id: 'recQMIdescOV0001',
+      published: 1,
+      synced_address: '11 Override Ct',
+      synced_floor_plan_id: 'recFPdesc0000001',
+      synced_floor_plan_name: 'Verbena',
+      description: 'This specific home features a custom outdoor kitchen.',
+    });
+    const env = consumerEnv(db);
+
+    const fb = qmiDef.map((await loadRowById(env, qmiDef, 'recQMIdescFB0001'))!);
+    expect(sval(fb.fieldData['description'])).toBe(
+      'The Verbena, part of our Haven Collection, blends light and space.'
+    );
+    // the raw FP value still flows separately (contract has both fields)
+    expect(sval(fb.fieldData['fp_description'])).toBe(
+      'The Verbena, part of our Haven Collection, blends light and space.'
+    );
+
+    const ov = qmiDef.map((await loadRowById(env, qmiDef, 'recQMIdescOV0001'))!);
+    expect(sval(ov.fieldData['description'])).toBe(
+      'This specific home features a custom outdoor kitchen.'
+    );
+    expect(sval(ov.fieldData['fp_description'])).toBe(
+      'The Verbena, part of our Haven Collection, blends light and space.'
+    );
+  });
+
+  it('empty-string qmi description counts as unset (falls back to FP copy)', () => {
+    const item = qmiDef.map({
+      id: 'recQMIdescEMPTY1',
+      published: 1,
+      address: '12 Empty St',
+      description: '',
+      fp_description: 'Plan copy wins over an empty override.',
+    });
+    expect(sval(item.fieldData['description'])).toBe('Plan copy wins over an empty override.');
+  });
+
+  it('description is dropped entirely when neither qmi nor FP has copy', () => {
+    const db = freshDb();
+    insertRow(db, 'qmi', { id: 'recQMIdescNONE01', published: 1, synced_address: '13 Bare Rd' });
+    const row = db.prepare(qmiDef.selectByIdSql).get('recQMIdescNONE01') as Record<string, unknown>;
+    const item = qmiDef.map(row);
+    expect(item.fieldData['description']).toBeUndefined();
+  });
+
+  it('photo_gallery: dropped while qmi.photo_gallery_json does not exist (tolerant probe)', async () => {
+    const db = freshDb();
+    // Simulate a D1 instance where migration 0010 has NOT been applied yet (the
+    // local migration chain already carries it). The view must go first — SQLite
+    // refuses to drop a column a view references; framer-push reads base tables.
+    db.exec(`DROP VIEW IF EXISTS v_public_qmi`);
+    db.exec(`ALTER TABLE qmi DROP COLUMN photo_gallery_json`);
+    insertRow(db, 'qmi', { id: 'recQMIgalNOCOL01', published: 1, synced_address: '14 Pre-Mig Pl' });
+    const env = consumerEnv(db);
+    // loadRowById must not throw — the enrichRow probe swallows "no such column"
+    const row = await loadRowById(env, qmiDef, 'recQMIgalNOCOL01');
+    expect(row).not.toBeNull();
+    const item = qmiDef.map(row!);
+    expect(item.fieldData['photo_gallery']).toBeUndefined();
+  });
+
+  it('photo_gallery: emits the QMI-own gallery once the column lands; NO FP fallback', async () => {
+    const db = freshDb(); // migration 0010 in the chain → qmi.photo_gallery_json exists
+    insertRow(db, 'floor_plans', {
+      id: 'recFPgallery0001',
+      name: 'Gallery Plan',
+      slug: 'gallery-plan',
+      published: 1,
+      fp_additional_images:
+        '[{"url":"https://media.esperanzahomes.com/fp/extra-1.jpg"},{"url":"https://media.esperanzahomes.com/fp/extra-2.jpg"}]',
+    });
+    insertRow(db, 'qmi', {
+      id: 'recQMIgalOWN0001',
+      published: 1,
+      synced_address: '15 Gallery Way',
+      synced_floor_plan_id: 'recFPgallery0001',
+      // {url, alt} object shape per migration 0010 (galleryUrls accepts both)
+      photo_gallery_json:
+        '[{"url":"https://media.esperanzahomes.com/qmi/own-1.jpg","alt":"Kitchen"},{"url":"https://media.esperanzahomes.com/qmi/own-2.jpg","alt":"Patio"}]',
+    });
+    insertRow(db, 'qmi', {
+      id: 'recQMIgalNULL001',
+      published: 1,
+      synced_address: '16 No Gallery Ln',
+      synced_floor_plan_id: 'recFPgallery0001', // FP gallery exists, must NOT leak in
+    });
+    const env = consumerEnv(db);
+
+    const own = qmiDef.map((await loadRowById(env, qmiDef, 'recQMIgalOWN0001'))!);
+    const gal = own.fieldData['photo_gallery'];
+    expect(gal?.type).toBe('array');
+    expect((gal as ArrayFieldValue).value.map((v) => v.fieldData['image']?.value)).toEqual([
+      'https://media.esperanzahomes.com/qmi/own-1.jpg',
+      'https://media.esperanzahomes.com/qmi/own-2.jpg',
+    ]);
+
+    // null gallery → field dropped (empty); the FP's images stay in fp_* fields only
+    const none = qmiDef.map((await loadRowById(env, qmiDef, 'recQMIgalNULL001'))!);
+    expect(none.fieldData['photo_gallery']).toBeUndefined();
+    expect(none.fieldData['fp_additional_images_gallery']).toBeDefined();
+  });
+
   it('upserts by record id end-to-end and removes a vanished row as a delete', async () => {
     const db = freshDb();
     insertRow(db, 'qmi', {

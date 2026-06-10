@@ -158,6 +158,8 @@ export const qmi = sqliteTable(
     image3: text('image_3'),
     image4: text('image_4'),
     image5: text('image_5'),
+    // 0010: per-home photo gallery — JSON array of {url, alt} (R2-hosted, ordered)
+    photoGalleryJson: text('photo_gallery_json'),
 
     // copy / misc
     description: text('description'),
