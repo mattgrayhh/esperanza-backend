@@ -646,6 +646,7 @@ const communities: CollectionDef = {
       directions: sIf(row['directions']),
       education_rich: ftIf(row['education_rich']),
       mine_link: sIf(row['mine_link']),
+      nter_now: sIf(row['nter_now']),
       community_map_embed: sIf(row['community_map_embed']),
       features_download: linkIf(row['features_download_url']),
       resources_download: linkIf(row['resources_download_url']),

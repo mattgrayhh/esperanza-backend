@@ -32,7 +32,12 @@ A complete community page has:
 
 ## Optional
 - `Incentive` banner text, `Community Map Embed` (interactive lot map),
-  features/resources PDFs, `Featured Video`.
+  features/resources PDFs, `Featured Video`, `Enter Now`.
+- `Featured Video` holds the **Vimeo embed** for the community (e.g.
+  `https://player.vimeo.com/video/…`). Leave it blank if the community has no video.
+- `Enter Now` holds the **NterNow self-tour link** (the "Enter Now" CTA button) —
+  a separate field from `Featured Video`. Don't paste a tour link into the video
+  field; the two drive different parts of the page.
 
 Tip: open an established community (e.g. a Tres Lagos one) side-by-side as a
 reference for tone and length.
