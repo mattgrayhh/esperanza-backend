@@ -306,5 +306,24 @@ export const HELP_ARTICLES: HelpArticle[] = [
     ],
     "entity": null,
     "html": "<h2>The pipeline</h2><ol><li>You <code>Save</code> in the admin → the change lands in the database instantly.</li><li>The website is pushed the change <strong>immediately</strong> (typically under a</li></ol><p>   minute). A nightly sweep re-pushes everything as a safety net.</p><ol><li>Snowflake-driven changes (prices, new homes, sold homes) arrive on the</li></ol><p>   sync schedule — every 4 hours — then push to the site the same way.</p><ol><li>PDF brochures regenerate automatically after content changes.</li></ol><h2>Don't want to wait for the 4-hour sync?</h2><p>Use the <strong>Sync now</strong> button at the top of the Dashboard. It runs the same<br>MarkSystems/Snowflake sync immediately (it takes a minute or so to finish), and<br>anything it pulls in pushes to the website right after. You only need this for<br><em>upstream</em> changes — your own admin edits already reach the site in moments<br>without it.</p><h2>\"My change isn't showing\" checklist</h2><ol><li><strong>Is the record <code>Live</code>?</strong> A <code>Draft</code> never appears, and <code>Coming Soon</code> shows</li></ol><p>   only the teaser page.</p><ol><li><strong>Hard-refresh</strong> the page (Cmd+Shift+R) — your browser may be showing its</li></ol><p>   own cached copy.</p><ol><li><strong>Wait one minute</strong> and refresh again — pushes are fast but not literally</li></ol><p>   instant.</p><ol><li><strong>Is the field synced (lock badge)?</strong> If you edited upstream in</li></ol><p>   MarkSystems, it appears after the next 4-hour sync. If you need it now,<br>   hit <strong>Sync now</strong> on the Dashboard, or use <code>Unlock to override</code>.</p><ol><li>Still stuck after ~10 minutes? Tell a Full Admin — they can check the sync</li></ol><p>   dashboard and re-push.</p>"
+  },
+  {
+    "slug": "update-the-mortgage-rate",
+    "title": "Update the Mortgage Rate (site-wide)",
+    "category": "Publishing",
+    "categorySort": 60,
+    "sort": 20,
+    "summary": "One field updates the interest rate every payment calculator on the website uses.",
+    "keywords": [
+      "interest rate",
+      "mortgage rate",
+      "APR",
+      "payment calculator",
+      "monthly payment",
+      "rates",
+      "biweekly"
+    ],
+    "entity": null,
+    "html": "<p>The website's payment calculators — on community pages, home pages, and the<br>financing page — all read <strong>one company-wide Mortgage Rate</strong>. Update it in one<br>place and every calculator follows.</p><h2>Steps</h2><ol><li>Click your account (bottom of the sidebar) → <strong>Site settings</strong>.</li><li>Type the new rate into <strong>Mortgage Rate</strong> (a percentage, e.g. <code>6.15</code>).</li><li><code>Save</code>. Calculators across the site use the new rate within moments —</li></ol><p>   visitors mid-session see it on their next page load.</p><h2>Good to know</h2><ul><li>This replaces the Homefiniti \"Mortgage Rate\" field at the Esperanza Homes</li></ul><p>  level — same idea: type a number, the whole site updates.</p><ul><li>Visitors can still type their own rate <em>into</em> a calculator on the page;</li></ul><p>  this setting is the <strong>starting default</strong> every calculator shows.</p><ul><li>The per-home <code>ARM Rate</code> badge and the <code>Est. Monthly Payment</code> numbers on</li></ul><p>  listings are separate, manually-set marketing fields — changing the<br>  Mortgage Rate doesn't rewrite those.</p><ul><li>Every change is logged (who + when) in Activity.</li></ul>"
   }
 ];

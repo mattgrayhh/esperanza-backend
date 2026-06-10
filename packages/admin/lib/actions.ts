@@ -33,6 +33,7 @@ import {
   images,
   auditLog,
   fieldDefinitions,
+  siteSettings,
   type FieldDefinition,
   type NewAuditLogRow,
   type NewFieldDefinition,
@@ -1935,5 +1936,90 @@ export async function triggerIngestSync(): Promise<
 
   // The reconciliation may have touched any entity; refresh the worklist + lists.
   revalidatePath('/');
+  return { ok: true };
+}
+
+// =============================================================================
+// SITE SETTINGS — saveSiteSettings (migration 0013).
+//
+// Company-wide values the marketing team adjusts on a schedule — today that's
+// the Mortgage Rate (%), reviewed biweekly, which the Framer mortgage
+// calculators on community / QMI / financing pages fetch from the api worker's
+// GET /api/public/settings. Saving here updates D1, writes an audit_log row per
+// changed key, and purges the api worker's edge cache so the new rate is live
+// site-wide within moments (calculators fetch on page load).
+// Any signed-in editor may save — these are content values, like prices.
+// =============================================================================
+
+const SITE_SETTING_KEYS = ['mortgage_rate'] as const;
+
+export async function saveSiteSettings(
+  values: Record<string, string>
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  let actor: string;
+  try {
+    actor = await getCurrentUser();
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Not authenticated' };
+  }
+
+  // Allow-list keys; validate the rate is a sane percentage.
+  const writes: Array<{ key: string; value: string }> = [];
+  for (const key of SITE_SETTING_KEYS) {
+    if (!(key in values)) continue;
+    const raw = String(values[key] ?? '').trim();
+    if (key === 'mortgage_rate') {
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n <= 0 || n >= 25) {
+        return { ok: false, error: 'Mortgage Rate must be a percentage between 0 and 25 (e.g. 6.15).' };
+      }
+      writes.push({ key, value: String(n) });
+    } else {
+      writes.push({ key, value: raw });
+    }
+  }
+  if (writes.length === 0) return { ok: false, error: 'Nothing to save.' };
+
+  const { db } = getDb();
+  const at = new Date().toISOString();
+  for (const w of writes) {
+    const prev = await db
+      .select({ value: siteSettings.value })
+      .from(siteSettings)
+      .where(eq(siteSettings.key, w.key));
+    const old = prev[0]?.value ?? null;
+    if (old === w.value) continue; // no-op: skip write + audit spam
+
+    await db
+      .insert(siteSettings)
+      .values({ key: w.key, value: w.value, updatedBy: actor, updatedAt: at })
+      .onConflictDoUpdate({
+        target: siteSettings.key,
+        set: { value: w.value, updatedBy: actor, updatedAt: at },
+      });
+    await db.insert(auditLog).values({
+      entity: 'site_settings',
+      entityId: w.key,
+      field: w.key,
+      action: 'update',
+      oldValue: old,
+      newValue: w.value,
+      actor,
+      at,
+    } as NewAuditLogRow);
+  }
+
+  // Purge the api worker's edge cache so calculators pick the new value up on the
+  // next page load instead of after the 5-minute TTL. Best-effort: a purge failure
+  // must not fail the save (the TTL is the backstop).
+  try {
+    const env = getCloudflareContext().env as unknown as { API_PUBLIC_URL?: string };
+    const base = (env.API_PUBLIC_URL ?? '').replace(/\/+$/, '');
+    if (base) await fetch(`${base}/api/public/settings?purge=1`, { method: 'GET' });
+  } catch {
+    /* TTL backstop */
+  }
+
+  revalidatePath('/settings/site');
   return { ok: true };
 }

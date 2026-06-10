@@ -13,6 +13,7 @@
 //   GET /api/public/images       -> { images:       Image[],             ts }
 //   GET /api/public/blogs        -> { blogs:        Blog[],              ts }
 //   GET /api/public/testimonials -> { testimonials: Testimonial[],       ts }
+//   GET /api/public/settings     -> { settings: {mortgage_rate,...},     ts }
 //
 // Three contract invariants the serializers reproduce byte-for-byte:
 //   1. /qmi is a RAW Airtable passthrough: each item is { id, createdTime, fields }
@@ -91,6 +92,7 @@ const TTL: Record<string, number> = {
   blogs: 300,
   testimonials: 300,
   sitesearch: 300,
+  settings: 300,
 };
 
 const ENTITIES = Object.keys(TTL) as readonly string[];
@@ -787,6 +789,22 @@ async function buildPayload(
       // Unified header-search index — clone of the legacy /sitesearch.json feed.
       // See sitesearch.ts + docs/sitesearch-clone-design.md.
       return await buildSiteSearchPayload(session);
+    }
+
+    case 'settings': {
+      // Company-wide settings (site_settings, migration 0013) — e.g. mortgage_rate,
+      // which the Framer mortgage calculators fetch so a single admin edit updates
+      // every payment calculator site-wide. Numeric-looking values are coerced so
+      // calculators can use them directly.
+      const res = await session.prepare('SELECT key, value FROM site_settings').all();
+      const rows = (res.results ?? []) as unknown as Row[];
+      const settings: Record<string, string | number | null> = {};
+      for (const r of rows) {
+        const v = r['value'];
+        const n = asNumOrNull(v);
+        settings[asStr(r['key'])] = n != null ? n : asStrOrNull(v);
+      }
+      return { settings, ts };
     }
 
     default:

@@ -557,6 +557,18 @@ export const testimonials = sqliteTable('testimonials', {
 });
 
 // =============================================================================
+// SITE SETTINGS — company-wide key→value settings (migration 0013), e.g. the
+// Mortgage Rate the marketing team updates biweekly. Served publicly by the api
+// worker at /api/public/settings; edited in the admin at /settings/site.
+// =============================================================================
+export const siteSettings = sqliteTable('site_settings', {
+  key: text('key').primaryKey(),
+  value: text('value'),
+  updatedBy: text('updated_by'),
+  updatedAt: text('updated_at').notNull().default(nowIso),
+});
+
+// =============================================================================
 // AUDIT LOG / SYNC LOG
 // =============================================================================
 export const auditLog = sqliteTable(
