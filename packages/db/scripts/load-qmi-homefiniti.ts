@@ -256,6 +256,11 @@ async function main() {
     }
 
     const photos = (home.photos ?? []).filter((p) => typeof p === 'string' && p.trim());
+    // The page's og:image is the canonical exterior hero shot and is usually NOT in
+    // the fancybox gallery (the hero slider is a separate group on the legacy pages) —
+    // prepend it so it mirrors as photo_1 and becomes the image_url hero below.
+    const og = String(home.og_image ?? '').split('?')[0].trim();
+    if (og && !photos.includes(og)) photos.unshift(og);
     if (photos.length === 0) {
       console.warn(`  SKIP ${label}: no photos in scrape`);
       stats.noPhotos++;
