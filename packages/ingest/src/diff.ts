@@ -149,6 +149,105 @@ export interface DiffResult {
     floorPlansUpdated: number;
     unresolvedLinks: number;
   };
+  /** Mass-unpublish safety guard outcome (see evaluateUnpublishGuard). */
+  unpublishGuard: UnpublishGuardResult;
+}
+
+// =============================================================================
+// MASS-UNPUBLISH SAFETY GUARD — 2026-06-11 incident.
+//
+// The 08:00 producer run received a TRUNCATED Snowflake QMI result (60 rows
+// where every adjacent 4-hourly run sees 321-324 — the REST client was reading
+// only the first inline chunk) and, because the unpublish rule treats "published
+// row's eci_key absent from the Snowflake result" as sold/removed, it enqueued
+// 118 qmi.unpublish messages and mass-unpublished the live catalog.
+//
+// The client is fixed (snowflake.ts now follows data.chunks), but as defense in
+// depth the diff refuses to emit ANY unpublish messages for a run whose
+// Snowflake result is anomalously small. Upserts are unaffected — a guarded run
+// still processes creates/updates normally; only the destructive unpublish leg
+// is skipped (and surfaced as a loud sync_log warning by the producer).
+// =============================================================================
+
+/**
+ * Guard only engages at/above this many would-be unpublishes. Below it, even a
+ * proportionally large unpublish (e.g. 1 of 2 published rows genuinely selling)
+ * is plausible and must keep working.
+ */
+export const UNPUBLISH_GUARD_MIN_CANDIDATES = 5;
+
+/**
+ * Trip when the run would unpublish more than this fraction of the currently
+ * published, eci-keyed rows. A healthy run unpublishes a handful of solds; the
+ * 2026-06-11 incident run would have unpublished ~44% of the catalog.
+ */
+export const UNPUBLISH_GUARD_MAX_PUBLISHED_FRACTION = 0.2;
+
+/**
+ * Trip when the Snowflake QMI row count falls below this fraction of the
+ * existing eci-keyed D1 rows (the incident shape: 60 returned vs ~330 known —
+ * a truncated/partial result, not 270 simultaneous sales).
+ */
+export const UNPUBLISH_GUARD_MIN_SNOWFLAKE_RATIO = 0.5;
+
+export interface UnpublishGuardResult {
+  tripped: boolean;
+  /** How many qmi.unpublish messages the run WOULD have emitted. */
+  candidateCount: number;
+  /** Currently published, eci-keyed D1 rows (the fraction-rule denominator). */
+  publishedEciCount: number;
+  /** All eci-keyed D1 rows (the shrink-rule denominator). */
+  eciKeyedCount: number;
+  /** QMI rows the Snowflake query returned this run. */
+  snowflakeCount: number;
+  /** Loud, human-readable explanation when tripped; null otherwise. */
+  reason: string | null;
+}
+
+/** Pure guard evaluation (exported for tests). */
+export function evaluateUnpublishGuard(
+  candidateCount: number,
+  publishedEciCount: number,
+  eciKeyedCount: number,
+  snowflakeCount: number
+): UnpublishGuardResult {
+  const base: UnpublishGuardResult = {
+    tripped: false,
+    candidateCount,
+    publishedEciCount,
+    eciKeyedCount,
+    snowflakeCount,
+    reason: null,
+  };
+  if (candidateCount < UNPUBLISH_GUARD_MIN_CANDIDATES) return base;
+
+  const overPublishedFraction =
+    publishedEciCount > 0 &&
+    candidateCount > UNPUBLISH_GUARD_MAX_PUBLISHED_FRACTION * publishedEciCount;
+  const snowflakeShrunk =
+    eciKeyedCount > 0 && snowflakeCount < UNPUBLISH_GUARD_MIN_SNOWFLAKE_RATIO * eciKeyedCount;
+
+  if (!overPublishedFraction && !snowflakeShrunk) return base;
+
+  const reasons: string[] = [];
+  if (overPublishedFraction) {
+    reasons.push(
+      `would unpublish ${candidateCount}/${publishedEciCount} published rows (> ${UNPUBLISH_GUARD_MAX_PUBLISHED_FRACTION * 100}%)`
+    );
+  }
+  if (snowflakeShrunk) {
+    reasons.push(
+      `snowflake returned ${snowflakeCount} QMI rows vs ${eciKeyedCount} eci-keyed D1 rows (< ${UNPUBLISH_GUARD_MIN_SNOWFLAKE_RATIO * 100}%)`
+    );
+  }
+  return {
+    ...base,
+    tripped: true,
+    reason:
+      `UNPUBLISH GUARD TRIPPED — skipped ${candidateCount} qmi.unpublish message(s): ` +
+      reasons.join('; ') +
+      '. Likely truncated/partial Snowflake result (2026-06-11 incident shape); upserts processed normally.',
+  };
 }
 
 const W = (v: number | null | undefined) => v !== null && v !== undefined && v > 0;
@@ -357,13 +456,29 @@ export function diff(
 
   // SOLD / REMOVED: existing rows WITH eci_key not present in Snowflake AND
   // currently published → unpublish (force =0). No-eci rows skipped.
+  // Candidates are collected first and gated by the mass-unpublish guard: a
+  // truncated Snowflake result must NOT unpublish the catalog (2026-06-11).
+  const unpublishCandidates: QmiUnpublishMessage[] = [];
+  let publishedEciCount = 0;
+  let eciKeyedCount = 0;
   for (const e of existingQmis) {
     const k = snowflakeKey(e.eci_key);
     if (!k) continue; // pre-migration row → skip
+    eciKeyedCount++;
+    if (e.published === 1) publishedEciCount++;
     if (!snowflakeEcis.has(k) && e.published === 1) {
-      messages.push({ kind: 'qmi.unpublish', snowflakeKey: k, qmiId: e.id });
-      stats.qmisUnpublished++;
+      unpublishCandidates.push({ kind: 'qmi.unpublish', snowflakeKey: k, qmiId: e.id });
     }
+  }
+  const unpublishGuard = evaluateUnpublishGuard(
+    unpublishCandidates.length,
+    publishedEciCount,
+    eciKeyedCount,
+    snowflakeQmis.length
+  );
+  if (!unpublishGuard.tripped) {
+    messages.push(...unpublishCandidates);
+    stats.qmisUnpublished = unpublishCandidates.length;
   }
 
   // Communities: sqft range + bed/bath ranges + price_from (0007), with change
@@ -410,7 +525,7 @@ export function diff(
     stats.floorPlansUpdated++;
   }
 
-  return { messages, stats };
+  return { messages, stats, unpublishGuard };
 }
 
 /** Has any synced community value actually changed vs the existing D1 row? */
