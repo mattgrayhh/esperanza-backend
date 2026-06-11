@@ -108,7 +108,34 @@ export async function snowflakeLogin(env: SnowflakeEnv): Promise<string> {
   return token;
 }
 
-/** POST /queries/v1/query-request → rowset (positional arrays) (worker.js:178-192). */
+/** The slice of the query-request response the client consumes. */
+interface SnowflakeQueryResponseData {
+  /** FIRST chunk only — large results page the rest out via `chunks`. */
+  rowset?: unknown[][];
+  /** Remaining result chunks (S3 URLs). ABSENT for small (single-chunk) results. */
+  chunks?: { url: string; rowCount?: number }[];
+  /** Headers Snowflake wants echoed on each chunk download (when provided). */
+  chunkHeaders?: Record<string, string>;
+  /** Query Result Master Key — SSE-C key for chunk downloads when chunkHeaders absent. */
+  qrmk?: string;
+  /** Total row count across rowset + all chunks (when provided). */
+  total?: number;
+  queryResultFormat?: string;
+}
+
+/**
+ * POST /queries/v1/query-request → ALL rows (positional arrays).
+ *
+ * ⚠ 2026-06-11 incident: this endpoint returns only the FIRST chunk of a large
+ * result inline in `data.rowset`; the remainder is delivered as `data.chunks`
+ * (chunk download URLs). The original 1:1 port from esperanza-data-sync read
+ * only `data.rowset`, so once the QMI result grew past one chunk it silently
+ * truncated (60 of 321 rows) and the diff mass-unpublished the live catalog.
+ * This client now follows every chunk URL — sending `data.chunkHeaders` when
+ * provided, else the SSE-C header pair derived from `data.qrmk` per Snowflake's
+ * chunk protocol — reassembles rows in order, and cross-checks `data.total` so
+ * any OTHER partial-result mode fails loudly instead of returning a subset.
+ */
 export async function snowflakeQuery(
   token: string,
   env: SnowflakeEnv,
@@ -129,10 +156,50 @@ export async function snowflakeQuery(
   const json = (await res.json()) as {
     success?: boolean;
     message?: string;
-    data?: { rowset?: unknown[][] };
+    data?: SnowflakeQueryResponseData;
   };
   if (!json.success) throw new Error(`Snowflake query failed: ${json.message}`);
-  return json.data?.rowset ?? [];
+  const data = json.data ?? {};
+  if (data.queryResultFormat && data.queryResultFormat !== 'json') {
+    throw new Error(`Snowflake returned unsupported result format: ${data.queryResultFormat}`);
+  }
+
+  const rows: unknown[][] = [...(data.rowset ?? [])];
+
+  const chunks = data.chunks ?? [];
+  if (chunks.length > 0) {
+    // Chunk downloads need the auth headers the response provides: prefer the
+    // explicit chunkHeaders map; else derive the SSE-C pair from qrmk.
+    const chunkHeaders: Record<string, string> = data.chunkHeaders
+      ? { ...data.chunkHeaders }
+      : data.qrmk
+        ? {
+            'x-amz-server-side-encryption-customer-algorithm': 'AES256',
+            'x-amz-server-side-encryption-customer-key': data.qrmk,
+          }
+        : {};
+    // Sequential keeps result order deterministic (chunk counts here are small).
+    for (const chunk of chunks) {
+      const cres = await fetch(chunk.url, { headers: chunkHeaders });
+      if (!cres.ok) {
+        throw new Error(`Snowflake chunk download failed (HTTP ${cres.status}): ${chunk.url}`);
+      }
+      // Chunk bodies are comma-joined row arrays WITHOUT enclosing brackets.
+      const body = (await cres.text()).trim();
+      if (body !== '') rows.push(...(JSON.parse(`[${body}]`) as unknown[][]));
+    }
+  }
+
+  // Truncation tripwire: when Snowflake reports the total row count, a mismatch
+  // means a partial result (whatever the cause) — fail the run rather than let
+  // the diff treat missing rows as sold/removed.
+  if (typeof data.total === 'number' && rows.length !== data.total) {
+    throw new Error(
+      `Snowflake result truncated: assembled ${rows.length} row(s) but server reports total=${data.total}`
+    );
+  }
+
+  return rows;
 }
 
 const FQ = (env: SnowflakeEnv) =>

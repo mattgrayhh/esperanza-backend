@@ -216,7 +216,7 @@ export async function runIngest(env: Env): Promise<void> {
       loadExistingFloorPlans(env.DB),
     ]);
 
-    const { messages, stats } = diff(
+    const { messages, stats, unpublishGuard } = diff(
       snowflakeQmis,
       snowflakeCommunities,
       existingQmis,
@@ -229,11 +229,18 @@ export async function runIngest(env: Env): Promise<void> {
 
     if (messages.length > 0) await enqueue(env, messages);
 
+    // Mass-unpublish guard (2026-06-11 truncated-rowset incident): when tripped
+    // the diff emitted NO qmi.unpublish messages — surface it loudly so the
+    // skipped run is visible in sync_log (and in the Worker logs).
+    if (unpublishGuard.tripped) {
+      console.error(unpublishGuard.reason);
+    }
+
     // producer-side telemetry (the consumer writes a separate row per batch).
     await writeSyncLog(env, {
       runId: crypto.randomUUID(),
       source: 'snowflake',
-      status: 'success',
+      status: unpublishGuard.tripped ? 'warning' : 'success',
       startedAt,
       finishedAt: new Date().toISOString(),
       durationS: (Date.now() - start) / 1000,
@@ -244,7 +251,9 @@ export async function runIngest(env: Env): Promise<void> {
       communitiesUpdated: stats.communitiesUpdated,
       floorPlansUpdated: stats.floorPlansUpdated,
       unresolvedLinks: stats.unresolvedLinks,
-      notes: `producer enqueued ${messages.length} message(s)`,
+      notes: unpublishGuard.tripped
+        ? `producer enqueued ${messages.length} message(s); ${unpublishGuard.reason}`
+        : `producer enqueued ${messages.length} message(s)`,
     });
   } catch (err) {
     await writeSyncLog(env, {
