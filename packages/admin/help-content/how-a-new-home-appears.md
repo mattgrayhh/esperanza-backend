@@ -5,7 +5,7 @@ category: Homes (Quick Move-Ins)
 categorySort: 20
 sort: 10
 summary: New homes arrive from Snowflake as Drafts — your job is to review, polish, and publish.
-keywords: create house, new home, qmi, spec, add home, publish home
+keywords: create house, new home, qmi, spec, add home, publish home, lot number, lot, search, find home
 entity: qmi
 ---
 
@@ -13,6 +13,16 @@ entity: qmi
 MarkSystems, it appears in `Quick Move-Ins` automatically — usually within
 4 hours — as a `Draft` with its facts pre-filled: address, price, beds/baths,
 square footage, community, floor plan, construction stage, and move-in date.
+
+## Finding a home in the list
+
+Each row in `Quick Move-Ins` shows the home's **lot number** (for example
+`Lot: RC146`) under the address — click it to copy the code. Homes that don't
+have a lot number yet show their House ID instead.
+
+The search box at the top matches lot numbers too: type the full code
+(`RC146`) or just the number part (`146`) — along with address, community,
+and floor plan, in any capitalization.
 
 ## Publishing checklist
 

@@ -15,7 +15,7 @@
 // QMI column spec.
 //
 // Columns (in spec order):
-//   1 Thumbnail   2 Address (+ copyable Housemaster sub-line)   3 Community
+//   1 Thumbnail   2 Address (+ copyable Lot-number sub-line; House ID fallback)   3 Community
 //   4 Floor Plan (Assign affordance when unassigned draft)      5 Base price
 //   6 Current price (override indicator)   7 Availability (date / Available-now)
 //   8 Status (Published/Draft + Available-now)   9 row ⋯ menu
@@ -54,6 +54,7 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { qmiRowMatchesQuery } from "@/lib/qmi-search"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -83,6 +84,8 @@ export interface QmiRow {
   id: string
   address: string
   housenumber: string
+  /** effective lot number ("" when none), e.g. "RC146". */
+  lotNumber: string
   communityName: string
   floorPlanName: string
   floorPlanId: string | null
@@ -156,16 +159,21 @@ function Thumb({ src, alt }: { src: string | null; alt: string }) {
   )
 }
 
-/** Address cell — bold primary line + a copyable muted Housemaster sub-line. */
+/** Address cell — bold primary line + a copyable muted sub-line showing the LOT
+ *  number (the code the sales team actually uses, e.g. "RC146"). Falls back to
+ *  the Housemaster House ID when no lot is set, and to "—" when neither exists. */
 function AddressCell({ row }: { row: QmiRow }) {
   const [copied, setCopied] = React.useState(false)
+  // lot number first; House ID as the legacy fallback.
+  const subLabel = row.lotNumber ? "Lot" : "House ID"
+  const subValue = row.lotNumber || row.housenumber
   const copy = React.useCallback(
     (e: React.MouseEvent) => {
       // don't trigger the row-click navigation / selection.
       e.stopPropagation()
       e.preventDefault()
-      if (!row.housenumber) return
-      navigator.clipboard?.writeText(row.housenumber).then(
+      if (!subValue) return
+      navigator.clipboard?.writeText(subValue).then(
         () => {
           setCopied(true)
           window.setTimeout(() => setCopied(false), 1200)
@@ -173,7 +181,7 @@ function AddressCell({ row }: { row: QmiRow }) {
         () => {},
       )
     },
-    [row.housenumber],
+    [subValue],
   )
 
   return (
@@ -185,14 +193,16 @@ function AddressCell({ row }: { row: QmiRow }) {
       >
         {row.address || <span className="text-muted-foreground italic">No address</span>}
       </Link>
-      {row.housenumber ? (
+      {subValue ? (
         <button
           type="button"
           onClick={copy}
-          title="Copy House ID"
+          title={`Copy ${subLabel === "Lot" ? "lot number" : "House ID"}`}
           className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
-          <span className="tabular-nums">House ID: {row.housenumber}</span>
+          <span className="tabular-nums">
+            {subLabel}: {subValue}
+          </span>
           {copied ? (
             <Check className="size-3 text-status-published" />
           ) : (
@@ -506,15 +516,10 @@ export function QmiDataTable({ rows, truncated }: QmiDataTableProps) {
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    // search across address + housemaster + community + floor plan.
-    globalFilterFn: (row, _columnId, value) => {
-      const q = String(value).toLowerCase().trim()
-      if (!q) return true
-      const r = row.original
-      return [r.address, r.housenumber, r.communityName, r.floorPlanName]
-        .filter(Boolean)
-        .some((s) => s.toLowerCase().includes(q))
-    },
+    // search across address + housemaster + community + floor plan + lot number
+    // (pure predicate in lib/qmi-search.ts — unit-tested; lot matches "RC146"
+    // and bare-numeric "146" forms, case-insensitively).
+    globalFilterFn: (row, _columnId, value) => qmiRowMatchesQuery(row.original, String(value)),
     initialState: { pagination: { pageSize: 25 } },
   })
 
@@ -570,7 +575,7 @@ export function QmiDataTable({ rows, truncated }: QmiDataTableProps) {
           <Input
             value={globalFilter}
             onChange={(e) => setGlobalFilter(e.target.value)}
-            placeholder="Search address, community…"
+            placeholder="Search address, lot, community…"
             className="pl-8"
             aria-label="Search quick move-ins"
           />

@@ -35,6 +35,8 @@ export interface QmiListRow {
   address: string;
   /** the housemaster number, e.g. "00000149". */
   housenumber: string;
+  /** effective lot number, e.g. "RC146" — COALESCE(NULLIF(override_lot_number,''), synced_lot_number); "" when none. */
+  lotNumber: string;
   /** resolved community name ("" when none → table shows "—"). */
   communityName: string;
   /** resolved floor-plan name ("" when unassigned → table shows the Assign affordance). */
@@ -73,6 +75,7 @@ const QMI_LIST_SQL = `
     q.id                                                       AS id,
     COALESCE(q.override_address, q.synced_address)             AS address,
     q.housenumber                                              AS housenumber,
+    COALESCE(NULLIF(q.override_lot_number, ''), q.synced_lot_number) AS lot_number,
     COALESCE(q.override_floor_plan_id, q.synced_floor_plan_id) AS floor_plan_id,
     COALESCE(c.name,  q.synced_community_name)                 AS community_name,
     COALESCE(fp.name, q.synced_floor_plan_name)                AS floor_plan_name,
@@ -139,6 +142,7 @@ export async function buildQmiListView(): Promise<QmiListView> {
       id: toStr(r['id']),
       address: toStr(r['address']),
       housenumber: toStr(r['housenumber']),
+      lotNumber: toStr(r['lot_number']),
       communityName: toStr(r['community_name']),
       floorPlanName: toStr(r['floor_plan_name']),
       floorPlanId: r['floor_plan_id'] == null || r['floor_plan_id'] === '' ? null : toStr(r['floor_plan_id']),
