@@ -9,6 +9,13 @@
 //     (defense-in-depth — a hand-built patch can't smuggle a forbidden column).
 //   * published is written by a SEPARATE, narrow path that can only set 0
 //     (forceUnpublish) on the sold/removed transition; insert seeds 0; NEVER 1.
+//   * availability_text is a SEPARATE, narrow DERIVED path (it is NOT in the
+//     allow-list and never flows through applySynced): on insert, and on update
+//     when the EFFECTIVE move-in date (COALESCE(override, synced)) actually
+//     changes, the consumer writes the canonical "Available JUN/JUL 2026" /
+//     "Available Now" text — but ONLY when the stored value is empty or itself
+//     machine-generated (isAutoAvailabilityText). Admin-authored copy survives
+//     every ingest cycle. See ./availability.ts.
 //
 // Price (Decision #6): in the D1 bucketed model the admin's manual price lives in
 // `override_price` (the view COALESCEs override over synced). Ingest owns
@@ -18,6 +25,7 @@
 // synced_price as the divergence anchor / diagnostic.
 // =============================================================================
 
+import { deriveAvailabilityText, isAutoAvailabilityText } from './availability.js';
 import {
   applySynced,
   assertQmiPatchAllowed,
@@ -160,11 +168,19 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
 
   if (msg.isNew) {
     // INSERT new spec: published=0, seed slug from address, plus the synced patch.
+    // availability_text (derived, NOT part of the synced allow-list — see header)
+    // is seeded from the move-in date so the Framer badge never falls back to the
+    // raw ISO date. No date → leave it absent (NULL).
     const slug = msg.slugSource ? deriveSlug(msg.slugSource) : null;
     const id = newQmiId();
+    const availabilityText = deriveAvailabilityText(msg.values.moveInDate);
     const cols = ['id', 'published', 'slug', 'created_at', 'updated_at', ...Object.keys(patch)];
+    const vals: unknown[] = [id, 0, slug, nowIso(), nowIso(), ...Object.values(patch)];
+    if (availabilityText !== null) {
+      cols.push('availability_text');
+      vals.push(availabilityText);
+    }
     const placeholders = cols.map(() => '?').join(', ');
-    const vals = [id, 0, slug, nowIso(), nowIso(), ...Object.values(patch)];
     await env.DB.prepare(
       `INSERT INTO qmi (${cols.join(', ')}) VALUES (${placeholders})`
     )
@@ -182,10 +198,40 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
   // UPDATE existing: synced patch only (Published untouched on updates).
   if (!msg.qmiId) return result; // defensive: no id, nothing to update
   if (Object.keys(patch).length === 0) return result;
-  const setClause = Object.keys(patch)
-    .map((c) => `${c} = ?`)
-    .join(', ');
-  const vals = [...Object.values(patch), nowIso(), msg.qmiId];
+
+  // Derived availability_text refresh (separate narrow path — see header).
+  // Only considered when the message carries a move-in date; the text is
+  // recomputed ONLY when the EFFECTIVE date (COALESCE(override, synced))
+  // actually changes, and ONLY over an empty/machine-generated stored value.
+  const setExtra: string[] = [];
+  const valsExtra: unknown[] = [];
+  if ('synced_move_in_date' in patch) {
+    const current = await env.DB.prepare(
+      `SELECT synced_move_in_date, override_move_in_date, availability_text
+         FROM qmi WHERE id = ?`
+    )
+      .bind(msg.qmiId)
+      .first<{
+        synced_move_in_date: string | null;
+        override_move_in_date: string | null;
+        availability_text: string | null;
+      }>();
+    if (current) {
+      const oldEffective = current.override_move_in_date ?? current.synced_move_in_date;
+      const newEffective =
+        current.override_move_in_date ?? (patch['synced_move_in_date'] as string | null);
+      if (newEffective !== oldEffective && isAutoAvailabilityText(current.availability_text)) {
+        const text = deriveAvailabilityText(newEffective);
+        if (text !== null) {
+          setExtra.push('availability_text = ?');
+          valsExtra.push(text);
+        }
+      }
+    }
+  }
+
+  const setClause = [...Object.keys(patch).map((c) => `${c} = ?`), ...setExtra].join(', ');
+  const vals = [...Object.values(patch), ...valsExtra, nowIso(), msg.qmiId];
   await env.DB.prepare(
     `UPDATE qmi SET ${setClause}, updated_at = ? WHERE id = ?`
   )
