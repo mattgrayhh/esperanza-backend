@@ -35,6 +35,19 @@ export interface ManagedField {
   id: string;
   name: string;
   type: string;
+  // Type-specific sub-schema, preserved verbatim so a setFields rebuild can round-trip
+  // a non-scalar field. Framer's setFields validator REQUIRES these on the field input:
+  //   array  → fields  (ManagedArrayItemFieldInput[])
+  //   enum   → cases
+  //   collectionReference / multiCollectionReference → collectionId
+  //   file   → allowedFileTypes
+  // Dropping them is what made setFields reject the whole rebuild ("invalid type on
+  // …fields, expect to be [ManagedArrayItemFieldInput]") on any collection with a gallery.
+  fields?: unknown;
+  cases?: unknown;
+  collectionId?: unknown;
+  allowedFileTypes?: unknown;
+  userEditable?: boolean;
 }
 
 /**
@@ -48,6 +61,12 @@ export interface ManagedFieldInput {
   type: string;
   name: string;
   userEditable?: boolean;
+  // Carried verbatim from the existing field so non-scalar fields (array/enum/
+  // reference/file) survive a setFields rebuild — see ManagedField above.
+  fields?: unknown;
+  cases?: unknown;
+  collectionId?: unknown;
+  allowedFileTypes?: unknown;
 }
 
 /** A single managed collection handle (the subset of the framer-api surface we use). */
@@ -101,6 +120,13 @@ interface FramerApiField {
   id: string;
   name: string;
   type: string;
+  // Non-scalar fields carry a type-specific sub-schema we must NOT drop (a setFields
+  // rebuild has to send it back verbatim). Declared loosely; passed through as-is.
+  fields?: unknown;
+  cases?: unknown;
+  collectionId?: unknown;
+  allowedFileTypes?: unknown;
+  userEditable?: boolean;
 }
 interface FramerApiCollection {
   name: string;
@@ -158,7 +184,18 @@ export const connectFramer: FramerConnect = async (env) => {
         removeItems: (ids) => c.removeItems(ids).then(() => undefined),
         getItemIds: () => c.getItemIds(),
         getFields: async () =>
-          (await c.getFields()).map((f) => ({ id: f.id, name: f.name, type: f.type })),
+          // Preserve each field's type-specific sub-schema (array→fields, enum→cases,
+          // reference→collectionId, file→allowedFileTypes) so applySchema can rebuild the
+          // full set without Framer's setFields validator rejecting a non-scalar field.
+          (await c.getFields()).map((f) => {
+            const out: ManagedField = { id: f.id, name: f.name, type: f.type };
+            if (f.fields !== undefined) out.fields = f.fields;
+            if (f.cases !== undefined) out.cases = f.cases;
+            if (f.collectionId !== undefined) out.collectionId = f.collectionId;
+            if (f.allowedFileTypes !== undefined) out.allowedFileTypes = f.allowedFileTypes;
+            if (f.userEditable !== undefined) out.userEditable = f.userEditable;
+            return out;
+          }),
         setFields: (fields) => c.setFields(fields).then(() => undefined),
       };
     },

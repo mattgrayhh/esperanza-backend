@@ -593,6 +593,22 @@ const SETTABLE_TYPES = new Set<string>([
 ]);
 
 /**
+ * Map an existing ManagedField to a setFields input, carrying its type-specific
+ * sub-schema verbatim. A non-scalar field MUST round-trip these keys or Framer's
+ * setFields validator rejects the whole field set (array→fields, enum→cases,
+ * reference→collectionId, file→allowedFileTypes; userEditable preserved too).
+ */
+function preserveFieldInput(f: ManagedField): ManagedFieldInput {
+  const input: ManagedFieldInput = { id: f.id, type: f.type, name: f.name };
+  if (f.fields !== undefined) input.fields = f.fields;
+  if (f.cases !== undefined) input.cases = f.cases;
+  if (f.collectionId !== undefined) input.collectionId = f.collectionId;
+  if (f.allowedFileTypes !== undefined) input.allowedFileTypes = f.allowedFileTypes;
+  if (f.userEditable !== undefined) input.userEditable = f.userEditable;
+  return input;
+}
+
+/**
  * Re-type and/or create Framer fields on a collection, then re-push it.
  *
  *  - getFields() → the live schema.
@@ -643,7 +659,12 @@ export async function applySchema(
   const byId = new Map<string, ManagedField>();
   for (const f of existing) byId.set(f.id, f);
   const nextById = new Map<string, ManagedFieldInput>();
-  for (const f of existing) nextById.set(f.id, { id: f.id, type: f.type, name: f.name });
+  // Preserve every existing field VERBATIM, including its type-specific sub-schema.
+  // A non-scalar field (array/enum/reference/file) carries extra keys Framer's
+  // setFields validator requires (array→fields, enum→cases, reference→collectionId,
+  // file→allowedFileTypes). Dropping them made setFields reject the WHOLE rebuild on
+  // any collection that has e.g. a gallery field — so no field could be re-typed.
+  for (const f of existing) nextById.set(f.id, preserveFieldInput(f));
 
   const fieldResults: SchemaFieldResult[] = [];
   for (const req of requests) {

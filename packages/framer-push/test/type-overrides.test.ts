@@ -374,6 +374,35 @@ describe('applySchema (/schema core)', () => {
     expect(result.deploymentId).toBeTruthy();
   });
 
+  it('preserves a non-scalar field’s sub-schema (array `fields`) through the setFields rebuild', async () => {
+    // Regression: a collection with a gallery (array) field could not have ANY field
+    // re-typed — rebuilding the field set dropped the array's nested item schema, so
+    // Framer's setFields validator rejected the whole call ("invalid type on …fields,
+    // expect to be [ManagedArrayItemFieldInput]"). The array field is NOT in the request;
+    // it must be passed through verbatim, sub-schema and all.
+    const env = envWithRow();
+    const itemSchema = [{ fieldData: { image: { type: 'image' } } }];
+    const mock = createMockFramer(['Quick Move-Ins'], {
+      'Quick Move-Ins': [
+        ...baseFields,
+        { id: 'photo_gallery', name: 'Photo Gallery', type: 'array', fields: itemSchema },
+      ],
+    });
+    const framer = await mock.connect(env);
+    const result = await applySchema(env, framer, 'qmi', [
+      { key: 'postal_code', framer_type: 'string', label: 'ZIP' }, // retype a scalar only
+    ]);
+
+    expect(result.error).toBeUndefined();
+    const state = mock.collections.get('Quick Move-Ins')!;
+    expect(state.setFieldsCalls.length).toBe(1);
+    const gallery = state.setFieldsCalls[0]!.find((f) => f.id === 'photo_gallery');
+    expect(gallery).toBeDefined();
+    expect(gallery!.type).toBe('array');
+    // The array field MUST carry its nested item schema or Framer rejects the rebuild.
+    expect(gallery!.fields).toEqual(itemSchema);
+  });
+
   it('is a pure no-op (no setFields) when every requested field already matches', async () => {
     const env = envWithRow();
     const mock = createMockFramer(['Quick Move-Ins'], { 'Quick Move-Ins': baseFields });
