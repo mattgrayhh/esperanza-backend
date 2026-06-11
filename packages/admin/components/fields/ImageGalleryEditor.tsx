@@ -9,15 +9,21 @@
 //
 // UX:
 //   · Grid of thumbnails with remove (×) buttons.
-//   · "Add image" button at the end opens the file picker.
+//   · "Add images" button at the end opens a multi-select file picker.
+//   · Drag one or more image files anywhere onto the widget to bulk-upload
+//     them in drop order.
 //   · Re-order: arrow-up / arrow-down buttons per image.
 // =============================================================================
 
 import { useRef, useState, useTransition } from 'react';
 import { uploadGalleryImage } from '../../lib/actions';
+import { filterAcceptedFiles } from '../../lib/dropped-files';
+import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { UploadIcon, XIcon, ChevronUpIcon, ChevronDownIcon, ImageIcon } from 'lucide-react';
+
+const ACCEPT = 'image/*';
 
 const AIRTABLE_HOST = 'airtableusercontent.com';
 
@@ -51,6 +57,7 @@ export function ImageGalleryEditor({
   const [urls, setUrls] = useState<string[]>(() => parseUrls(initialValue));
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function move(index: number, dir: -1 | 1) {
@@ -67,16 +74,29 @@ export function ImageGalleryEditor({
     setUrls((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function onPick(file: File | undefined) {
-    if (!file) return;
+  function addFiles(picked: Iterable<File> | null | undefined) {
+    if (!picked) return;
+    const files = filterAcceptedFiles(picked, ACCEPT);
+    if (files.length === 0) {
+      setErr('Only image files can be added to the gallery.');
+      return;
+    }
     setErr(null);
-    const index = urls.length; // slot for the new image
+    let index = urls.length; // slot for the first new image
     startTransition(async () => {
-      const res = await uploadGalleryImage(entity, id, index, file);
-      if (res.ok) {
-        setUrls((prev) => [...prev, res.url]);
-      } else {
-        setErr(res.error);
+      // Sequential on purpose: keeps the gallery in drop/pick order.
+      const errors: string[] = [];
+      for (const file of files) {
+        const res = await uploadGalleryImage(entity, id, index, file);
+        if (res.ok) {
+          setUrls((prev) => [...prev, res.url]);
+          index += 1;
+        } else {
+          errors.push(res.error);
+        }
+      }
+      if (errors.length > 0) {
+        setErr(errors.length === 1 ? errors[0]! : `${errors.length} uploads failed: ${errors[0]}`);
       }
       if (fileRef.current) fileRef.current.value = '';
     });
@@ -91,6 +111,26 @@ export function ImageGalleryEditor({
       {/* Hidden input carries the serialized array into the form submit */}
       <input type="hidden" name={field} value={serialized} />
 
+      {/* Everything inside is a dropzone — drag image files anywhere onto the
+          widget to bulk-upload them in drop order. */}
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          if (!pending) addFiles(e.dataTransfer.files);
+        }}
+        className={cn(
+          'grid gap-2 rounded-lg transition-colors',
+          dragOver && 'outline-2 outline-dashed outline-primary bg-primary/5'
+        )}
+      >
       {urls.length > 0 ? (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {urls.map((url, i) => {
@@ -150,16 +190,17 @@ export function ImageGalleryEditor({
         </div>
       ) : (
         <div className="flex h-20 items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground">
-          <span className="text-xs">No images yet</span>
+          <span className="text-xs">No images yet — drag photos here or use Add images</span>
         </div>
       )}
 
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
+        accept={ACCEPT}
+        multiple
         disabled={pending}
-        onChange={(e) => onPick(e.target.files?.[0])}
+        onChange={(e) => addFiles(e.target.files)}
         className="hidden"
       />
 
@@ -172,8 +213,9 @@ export function ImageGalleryEditor({
         className="w-fit"
       >
         <UploadIcon />
-        {pending ? 'Uploading…' : 'Add image'}
+        {pending ? 'Uploading…' : 'Add images'}
       </Button>
+      </div>
 
       {err ? <span className="text-xs text-destructive">{err}</span> : null}
       {help ? <span className="text-xs text-muted-foreground">{help}</span> : null}

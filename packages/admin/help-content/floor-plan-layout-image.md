@@ -26,8 +26,9 @@ first/second floor) for a plan — not an exterior elevation or a photo.
   exterior/marketing shots. Keep the layout drawing here and the exterior shots
   in those fields.
 - **Interior photos** (kitchen, living room, baths…) go in the plan's
-  `Interior Photos` gallery — upload them in display order. Like the layout
-  image, they live on the plan and show on every home of that plan.
+  `Interior Photos` gallery — drag several photos onto the gallery at once
+  (they keep the order you dropped them in) or click `Add images`. Like the
+  layout image, they live on the plan and show on every home of that plan.
 - Uploads are stored in the central image library and served from our own CDN.
 - After saving, the image reaches the live site on the next publish (see
   *How changes reach the site*). If a plan has no layout image yet, the plan and

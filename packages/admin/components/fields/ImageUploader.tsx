@@ -23,12 +23,15 @@
 
 import { useRef, useState, useTransition } from 'react';
 import { uploadImage } from '../../lib/actions';
+import { filterAcceptedFiles } from '../../lib/dropped-files';
+import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { ImageIcon, UploadIcon, RefreshCwIcon, XIcon, FileTextIcon, ExternalLinkIcon } from 'lucide-react';
 
 const AIRTABLE_HOST = 'airtableusercontent.com';
 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'avif'];
+const ACCEPT = 'image/*,application/pdf';
 
 /** True when the url points at a real image (vs a PDF/doc we should show as a file).
  *  Inspect only the FILENAME's extension — splitting the whole URL on '.' would trip on
@@ -68,6 +71,7 @@ export function ImageUploader({
   const [url, setUrl] = useState(initialUrl);
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function onPick(file: File | undefined) {
@@ -83,6 +87,15 @@ export function ImageUploader({
       // allow re-picking the same filename
       if (fileRef.current) fileRef.current.value = '';
     });
+  }
+
+  function onDrop(files: Iterable<File>) {
+    const accepted = filterAcceptedFiles(files, ACCEPT);
+    if (accepted.length === 0) {
+      setErr('Drop an image (or PDF) file here.');
+      return;
+    }
+    onPick(accepted[0]); // single-value field — first accepted file wins
   }
 
   // A previously-stored Airtable attachment URL must never be previewed (it expires and
@@ -103,8 +116,26 @@ export function ImageUploader({
       {/* The column value travels via this HIDDEN input — never a visible URL field. */}
       <input type="hidden" name={field} value={isAirtable ? '' : url} />
 
-      {/* Inline preview — image thumbnail, a file card for PDFs/docs, or an empty placeholder. */}
-      <div className="relative flex h-32 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/30">
+      {/* Inline preview — image thumbnail, a file card for PDFs/docs, or an empty
+          placeholder. Also a dropzone: drag a file onto it to upload/replace. */}
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          if (!pending) onDrop(e.dataTransfer.files);
+        }}
+        className={cn(
+          'relative flex h-32 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/30 transition-colors',
+          dragOver && 'border-2 border-dashed border-primary bg-primary/5'
+        )}
+      >
         {hasImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={url} alt={label} className="h-full w-full object-contain" />
@@ -126,7 +157,9 @@ export function ImageUploader({
         ) : (
           <div className="flex flex-col items-center gap-1 text-muted-foreground">
             <ImageIcon className="size-6" />
-            <span className="text-xs">{isAirtable ? 'Stale Airtable image — re-upload' : 'No file yet'}</span>
+            <span className="text-xs">
+              {isAirtable ? 'Stale Airtable image — re-upload' : 'No file yet — drag one here or Upload'}
+            </span>
           </div>
         )}
       </div>
@@ -134,7 +167,7 @@ export function ImageUploader({
       <input
         ref={fileRef}
         type="file"
-        accept="image/*,application/pdf"
+        accept={ACCEPT}
         disabled={pending}
         onChange={(e) => onPick(e.target.files?.[0])}
         className="hidden"
