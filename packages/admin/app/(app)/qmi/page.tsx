@@ -27,6 +27,7 @@ export default async function QmiListPage() {
     id: r.id,
     address: r.address,
     housenumber: r.housenumber,
+    lotNumber: r.lotNumber,
     communityName: r.communityName,
     floorPlanName: r.floorPlanName,
     floorPlanId: r.floorPlanId,
