@@ -113,6 +113,49 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
     expect(sval(f['floor_plan_slug'])).toBe('kestrel');
   });
 
+  it('emits lot_number_short = digits-only lot number (RC169 → 169), keeping raw lot_number', () => {
+    const cases: Array<[string | null, unknown, unknown]> = [
+      // [synced_lot_number, expected lot_number, expected lot_number_short]
+      ['RC169', 'RC169', '169'], // strip 2-letter community prefix
+      ['RC069', 'RC069', '69'], // drop leading zeros too
+      ['169', '169', '169'], // already numeric → unchanged
+      ['MODEL', 'MODEL', 'MODEL'], // no digits → fall back to raw
+      [null, undefined, undefined], // absent → both dropped
+    ];
+    let n = 0;
+    for (const [lot, expRaw, expShort] of cases) {
+      const db = freshDb();
+      const id = `recQMILOT${String(n++).padStart(7, '0')}`;
+      insertRow(db, 'qmi', {
+        id,
+        published: 1,
+        synced_address: '1 Lot St',
+        ...(lot === null ? {} : { synced_lot_number: lot }),
+        updated_at: '2026-05-30T12:00:00.000Z',
+      });
+      const row = db.prepare(qmiDef.selectByIdSql).get(id) as Record<string, unknown>;
+      const f = qmiDef.map(row).fieldData;
+      expect(sval(f['lot_number'])).toBe(expRaw);
+      expect(sval(f['lot_number_short'])).toBe(expShort);
+    }
+  });
+
+  it('lot_number_short follows the override → synced COALESCE like lot_number', () => {
+    const db = freshDb();
+    insertRow(db, 'qmi', {
+      id: 'recQMILOTOVR0001',
+      published: 1,
+      synced_address: '2 Lot St',
+      synced_lot_number: 'RC169',
+      override_lot_number: 'RC200', // override wins for both
+      updated_at: '2026-05-30T12:00:00.000Z',
+    });
+    const row = db.prepare(qmiDef.selectByIdSql).get('recQMILOTOVR0001') as Record<string, unknown>;
+    const f = qmiDef.map(row).fieldData;
+    expect(sval(f['lot_number'])).toBe('RC200');
+    expect(sval(f['lot_number_short'])).toBe('200');
+  });
+
   it('drops empty numbers (no "0" leak) and absent strings', () => {
     const db = freshDb();
     insertRow(db, 'qmi', {

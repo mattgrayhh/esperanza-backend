@@ -247,6 +247,17 @@ const ftIf = (v: unknown) => {
   return html === '' ? undefined : formattedText(html);
 };
 const galIf = (urls: string[]) => (urls.length ? galleryArray(urls) : undefined);
+// Lot number stripped to its numeric part for display: drops the community
+// letter-prefix and any leading zeros ("RC169" → "169", "RC069" → "69"), falling
+// back to the raw value when it has no digits ("MODEL" → "MODEL"). Same rule the
+// PDF renderer applies (packages/pdf/src/data/qmi.ts lotDisplay). Absent/empty →
+// undefined (field dropped), matching sIf.
+const lotShortIf = (v: unknown) => {
+  const s = asString(v);
+  if (s === undefined) return undefined;
+  const digits = s.replace(/\D/g, '').replace(/^0+/, '');
+  return str(digits || s);
+};
 // The QMI detail page's availability badge ("/new-homes/available/:slug/") is bound
 // to the managed `move_in_date` field behind a static "AVAILABLE " prefix, so it was
 // rendering the raw ISO date — "AVAILABLE 2026-11-23". The listing cards instead show
@@ -537,6 +548,7 @@ const qmi: CollectionDef = {
       housenumber: sIf(row['housenumber']),
       mls_id: sIf(row['mls_id']),
       lot_number: sIf(row['lot_number']),
+      lot_number_short: lotShortIf(row['lot_number']), // RC169 → 169 (community prefix + leading zeros stripped)
       year_built: nIf(row['year_built']),
       lot_size_sqft: nIf(row['lot_size_sqft']),
       // Display value for the "AVAILABLE …" badge — de-prefixed availability_text
