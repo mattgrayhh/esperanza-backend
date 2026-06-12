@@ -81,6 +81,70 @@ describe('resolveEffectivePromo — specificity', () => {
   });
 });
 
+describe('resolveEffectivePromo — floor_plan targeting + cascade', () => {
+  // a QMI carries its floor plan id, so a plan-targeted promo cascades onto it.
+  const ctxFP = { qmiId: 'recQMI1', communityId: 'recComm1', floorPlanId: 'recFP1', cityId: 'recCity1' };
+
+  it('a floor_plan promo cascades onto a QMI built on that plan', () => {
+    const promos = [promo('pGlobal'), promo('pFP')];
+    const targets: PromoTargetLike[] = [
+      { promotion_id: 'pGlobal', target_type: 'global', target_id: null },
+      { promotion_id: 'pFP', target_type: 'floor_plan', target_id: 'recFP1' },
+    ];
+    expect(resolveEffectivePromo('qmi', ctxFP, promos, targets, NOW)?.id).toBe('pFP');
+  });
+
+  it('community beats floor_plan (a place is more specific than a plan)', () => {
+    const promos = [promo('pComm'), promo('pFP')];
+    const targets: PromoTargetLike[] = [
+      { promotion_id: 'pComm', target_type: 'community', target_id: 'recComm1' },
+      { promotion_id: 'pFP', target_type: 'floor_plan', target_id: 'recFP1' },
+    ];
+    expect(resolveEffectivePromo('qmi', ctxFP, promos, targets, NOW)?.id).toBe('pComm');
+  });
+
+  it('floor_plan beats city and global', () => {
+    const promos = [promo('pGlobal'), promo('pCity'), promo('pFP')];
+    const targets: PromoTargetLike[] = [
+      { promotion_id: 'pGlobal', target_type: 'global', target_id: null },
+      { promotion_id: 'pCity', target_type: 'city', target_id: 'recCity1' },
+      { promotion_id: 'pFP', target_type: 'floor_plan', target_id: 'recFP1' },
+    ];
+    expect(resolveEffectivePromo('qmi', ctxFP, promos, targets, NOW)?.id).toBe('pFP');
+  });
+
+  it('qmi still beats floor_plan', () => {
+    const promos = [promo('pQmi'), promo('pFP')];
+    const targets: PromoTargetLike[] = [
+      { promotion_id: 'pQmi', target_type: 'qmi', target_id: 'recQMI1' },
+      { promotion_id: 'pFP', target_type: 'floor_plan', target_id: 'recFP1' },
+    ];
+    expect(resolveEffectivePromo('qmi', ctxFP, promos, targets, NOW)?.id).toBe('pQmi');
+  });
+
+  it('a floor-plan page matches its own plan promo but NOT a qmi/community promo (scope leak guard)', () => {
+    // a floor-plan page passes only floorPlanId — never qmi/community/city ids.
+    const fpCtx = { floorPlanId: 'recFP1' };
+    const promos = [promo('pQmi'), promo('pComm'), promo('pFP')];
+    const targets: PromoTargetLike[] = [
+      { promotion_id: 'pQmi', target_type: 'qmi', target_id: 'recQMI1' },
+      { promotion_id: 'pComm', target_type: 'community', target_id: 'recComm1' },
+      { promotion_id: 'pFP', target_type: 'floor_plan', target_id: 'recFP1' },
+    ];
+    expect(resolveEffectivePromo('qmi', fpCtx, promos, targets, NOW)?.id).toBe('pFP');
+  });
+
+  it('a community page does NOT match a floor_plan promo (no floorPlanId in ctx)', () => {
+    const communityCtx = { communityId: 'recComm1', cityId: 'recCity1' };
+    const promos = [promo('pFP'), promo('pComm')];
+    const targets: PromoTargetLike[] = [
+      { promotion_id: 'pFP', target_type: 'floor_plan', target_id: 'recFP1' },
+      { promotion_id: 'pComm', target_type: 'community', target_id: 'recComm1' },
+    ];
+    expect(resolveEffectivePromo('community', communityCtx, promos, targets, NOW)?.id).toBe('pComm');
+  });
+});
+
 describe('resolveEffectivePromo — tie-break by lowest sort_order', () => {
   it('lowest sort_order wins among equally specific promos', () => {
     const promos = [
@@ -204,6 +268,27 @@ describe('promo resolution backed by the real schema (end-to-end against D1 SQL)
     const promos = db.prepare('SELECT * FROM promotions').all() as PromoLike[];
     const targets = db.prepare('SELECT * FROM promotion_targets').all() as PromoTargetLike[];
     expect(resolveEffectivePromo('qmi', ctx, promos, targets, NOW)?.id).toBe('pQmi');
+    db.close();
+  });
+
+  it('migration 0014 lets promotion_targets hold a floor_plan target, and it cascades to a QMI', () => {
+    const db = freshDb();
+    db.prepare(
+      `INSERT INTO promotions (id, title, banner_text, sort_order, start_date, end_date, published)
+       VALUES (@id, @title, @banner, @sort, @start, @end, @active)`
+    ).run({ id: 'pFP', title: 'FP', banner: 'fp', sort: 0, start: null, end: null, active: 1 });
+
+    // The widened CHECK (migration 0014) must accept target_type='floor_plan'.
+    expect(() =>
+      db
+        .prepare(`INSERT INTO promotion_targets (promotion_id, target_type, target_id) VALUES (?, ?, ?)`)
+        .run('pFP', 'floor_plan', 'recFP1')
+    ).not.toThrow();
+
+    const promos = db.prepare('SELECT * FROM promotions').all() as PromoLike[];
+    const targets = db.prepare('SELECT * FROM promotion_targets').all() as PromoTargetLike[];
+    const ctxFP = { qmiId: 'recQMI1', communityId: 'recComm1', floorPlanId: 'recFP1', cityId: 'recCity1' };
+    expect(resolveEffectivePromo('qmi', ctxFP, promos, targets, NOW)?.id).toBe('pFP');
     db.close();
   });
 });

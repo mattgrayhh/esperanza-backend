@@ -124,8 +124,13 @@ export interface JsonBlocksView {
 export interface PromoScopeView {
   kind: 'promoScope';
   global: boolean;
-  selected: { cities: string[]; communities: string[]; qmis: string[] };
-  options: { cities: SelectOption[]; communities: SelectOption[]; qmis: SelectOption[] };
+  selected: { cities: string[]; communities: string[]; floorPlans: string[]; qmis: string[] };
+  options: {
+    cities: SelectOption[];
+    communities: SelectOption[];
+    floorPlans: SelectOption[];
+    qmis: SelectOption[];
+  };
 }
 export interface CommunityFloorPlansView {
   kind: 'communityFloorPlans';

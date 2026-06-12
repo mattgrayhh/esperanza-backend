@@ -81,14 +81,18 @@ export async function loadFloorPlanOptions(): Promise<SelectOption[]> {
 export async function loadPromoScopeOptions(): Promise<{
   cities: SelectOption[];
   communities: SelectOption[];
+  floorPlans: SelectOption[];
   qmis: SelectOption[];
 }> {
   const db = getReadDb();
-  const [cityRows, communityRows, qmiRows] = await Promise.all([
+  const [cityRows, communityRows, floorPlanRows, qmiRows] = await Promise.all([
     db.select({ id: cities.id, name: cities.cityName }).from(cities).limit(LIMIT) as Promise<
       Array<{ id: string; name: string | null }>
     >,
     db.select({ id: communities.id, name: communities.name }).from(communities).limit(LIMIT) as Promise<
+      Array<{ id: string; name: string | null }>
+    >,
+    db.select({ id: floorPlans.id, name: floorPlans.name }).from(floorPlans).limit(LIMIT) as Promise<
       Array<{ id: string; name: string | null }>
     >,
     db
@@ -105,6 +109,9 @@ export async function loadPromoScopeOptions(): Promise<{
   return {
     cities: cityRows.map((r) => ({ id: r.id, label: r.name?.trim() || r.id })).sort(sortByLabel),
     communities: communityRows
+      .map((r) => ({ id: r.id, label: r.name?.trim() || r.id }))
+      .sort(sortByLabel),
+    floorPlans: floorPlanRows
       .map((r) => ({ id: r.id, label: r.name?.trim() || r.id }))
       .sort(sortByLabel),
     qmis: qmiRows

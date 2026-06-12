@@ -635,7 +635,12 @@ function toResolved(p: PromoRow | null): ResolvedPromo | null {
 function resolveFor(
   ctx: PromoContext,
   entity: 'qmi' | 'community' | 'city',
-  ids: { qmiId?: string | null; communityId?: string | null; cityId?: string | null },
+  ids: {
+    qmiId?: string | null;
+    communityId?: string | null;
+    floorPlanId?: string | null;
+    cityId?: string | null;
+  },
   now: string
 ): ResolvedPromo | null {
   const winner = resolveEffectivePromo(entity, ids, ctx.promos, ctx.targets, now);
@@ -706,6 +711,10 @@ async function buildPayload(
           {
             qmiId: String(row['id']),
             communityId: asStrOrNull(row['community_id']),
+            // Cascade: a plan-targeted promo applies to every QMI built on it
+            // (unless a more specific community/qmi promo wins). v_public_qmi
+            // exposes floor_plan_id as COALESCE(override, synced).
+            floorPlanId: asStrOrNull(row['floor_plan_id']),
             cityId: asStrOrNull(row['city_id']),
           },
           now

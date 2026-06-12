@@ -4,8 +4,9 @@
 // PromoScopeTagPicker — promotions targeting widget (bucket `target`).
 //
 // A scope picker: radio "Everything (global)" OR multi-select across
-// Cities / Communities / QMIs. target_type ∈ {global, city, community, qmi} (NO
-// floor_plan/collection — intentional per operator).
+// Cities / Communities / Floor Plans / QMIs. target_type ∈ {global, city,
+// community, floor_plan, qmi}. A floor-plan target cascades onto every QMI built
+// on that plan (resolution: qmi > community > floor_plan > city > global).
 //
 // On save → savePromotionTargets REPLACES all promotion_targets rows for this promo:
 //   global → one row {target_type:'global', target_id:NULL}
@@ -31,6 +32,7 @@ import { Badge } from '@/components/ui/badge';
 interface Selected {
   cities: string[];
   communities: string[];
+  floorPlans: string[];
   qmis: string[];
 }
 
@@ -44,7 +46,12 @@ export function PromoScopeTagPicker({
   promoId: string;
   initialGlobal: boolean;
   initialSelected: Selected;
-  options: { cities: SelectOption[]; communities: SelectOption[]; qmis: SelectOption[] };
+  options: {
+    cities: SelectOption[];
+    communities: SelectOption[];
+    floorPlans: SelectOption[];
+    qmis: SelectOption[];
+  };
   onResult?: (msg: string) => void;
 }) {
   const [mode, setMode] = useState<'global' | 'scoped'>(initialGlobal ? 'global' : 'scoped');
@@ -58,14 +65,21 @@ export function PromoScopeTagPicker({
     });
   }
 
-  const totalScoped = sel.cities.length + sel.communities.length + sel.qmis.length;
+  const totalScoped =
+    sel.cities.length + sel.communities.length + sel.floorPlans.length + sel.qmis.length;
 
   function onSave() {
     startTransition(async () => {
       const scope: PromoScope =
         mode === 'global'
           ? { type: 'global' }
-          : { type: 'scoped', cities: sel.cities, communities: sel.communities, qmis: sel.qmis };
+          : {
+              type: 'scoped',
+              cities: sel.cities,
+              communities: sel.communities,
+              floorPlans: sel.floorPlans,
+              qmis: sel.qmis,
+            };
       const res = await savePromotionTargets(promoId, scope);
       onResult?.(res.ok ? 'Targeting saved' : `Error: ${res.error}`);
     });
@@ -95,9 +109,10 @@ export function PromoScopeTagPicker({
       </div>
 
       {mode === 'scoped' ? (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
           <Picker title="Cities" opts={options.cities} sel={sel.cities} onToggle={(o) => toggle('cities', o)} />
           <Picker title="Communities" opts={options.communities} sel={sel.communities} onToggle={(o) => toggle('communities', o)} />
+          <Picker title="Floor Plans" opts={options.floorPlans} sel={sel.floorPlans} onToggle={(o) => toggle('floorPlans', o)} />
           <Picker title="QMIs" opts={options.qmis} sel={sel.qmis} onToggle={(o) => toggle('qmis', o)} />
         </div>
       ) : (

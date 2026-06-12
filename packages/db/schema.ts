@@ -458,7 +458,7 @@ export const promotionTargets = sqliteTable(
   {
     promotionId: text('promotion_id').notNull(),
     targetType: text('target_type', {
-      enum: ['global', 'city', 'community', 'qmi'],
+      enum: ['global', 'city', 'community', 'qmi', 'floor_plan'],
     }).notNull(),
     targetId: text('target_id'), // NULL iff target_type='global'
   },

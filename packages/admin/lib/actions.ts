@@ -712,7 +712,13 @@ export async function setTestimonialStatus(
 
 export type PromoScope =
   | { type: 'global' }
-  | { type: 'scoped'; cities?: string[]; communities?: string[]; qmis?: string[] };
+  | {
+      type: 'scoped';
+      cities?: string[];
+      communities?: string[];
+      floorPlans?: string[];
+      qmis?: string[];
+    };
 
 export async function savePromotionTargets(
   promoId: string,
@@ -747,9 +753,13 @@ export async function savePromotionTargets(
     };
     add('city', scope.cities);
     add('community', scope.communities);
+    add('floor_plan', scope.floorPlans);
     add('qmi', scope.qmis);
     if (rows.length === 0) {
-      return { ok: false, error: 'Scoped targeting requires at least one city, community, or QMI' };
+      return {
+        ok: false,
+        error: 'Scoped targeting requires at least one city, community, floor plan, or QMI',
+      };
     }
   }
 

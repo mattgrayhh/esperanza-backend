@@ -227,7 +227,12 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
     sideWidgets.push({
       kind: 'promoScope',
       global,
-      selected: { cities: pick('city'), communities: pick('community'), qmis: pick('qmi') },
+      selected: {
+        cities: pick('city'),
+        communities: pick('community'),
+        floorPlans: pick('floor_plan'),
+        qmis: pick('qmi'),
+      },
       options,
     });
   }

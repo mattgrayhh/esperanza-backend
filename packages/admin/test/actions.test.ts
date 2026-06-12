@@ -291,6 +291,20 @@ describe('savePromotionTargets — replace-all promotion_targets honoring the CH
     ]);
   });
 
+  it('mixed scope incl. floor plans writes one row per target_type/id (migration 0014)', async () => {
+    const res = await savePromotionTargets('p1', {
+      type: 'scoped',
+      communities: ['recCommA'],
+      floorPlans: ['recFPa', 'recFPb'],
+    });
+    expect(res).toEqual({ ok: true });
+    expect(targetsFor('p1')).toEqual([
+      { target_type: 'community', target_id: 'recCommA' },
+      { target_type: 'floor_plan', target_id: 'recFPa' },
+      { target_type: 'floor_plan', target_id: 'recFPb' },
+    ]);
+  });
+
   it('replace-all: switching from community scope to global removes the old rows', async () => {
     await savePromotionTargets('p1', { type: 'scoped', communities: ['recCommA'] });
     expect(targetsFor('p1')).toHaveLength(1);

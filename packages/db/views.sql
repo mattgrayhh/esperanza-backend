@@ -245,8 +245,9 @@ WHERE published = 1;   -- live publish gate (equivalent to old status<>'Draft')
 -- PROMO RESOLUTION — DOCUMENTED, NOT a view. The api Worker resolves the
 -- "effective promo" for an entity at read time (see packages/db/lib/promo.ts).
 -- Equivalent SQL for "effective promo for a QMI" (given :qmi_id, :community_id,
--- :city_id and a current timestamp :now in YYYY-MM-DD), kept here as the
--- canonical reference the Worker mirrors:
+-- :floor_plan_id, :city_id and a current timestamp :now in YYYY-MM-DD), kept here
+-- as the canonical reference the Worker mirrors. A QMI carries its floor plan id,
+-- so a floor_plan-targeted promo CASCADES onto the home (migration 0014):
 --
 --   SELECT p.*
 --   FROM promotions p
@@ -255,21 +256,24 @@ WHERE published = 1;   -- live publish gate (equivalent to old status<>'Draft')
 --     AND (p.start_date IS NULL OR p.start_date = '' OR p.start_date <= :now)
 --     AND (p.end_date   IS NULL OR p.end_date   = '' OR p.end_date   >= :now)
 --     AND (
---          (t.target_type = 'qmi'       AND t.target_id = :qmi_id)
---       OR (t.target_type = 'community' AND t.target_id = :community_id)
---       OR (t.target_type = 'city'      AND t.target_id = :city_id)
+--          (t.target_type = 'qmi'        AND t.target_id = :qmi_id)
+--       OR (t.target_type = 'community'  AND t.target_id = :community_id)
+--       OR (t.target_type = 'floor_plan' AND t.target_id = :floor_plan_id)
+--       OR (t.target_type = 'city'       AND t.target_id = :city_id)
 --       OR (t.target_type = 'global')
 --     )
 --   ORDER BY
---     CASE t.target_type                       -- specificity: qmi > community > city > global
---       WHEN 'qmi' THEN 0 WHEN 'community' THEN 1 WHEN 'city' THEN 2 WHEN 'global' THEN 3
+--     CASE t.target_type           -- specificity: qmi > community > floor_plan > city > global
+--       WHEN 'qmi' THEN 0 WHEN 'community' THEN 1 WHEN 'floor_plan' THEN 2
+--       WHEN 'city' THEN 3 WHEN 'global' THEN 4
 --     END ASC,
 --     p.sort_order ASC,                        -- tie-break: lowest sort_order wins
 --     p.id ASC                                 -- final deterministic tie-break
 --   LIMIT 1;
 --
--- For a Community endpoint, drop the qmi clause (community/city/global); for a
--- City endpoint, only city/global. The Worker returns the resolved promotion
+-- For a Floor Plan endpoint, pass only :floor_plan_id (floor_plan/global match). For
+-- a Community endpoint, drop the qmi+floor_plan clauses (community/city/global); for
+-- a City endpoint, only city/global. The Worker returns the resolved promotion
 -- object (banner/badge/cta/image) flattened onto each row, matching the shape the
 -- Framer components already expect. It is deliberately NOT a view because (a) the
 -- :now / per-entity parameters vary per request, and (b) D1 read replicas + the
