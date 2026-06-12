@@ -46,6 +46,7 @@ describe('Communities mapper — rich text, HOA links, coords, gates', () => {
       internet_details: 'Fiber up to **1 Gbps**.',
       water_details: 'Municipal water & sewer.',
       office_phone: '936-555-0100',
+      brochure_pdf_url: 'https://esperanza-pdf.round-base-ed8c.workers.dev/pdf/community/tres-lagos',
       master_planned: 1,
       coming_soon: 0,
       hoa_links_json: JSON.stringify([
@@ -92,6 +93,12 @@ describe('Communities mapper — rich text, HOA links, coords, gates', () => {
     expect(String(sval(f['internet_details']))).toContain('<strong>1 Gbps</strong>');
     expect(f['water_details']?.type).toBe('formattedText');
     expect(String(sval(f['water_details']))).toContain('Municipal water');
+
+    // dynamic community brochure PDF emitted as a LINK (auto-filled by ensurePdfRender)
+    expect(f['brochure_pdf_url']?.type).toBe('link');
+    expect(sval(f['brochure_pdf_url'])).toBe(
+      'https://esperanza-pdf.round-base-ed8c.workers.dev/pdf/community/tres-lagos'
+    );
 
     // booleans always emitted
     expect(sval(f['master_planned'])).toBe(true);

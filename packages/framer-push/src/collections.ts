@@ -15,8 +15,13 @@
 //     framer-api v4) — compactFields only drops genuinely-absent (undefined) values
 //     so empty numbers never leak "0" to the live site.
 //   * draft:true is SOFT-DELETE — the item & url persist, just hidden in prod.
-//   * brochure_pdf_url stays type "string" (never "link") — "link" makes addItems
-//     throw and aborts the batch.
+//   * PDF link fields (qmi.dynamic_pdf, floor_plans.brochure_pdf_url) are emitted as
+//     strings but pinned to framer_type 'link' in field_definitions (MAPPER_FRAMER_TYPE);
+//     applyTypeOverrides coerces them to links before push. The live Framer field MUST be
+//     Link type to match — a string-typed Framer field + a link value makes addItems throw
+//     and aborts the batch, so field_definitions and the Framer field type must stay in sync.
+//     communities.brochure_pdf_url has no field_definitions row, so the mapper emits a link
+//     value directly (same Link-field requirement applies).
 //   * slugs for QMI & Testimonials are normalized dashes→underscores (toUnderscore).
 //
 // READ STRATEGY (soft-delete-safe): we DO NOT read v_public_* directly because
@@ -443,7 +448,11 @@ const floorPlans: CollectionDef = {
       master_bed_location: sIf(row['master_bed_location']),
       incentive: sIf(row['incentive']),
       coming_soon: bool(asBool(row['coming_soon'])), // live FP (Managed) has the field (added 2026-06)
-      // brochure_pdf_url MUST stay "string" (link type breaks live binding & aborts batch)
+      // brochure_pdf_url = the dynamic floor-plan PDF (/pdf/floorplan/<slug>, auto-filled
+      // by ensurePdfRender). Emitted as a string here; field_definitions pins its
+      // framer_type to 'link' (MAPPER_FRAMER_TYPE), so applyTypeOverrides coerces it to a
+      // link before push. The live Framer field MUST be Link type to match (else addItems
+      // aborts) — keep field_definitions and the Framer field type in sync.
       brochure_pdf_url: sIf(row['brochure_pdf_url']),
       // [P2] brochure_pdf (legacy attachment dup of brochure_pdf_url) no longer emitted.
       hers_score: nIf(row['hers_score']),
@@ -527,6 +536,10 @@ const qmi: CollectionDef = {
           urlOf(row['og_image_url']) ??
           fpScalarUrl(row['fp_image'])
       ),
+      // Dynamic QMI brochure (/pdf/qmi/<slug>, auto-filled by ensurePdfRender). Emitted
+      // as a string; field_definitions pins qmi.dynamic_pdf framer_type to 'link'
+      // (MAPPER_FRAMER_TYPE) → applyTypeOverrides coerces to a link before push. The live
+      // Framer field MUST be Link type to match.
       dynamic_pdf: sIf(row['dynamic_pdf']),
       featured_image: imgIf(row['featured_image']),
       image_2: imgIf(row['image_2']),
@@ -683,6 +696,11 @@ const communities: CollectionDef = {
       community_map_embed: sIf(row['community_map_embed']),
       features_download: linkIf(row['features_download_url']),
       resources_download: linkIf(row['resources_download_url']),
+      // Dynamic PDF (community brochure) — deterministic /pdf/community/<slug> URL
+      // auto-filled into brochure_pdf_url by ensurePdfRender. Emitted as a LINK so
+      // the site can bind it directly. (No field_definitions row for this key, so the
+      // emitted link type passes through unchanged — the Framer field must be Link.)
+      brochure_pdf_url: linkIf(row['brochure_pdf_url']),
       incentive: sIf(row['incentive']),
       // 8 formattedText "*_rich" copy blocks
       design_copy_rich: ftIf(row['design_copy_rich']),
