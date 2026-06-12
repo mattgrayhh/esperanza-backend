@@ -495,6 +495,10 @@ const qmi: CollectionDef = {
     const floorPlanSlug = asString(row['floor_plan'])
       ? kebab(String(row['floor_plan']))
       : undefined;
+    // QMI photo gallery, computed once: the full array still feeds `photo_gallery`,
+    // AND the first two entries are surfaced as standalone scalar image fields so the
+    // site can bind them individually (CMS-linkable) without indexing into the gallery.
+    const qmiGallery = galleryUrls(row['photo_gallery_json']);
 
     const fieldData = compactFields({
       address: sIf(row['address']),
@@ -540,7 +544,11 @@ const qmi: CollectionDef = {
       // parallel migration; enrichRow() probes for it until the projection carries
       // it). Deliberately NO fallback to the floor plan's gallery: null/absent →
       // the field is dropped (pushed empty), per the content-resolution spec.
-      photo_gallery: galIf(galleryUrls(row['photo_gallery_json'])),
+      photo_gallery: galIf(qmiGallery),
+      // First two gallery photos as standalone, individually-bindable image fields
+      // (the gallery still carries the full set). Absent → dropped by compactFields.
+      gallery_image_1: imgIf(qmiGallery[0]),
+      gallery_image_2: imgIf(qmiGallery[1]),
       upgrades: sIf(row['upgrades']),
       incentive: sIf(row['incentive']),
       virtual_tour_url: sIf(row['virtual_tour_url']),

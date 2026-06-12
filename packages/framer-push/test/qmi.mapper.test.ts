@@ -394,10 +394,18 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
       'https://media.esperanzahomes.com/qmi/own-1.jpg',
       'https://media.esperanzahomes.com/qmi/own-2.jpg',
     ]);
+    // first two gallery photos ALSO surfaced as standalone, individually-bindable
+    // image fields — while remaining in the full gallery above.
+    expect(own.fieldData['gallery_image_1']?.type).toBe('image');
+    expect(own.fieldData['gallery_image_1']?.value).toBe('https://media.esperanzahomes.com/qmi/own-1.jpg');
+    expect(own.fieldData['gallery_image_2']?.type).toBe('image');
+    expect(own.fieldData['gallery_image_2']?.value).toBe('https://media.esperanzahomes.com/qmi/own-2.jpg');
 
     // null gallery → field dropped (empty); the FP's images stay in fp_* fields only
     const none = qmiDef.map((await loadRowById(env, qmiDef, 'recQMIgalNULL001'))!);
     expect(none.fieldData['photo_gallery']).toBeUndefined();
+    expect(none.fieldData['gallery_image_1']).toBeUndefined();
+    expect(none.fieldData['gallery_image_2']).toBeUndefined();
     expect(none.fieldData['fp_additional_images_gallery']).toBeDefined();
   });
 
