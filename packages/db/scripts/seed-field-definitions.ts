@@ -167,6 +167,13 @@ function framerType(type: FieldType, f: FieldConfig): string | null {
 // map (or the mappers) is how a future field is reconciled; do NOT widen framerType()
 // generically (most *_rich fields ARE correctly pushed as formattedText via ftIf).
 const MAPPER_FRAMER_TYPE: Record<string, string> = {
+  // Dynamic-PDF links: the mapper emits the deterministic /pdf/<type>/<slug> URL as a
+  // string, but it must land in Framer as a LINK. Pinning framer_type to 'link' makes
+  // applyTypeOverrides coerce the string → link before push. The live Framer field must
+  // be Link type to match (else addItems aborts). communities.brochure_pdf_url has no
+  // field-config row, so its mapper emits a link value directly (not pinned here).
+  'qmi.dynamic_pdf': 'link',
+  'floor_plans.brochure_pdf_url': 'link',
   'floor_plans.description': 'string',
   'qmi.postal_code': 'string',
   'qmi.description': 'string',
