@@ -801,6 +801,8 @@ const promotions: CollectionDef = {
       (SELECT group_concat(t.target_id) FROM promotion_targets t
          WHERE t.promotion_id = p.id AND t.target_type = 'community') AS community_ids,
       (SELECT group_concat(t.target_id) FROM promotion_targets t
+         WHERE t.promotion_id = p.id AND t.target_type = 'floor_plan') AS floor_plan_ids,
+      (SELECT group_concat(t.target_id) FROM promotion_targets t
          WHERE t.promotion_id = p.id AND t.target_type = 'qmi') AS qmi_ids,
       (SELECT group_concat(t.target_id) FROM promotion_targets t
          WHERE t.promotion_id = p.id AND t.target_type = 'city') AS city_ids
@@ -809,6 +811,8 @@ const promotions: CollectionDef = {
     SELECT p.*,
       (SELECT group_concat(t.target_id) FROM promotion_targets t
          WHERE t.promotion_id = p.id AND t.target_type = 'community') AS community_ids,
+      (SELECT group_concat(t.target_id) FROM promotion_targets t
+         WHERE t.promotion_id = p.id AND t.target_type = 'floor_plan') AS floor_plan_ids,
       (SELECT group_concat(t.target_id) FROM promotion_targets t
          WHERE t.promotion_id = p.id AND t.target_type = 'qmi') AS qmi_ids,
       (SELECT group_concat(t.target_id) FROM promotion_targets t

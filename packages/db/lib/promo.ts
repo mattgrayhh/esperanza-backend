@@ -12,7 +12,7 @@
 // Mirrors the documented SQL in views.sql.
 // =============================================================================
 
-export type PromoTargetType = 'global' | 'city' | 'community' | 'qmi';
+export type PromoTargetType = 'global' | 'city' | 'community' | 'qmi' | 'floor_plan';
 
 /** Minimal promotion shape the resolver needs (the api Worker passes full rows). */
 export interface PromoLike {
@@ -38,15 +38,27 @@ export interface PromoTargetLike {
 export interface ResolveContext {
   qmiId?: string | null;
   communityId?: string | null;
+  /**
+   * The floor plan the entity is built on / is. A QMI passes its resolved floor
+   * plan id here so a plan-targeted promo CASCADES onto the home; a floor-plan
+   * page passes its own id. Community/city pages omit it (a community offers many
+   * plans, so no single plan promo should leak onto it).
+   */
+  floorPlanId?: string | null;
   cityId?: string | null;
 }
 
-/** Lower number = more specific. */
+/**
+ * Lower number = more specific. floor_plan sits between community and city: a
+ * community (a physical place) is more specific than the product line (a plan
+ * offered across many communities), which is in turn more specific than a city.
+ */
 const SPECIFICITY: Record<PromoTargetType, number> = {
   qmi: 0,
   community: 1,
-  city: 2,
-  global: 3,
+  floor_plan: 2,
+  city: 3,
+  global: 4,
 };
 
 function isActive(p: PromoLike): boolean {
@@ -86,6 +98,9 @@ function bestMatchType(
         break;
       case 'community':
         matches = !!ctx.communityId && t.target_id === ctx.communityId;
+        break;
+      case 'floor_plan':
+        matches = !!ctx.floorPlanId && t.target_id === ctx.floorPlanId;
         break;
       case 'qmi':
         matches = !!ctx.qmiId && t.target_id === ctx.qmiId;

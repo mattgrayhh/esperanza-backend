@@ -111,7 +111,7 @@ describe('Promotions mapper — targets, image fallback, gate', () => {
     expect(sval(item.fieldData['image'])).toBe('https://media.esperanzahomes.com/com/has/hero.jpg');
   });
 
-  it('falls back to a linked Floor Plan render when no community image exists', async () => {
+  it('surfaces floor_plan target ids and borrows the linked Floor Plan render (migration 0014)', async () => {
     const db = freshDb();
     insertRow(db, 'floor_plans', {
       id: 'recFP00IMG0001A',
@@ -123,15 +123,20 @@ describe('Promotions mapper — targets, image fallback, gate', () => {
       id: 'recPROMO0003ABC',
       title: 'FP Image',
       published: 1,
+      // no image_url, no community target → fallback walks to the FP render
       updated_at: '2026-05-30T12:00:00.000Z',
     });
-    // FP targets aren't a target_type in the schema; the consumer reads
-    // floor_plan_ids (currently always empty), so this asserts the chain is
-    // exercised but yields no image when there is no community AND no FP target.
+    db.prepare(
+      `INSERT INTO promotion_targets (promotion_id, target_type, target_id) VALUES (?, ?, ?)`
+    ).run('recPROMO0003ABC', 'floor_plan', 'recFP00IMG0001A');
+
     const row = await loadRowById(env(db), def, 'recPROMO0003ABC');
     const item = def.map(row!);
-    // no targets → no borrowed image → image field dropped (never blank)
-    expect(item.fieldData['image']).toBeUndefined();
+    // floor_plan target id surfaced as csv (Framer matches it against the page's plan)
+    expect(sval(item.fieldData['floor_plan_ids'])).toBe('recFP00IMG0001A');
+    // image fallback chain reaches the linked FP render
+    expect(item.fieldData['image']?.type).toBe('image');
+    expect(sval(item.fieldData['image'])).toBe('https://media.esperanzahomes.com/fp/kestrel/render.jpg');
   });
 
   it('draft:true when published=false (hard-hide; gate renamed from active in 0005)', () => {

@@ -171,7 +171,7 @@ async function enrichRow(env: ConsumerEnv, key: CollectionKey, row: Row): Promis
 
   if (key === 'promotions') {
     const communityIds = csv(row['community_ids']);
-    const floorPlanIds = csv(row['floor_plan_ids']); // (no FP target_type today → [])
+    const floorPlanIds = csv(row['floor_plan_ids']); // floor_plan promotion_targets (migration 0014)
     // the mapper reads community_ids / floor_plan_ids / collection_ids strings;
     // surface them consistently (collection_ids has no target_type → '').
     row['floor_plan_ids'] = row['floor_plan_ids'] ?? null;

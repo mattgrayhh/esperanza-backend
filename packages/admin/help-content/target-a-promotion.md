@@ -4,8 +4,8 @@ title: Target a promotion at specific pages
 category: Promotions & Incentives
 categorySort: 50
 sort: 20
-summary: Global, City, Community, or single Home — and which promotion wins when several apply.
-keywords: targeting, scope, location, where, specific pages, apply, audience
+summary: Global, City, Community, Floor Plan, or single Home — and which promotion wins when several apply.
+keywords: targeting, scope, location, where, specific pages, apply, audience, floor plan, plan
 entity: promotions
 ---
 
@@ -14,10 +14,13 @@ Every promotion has a **Promotion Location** — where on the site it applies:
 - `Global` — every page that shows promotions, site-wide.
 - `City` — every community and home in that city.
 - `Community` — that community's page and all its homes.
+- `Floor Plan` — that floor plan's page **and every Quick Move-In built on that
+  plan**, across all communities. Use this for an offer tied to a specific plan
+  (e.g. "$5K off the Magnolia").
 - `Home` — one specific Quick Move-In.
 
 Pick the targets on the promotion's page; a promotion can have several
-(e.g. two communities).
+(e.g. two communities, or a plan plus a city).
 
 ## Find a promotion by lot number
 
@@ -30,7 +33,10 @@ lot number).
 
 A page shows **one** promotion. The most *specific* match wins:
 
-> `Home` beats `Community` beats `City` beats `Global`.
+> `Home` beats `Community` beats `Floor Plan` beats `City` beats `Global`.
+
+A `Community` offer outranks a `Floor Plan` offer — a home that is both in a
+promoted community *and* built on a promoted plan shows the **community** offer.
 
 Ties (two promotions at the same level) go to the one with the lower
 `Sort Order` number.
@@ -42,6 +48,9 @@ Ties (two promotions at the same level) go to the one with the lower
   everywhere else shows **$10K Your Way**.
 - Add "Final Lot Special" on one home (`Home`): that home's page shows the
   special; the rest of Las Brisas still shows Closeout.
+- "$5K off the Magnolia" targeting the *Magnolia* (`Floor Plan`): every Magnolia
+  home in any community shows it — unless that home's community has its own
+  community-level offer, which wins.
 
 ## Checklist when an offer ends
 
