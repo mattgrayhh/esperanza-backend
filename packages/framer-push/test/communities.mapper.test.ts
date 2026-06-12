@@ -94,8 +94,11 @@ describe('Communities mapper — rich text, HOA links, coords, gates', () => {
     expect(f['water_details']?.type).toBe('formattedText');
     expect(String(sval(f['water_details']))).toContain('Municipal water');
 
-    // dynamic community brochure PDF emitted as a LINK (auto-filled by ensurePdfRender)
-    expect(f['brochure_pdf_url']?.type).toBe('link');
+    // dynamic community brochure PDF (auto-filled by ensurePdfRender). The mapper emits
+    // the URL as a string; the push path coerces it to a link via field_definitions
+    // (communities.brochure_pdf_url framer_type='link', MAPPER_FRAMER_TYPE) — same proven
+    // pattern as floor_plans.brochure_pdf_url.
+    expect(f['brochure_pdf_url']?.type).toBe('string');
     expect(sval(f['brochure_pdf_url'])).toBe(
       'https://esperanza-pdf.round-base-ed8c.workers.dev/pdf/community/tres-lagos'
     );
