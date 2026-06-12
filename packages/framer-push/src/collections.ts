@@ -699,11 +699,11 @@ const communities: CollectionDef = {
       features_download: linkIf(row['features_download_url']),
       resources_download: linkIf(row['resources_download_url']),
       // Dynamic PDF (community brochure) — deterministic /pdf/community/<slug> URL
-      // auto-filled into brochure_pdf_url by ensurePdfRender. Emitted as a string;
-      // field_definitions pins communities.brochure_pdf_url framer_type to 'link'
-      // (MAPPER_FRAMER_TYPE) → applyTypeOverrides coerces it to a link before push
-      // (same proven pattern as floor_plans.brochure_pdf_url). The live Framer field
-      // must be Link type to match.
+      // auto-filled into brochure_pdf_url by ensurePdfRender. Emitted as a plain string
+      // URL (clickable in Framer bindings). NOT a link field: link-type coercion did not
+      // apply reliably on the communities collection, so its Framer field is Short text
+      // and field_definitions framer_type stays 'string'. (QMI/floor-plan dynamic PDFs
+      // are links via MAPPER_FRAMER_TYPE; communities deliberately differs.)
       brochure_pdf_url: sIf(row['brochure_pdf_url']),
       incentive: sIf(row['incentive']),
       // 8 formattedText "*_rich" copy blocks
