@@ -170,10 +170,11 @@ const MAPPER_FRAMER_TYPE: Record<string, string> = {
   // Dynamic-PDF links: the mapper emits the deterministic /pdf/<type>/<slug> URL as a
   // string, but it must land in Framer as a LINK. Pinning framer_type to 'link' makes
   // applyTypeOverrides coerce the string → link before push. The live Framer field must
-  // be Link type to match (else addItems aborts). communities.brochure_pdf_url has no
-  // field-config row, so its mapper emits a link value directly (not pinned here).
+  // be Link type to match (else addItems aborts). All three carry a (hidden, for
+  // communities) field-config row so the seed emits these framer_type overrides.
   'qmi.dynamic_pdf': 'link',
   'floor_plans.brochure_pdf_url': 'link',
+  'communities.brochure_pdf_url': 'link',
   'floor_plans.description': 'string',
   'qmi.postal_code': 'string',
   'qmi.description': 'string',

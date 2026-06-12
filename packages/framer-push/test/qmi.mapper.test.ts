@@ -375,9 +375,10 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
       published: 1,
       synced_address: '15 Gallery Way',
       synced_floor_plan_id: 'recFPgallery0001',
-      // {url, alt} object shape per migration 0010 (galleryUrls accepts both)
+      // {url, alt} object shape per migration 0010 (galleryUrls accepts both).
+      // Entry [0] is the elevation render; [1]/[2] are the first two photos.
       photo_gallery_json:
-        '[{"url":"https://media.esperanzahomes.com/qmi/own-1.jpg","alt":"Kitchen"},{"url":"https://media.esperanzahomes.com/qmi/own-2.jpg","alt":"Patio"}]',
+        '[{"url":"https://media.esperanzahomes.com/qmi/render.jpg","alt":"Render"},{"url":"https://media.esperanzahomes.com/qmi/own-1.jpg","alt":"Kitchen"},{"url":"https://media.esperanzahomes.com/qmi/own-2.jpg","alt":"Patio"}]',
     });
     insertRow(db, 'qmi', {
       id: 'recQMIgalNULL001',
@@ -390,12 +391,14 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
     const own = qmiDef.map((await loadRowById(env, qmiDef, 'recQMIgalOWN0001'))!);
     const gal = own.fieldData['photo_gallery'];
     expect(gal?.type).toBe('array');
+    // full gallery keeps every entry, render first
     expect((gal as ArrayFieldValue).value.map((v) => v.fieldData['image']?.value)).toEqual([
+      'https://media.esperanzahomes.com/qmi/render.jpg',
       'https://media.esperanzahomes.com/qmi/own-1.jpg',
       'https://media.esperanzahomes.com/qmi/own-2.jpg',
     ]);
-    // first two gallery photos ALSO surfaced as standalone, individually-bindable
-    // image fields — while remaining in the full gallery above.
+    // the two standalone photo fields are gallery entries [1] and [2] — the render
+    // at [0] is skipped — while the full gallery above still carries everything.
     expect(own.fieldData['gallery_image_1']?.type).toBe('image');
     expect(own.fieldData['gallery_image_1']?.value).toBe('https://media.esperanzahomes.com/qmi/own-1.jpg');
     expect(own.fieldData['gallery_image_2']?.type).toBe('image');

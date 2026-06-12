@@ -345,6 +345,10 @@ const communities: EntityFieldConfig = {
     { field: 'mine_link', label: 'Mine Link', widget: 'text', bucket: 'admin' },
     { field: 'features_download_url', label: 'Features Download (PDF)', widget: 'image', bucket: 'admin' },
     { field: 'resources_download_url', label: 'Resources Download (PDF)', widget: 'image', bucket: 'admin' },
+    // Auto-filled dynamic-PDF link (ensurePdfRender). Hidden from the form (computed,
+    // not hand-edited); the row exists only so its framer_type seeds as 'link'
+    // (MAPPER_FRAMER_TYPE) and applyTypeOverrides coerces the emitted URL to a link.
+    { field: 'brochure_pdf_url', label: 'Brochure PDF', widget: 'text', bucket: 'admin', visibleInForm: false },
     { field: 'office_phone', label: 'Office Phone', widget: 'text', bucket: 'admin' },
     { field: 'office_hours', label: 'Office Hours', widget: 'text', bucket: 'admin' },
     { field: 'schedule_visit', label: 'Schedule Visit', widget: 'text', bucket: 'admin' },

@@ -505,8 +505,9 @@ const qmi: CollectionDef = {
       ? kebab(String(row['floor_plan']))
       : undefined;
     // QMI photo gallery, computed once: the full array still feeds `photo_gallery`,
-    // AND the first two entries are surfaced as standalone scalar image fields so the
-    // site can bind them individually (CMS-linkable) without indexing into the gallery.
+    // AND two entries are surfaced as standalone scalar image fields so the site can
+    // bind them individually (CMS-linkable) without indexing into the gallery. Entry
+    // [0] is the elevation RENDER, so the two photo fields use gallery entries [1]/[2].
     const qmiGallery = galleryUrls(row['photo_gallery_json']);
 
     const fieldData = compactFields({
@@ -558,10 +559,11 @@ const qmi: CollectionDef = {
       // it). Deliberately NO fallback to the floor plan's gallery: null/absent →
       // the field is dropped (pushed empty), per the content-resolution spec.
       photo_gallery: galIf(qmiGallery),
-      // First two gallery photos as standalone, individually-bindable image fields
-      // (the gallery still carries the full set). Absent → dropped by compactFields.
-      gallery_image_1: imgIf(qmiGallery[0]),
-      gallery_image_2: imgIf(qmiGallery[1]),
+      // First two PHOTOS (gallery entries [1] and [2]) as standalone, individually-
+      // bindable image fields — entry [0] is the elevation render, so it's skipped.
+      // The gallery still carries the full set. Absent → dropped by compactFields.
+      gallery_image_1: imgIf(qmiGallery[1]),
+      gallery_image_2: imgIf(qmiGallery[2]),
       upgrades: sIf(row['upgrades']),
       incentive: sIf(row['incentive']),
       virtual_tour_url: sIf(row['virtual_tour_url']),
@@ -697,10 +699,12 @@ const communities: CollectionDef = {
       features_download: linkIf(row['features_download_url']),
       resources_download: linkIf(row['resources_download_url']),
       // Dynamic PDF (community brochure) — deterministic /pdf/community/<slug> URL
-      // auto-filled into brochure_pdf_url by ensurePdfRender. Emitted as a LINK so
-      // the site can bind it directly. (No field_definitions row for this key, so the
-      // emitted link type passes through unchanged — the Framer field must be Link.)
-      brochure_pdf_url: linkIf(row['brochure_pdf_url']),
+      // auto-filled into brochure_pdf_url by ensurePdfRender. Emitted as a string;
+      // field_definitions pins communities.brochure_pdf_url framer_type to 'link'
+      // (MAPPER_FRAMER_TYPE) → applyTypeOverrides coerces it to a link before push
+      // (same proven pattern as floor_plans.brochure_pdf_url). The live Framer field
+      // must be Link type to match.
+      brochure_pdf_url: sIf(row['brochure_pdf_url']),
       incentive: sIf(row['incentive']),
       // 8 formattedText "*_rich" copy blocks
       design_copy_rich: ftIf(row['design_copy_rich']),
