@@ -567,6 +567,10 @@ const qmi: CollectionDef = {
       upgrades: sIf(row['upgrades']),
       incentive: sIf(row['incentive']),
       virtual_tour_url: sIf(row['virtual_tour_url']),
+      // NterNow self-tour "Enter Now" link. Admin-owned; the view selects q.nter_now
+      // (line ~342). Mirrors the community mapper — was previously absent from the QMI
+      // mapper, so the field never reached Framer even when populated.
+      nter_now: sIf(row['nter_now']),
       elevation_type: sIf(row['elevation_type'] ?? row['elevation']),
       housenumber: sIf(row['housenumber']),
       mls_id: sIf(row['mls_id']),
