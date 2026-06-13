@@ -16,6 +16,8 @@
 //              entry with N images).
 // =============================================================================
 
+import { transformImageUrl } from './image-transform.js';
+
 export type FieldType =
   | 'string'
   | 'number'
@@ -67,7 +69,10 @@ export interface ManagedCollectionItemInput {
 export const str = (value: string): FieldValue => ({ type: 'string', value });
 export const num = (value: number): FieldValue => ({ type: 'number', value });
 export const bool = (value: boolean): FieldValue => ({ type: 'boolean', value });
-export const image = (value: string): FieldValue => ({ type: 'image', value });
+// image() is the SINGLE choke point for every image-type value (mappers' imgIf,
+// galleryArray below, and type-overrides' image case all route through here), so
+// the Cloudflare Images transform is applied once, here. No-op until configured.
+export const image = (value: string): FieldValue => ({ type: 'image', value: transformImageUrl(value) });
 export const link = (value: string): FieldValue => ({ type: 'link', value });
 export const formattedText = (value: string): FieldValue => ({
   type: 'formattedText',
@@ -77,5 +82,7 @@ export const formattedText = (value: string): FieldValue => ({
 /** Build an array field from a list of image urls (1 nested image per entry). */
 export const galleryArray = (urls: string[]): ArrayFieldValue => ({
   type: 'array',
-  value: urls.map((url) => ({ fieldData: { image: { type: 'image', value: url } } })),
+  value: urls.map((url) => ({
+    fieldData: { image: { type: 'image', value: transformImageUrl(url) } },
+  })),
 });
