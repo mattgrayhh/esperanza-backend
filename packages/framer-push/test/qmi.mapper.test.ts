@@ -452,3 +452,49 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
     expect(String(log['notes'])).toContain('qmi:');
   });
 });
+
+// =============================================================================
+// community_ids — the resolved community rec-ID (COALESCE override, synced) emitted
+// as a string under the SAME key as floor_plans, so a community CMS page can filter
+// `community_ids Contains {communityId}` for QMIs available there.
+// =============================================================================
+describe('QMI mapper — community_ids (community rec-ID for CMS matching)', () => {
+  const mapOne = (db: ReturnType<typeof freshDb>, id: string) =>
+    qmiDef.map(db.prepare(qmiDef.selectByIdSql).get(id) as Record<string, unknown>);
+
+  it('emits community_ids as a string = synced_community_id when no override', () => {
+    const db = freshDb();
+    insertRow(db, 'communities', { id: 'recCOMharvest01', name: 'Harvest Coves' });
+    insertRow(db, 'qmi', {
+      id: 'recQMIci0001',
+      published: 1,
+      synced_address: '3706 Westway Court',
+      synced_community_name: 'Harvest Coves',
+      synced_community_id: 'recCOMharvest01',
+    });
+    expect(mapOne(db, 'recQMIci0001').fieldData['community_ids']).toEqual({
+      type: 'string',
+      value: 'recCOMharvest01',
+    });
+  });
+
+  it('override_community_id wins over synced', () => {
+    const db = freshDb();
+    insertRow(db, 'communities', { id: 'recCOMsynced01', name: 'Synced Community' });
+    insertRow(db, 'communities', { id: 'recCOMoverride01', name: 'Override Community' });
+    insertRow(db, 'qmi', {
+      id: 'recQMIci0002',
+      published: 1,
+      synced_address: '1 Synced Way',
+      synced_community_id: 'recCOMsynced01',
+      override_community_id: 'recCOMoverride01',
+    });
+    expect(sval(mapOne(db, 'recQMIci0002').fieldData['community_ids'])).toBe('recCOMoverride01');
+  });
+
+  it('drops community_ids when the QMI has no community', () => {
+    const db = freshDb();
+    insertRow(db, 'qmi', { id: 'recQMIci0003', published: 1, synced_address: '2 No Comm Rd' });
+    expect(mapOne(db, 'recQMIci0003').fieldData['community_ids']).toBeUndefined();
+  });
+});

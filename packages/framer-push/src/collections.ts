@@ -519,6 +519,11 @@ const qmi: CollectionDef = {
       latitude: nIf(row['latitude']),
       longitude: nIf(row['longitude']),
       community: sIf(row['community']),
+      // Resolved community rec-ID (projection: COALESCE(override, synced) AS community_id).
+      // Same key + string shape as floor_plans.community_ids so a community CMS page can
+      // filter BOTH collections with `community_ids Contains {communityId}`. Auto-current:
+      // re-emitted on every QMI push (Snowflake ingest + admin edits), honors the override.
+      community_ids: sIf(row['community_id']),
       floor_plan: sIf(row['floor_plan']),
       floor_plan_slug: floorPlanSlug === undefined ? undefined : str(floorPlanSlug),
       collection: sIf(row['collection']),
