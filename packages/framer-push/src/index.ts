@@ -46,6 +46,7 @@ import {
   type MessageBatchLike,
 } from './types.js';
 import { writeFramerSyncLog } from './consumer.js';
+import { configureImageTransform } from './image-transform.js';
 
 export interface Env extends ConsumerEnv {
   DB: D1Like;
@@ -58,6 +59,14 @@ export interface Env extends ConsumerEnv {
    * (wrangler [vars] are strings). Defaults to CRON_LOOKBACK_MINUTES (1500 = 25h).
    */
   CRON_LOOKBACK_MINUTES?: string | number;
+  /**
+   * Cloudflare Images delivery origin fronting the R2 bucket, e.g.
+   * "https://img.hazardhouse.ai". UNSET → image URLs pass through unchanged
+   * (compression off). See image-transform.ts.
+   */
+  IMAGES_TRANSFORM_BASE?: string;
+  /** cdn-cgi option string; defaults to format=auto,quality=80,width=1920. */
+  IMAGES_TRANSFORM_OPTS?: string;
   // optional FRAMER_COLLECTION_* name overrides flow through ConsumerEnv index sig.
 }
 
@@ -368,6 +377,7 @@ export default {
     env: Env,
     ctx: { waitUntil(p: Promise<unknown>): void }
   ): Promise<void> {
+    configureImageTransform(env.IMAGES_TRANSFORM_BASE, env.IMAGES_TRANSFORM_OPTS);
     ctx.waitUntil(runLookback(env));
   },
 
@@ -375,10 +385,12 @@ export default {
     batch: MessageBatchLike<FramerSyncMessage>,
     env: Env
   ): Promise<void> {
+    configureImageTransform(env.IMAGES_TRANSFORM_BASE, env.IMAGES_TRANSFORM_OPTS);
     await handleQueueBatch(batch, env);
   },
 
   async fetch(request: Request, env: Env): Promise<Response> {
+    configureImageTransform(env.IMAGES_TRANSFORM_BASE, env.IMAGES_TRANSFORM_OPTS);
     return handleFetch(request, env);
   },
 };

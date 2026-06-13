@@ -23,19 +23,28 @@ import { join } from 'node:path';
 import { FORBIDDEN_IMAGE_HOST } from './coerce.js';
 
 export const DEFAULT_BUCKET = 'esperanza-cms';
-export const DEFAULT_CDN_BASE = 'https://media.esperanzahomes.com';
+// The stable public asset host is the R2 bucket's public domain. It was formerly
+// media.esperanzahomes.com (the legacy web host), which was decommissioned
+// 2026-06-15 — so that host must NEVER be the CDN base or be treated as "stable",
+// or scripts re-mint dead URLs. See scripts/rehost-media-host.mts.
+export const DEFAULT_CDN_BASE = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev';
 
 export function cdnBase(): string {
   return (process.env.CDN_BASE_URL ?? DEFAULT_CDN_BASE).replace(/\/+$/, '');
 }
 
-/** Hosts we treat as already-stable (never re-upload). */
+/**
+ * Hosts we treat as already-stable (never re-upload): the R2 public domain only.
+ * media.esperanzahomes.com is DELIBERATELY excluded — it is the dead legacy host;
+ * any value still on it must be re-hosted, not skipped as "stable".
+ */
 export function isStableUrl(url: string): boolean {
   if (!url) return false;
   const base = cdnBase();
   return (
     url.startsWith(base) ||
-    /https?:\/\/(media|cdn)\.esperanzahomes\.com\//.test(url)
+    /https?:\/\/[a-z0-9-]+\.r2\.dev\//.test(url) ||
+    /https?:\/\/[a-z0-9-]+\.r2\.cloudflarestorage\.com\//.test(url)
   );
 }
 
