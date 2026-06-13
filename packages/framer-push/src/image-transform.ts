@@ -9,7 +9,7 @@
 // HOW: rewrite each R2 image URL to a Cloudflare Images "transform via URL"
 // request served from a delivery domain that fronts the same R2 bucket, e.g.
 //   https://pub-<hash>.r2.dev/qmi/<id>/hero.jpg
-//     -> https://ehi.hazardhouse.ai/cdn-cgi/image/format=auto,quality=80,width=1920/qmi/<id>/hero.jpg
+//     -> https://img.hazardhouse.ai/cdn-cgi/image/format=auto,quality=80,width=1920/qmi/<id>/hero.jpg
 // format=auto negotiates WebP/AVIF per browser; width caps the source so the
 // original 5 MB JPEG never leaves R2 at full size. (Transformations must be
 // enabled on the delivery zone; the bucket is exposed at the delivery host as a
@@ -17,7 +17,7 @@
 // through unchanged — and link() fields, which carry PDFs, are never wrapped.)
 //
 // CONFIG (per-Worker-invocation, set from env at the handler entry points):
-//   IMAGES_TRANSFORM_BASE  delivery origin, e.g. "https://ehi.hazardhouse.ai".
+//   IMAGES_TRANSFORM_BASE  delivery origin, e.g. "https://img.hazardhouse.ai".
 //                          UNSET → passthrough (no-op). This is the kill switch:
 //                          deploying without it changes nothing; setting it (then
 //                          a backfill) activates compression.

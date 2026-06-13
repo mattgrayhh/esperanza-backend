@@ -85,10 +85,12 @@ dead_letter_queue = "esperanza-framer-queue-dlq"
 # transform (format=auto,quality=80,width=1920) served from the delivery domain
 # below, so Framer ingests a compressed source instead of the full-res original.
 # UNSET = passthrough (no compression). ACTIVATION ORDER: (1) confirm the delivery
-# host serves the bucket + Transformations are enabled on its zone, (2) uncomment
-# the base, (3) deploy, (4) run a backfill so Framer re-ingests the compressed URLs.
-# IMAGES_TRANSFORM_BASE = "https://ehi.hazardhouse.ai"
-# IMAGES_TRANSFORM_OPTS = "format=auto,quality=80,width=1920"
+# host serves the bucket + Transformations are enabled on its zone, (2) set the
+# base, (3) deploy, (4) run a backfill so Framer re-ingests the compressed URLs.
+# img.hazardhouse.ai is a public R2 custom domain on esperanza-cms (the brochures
+# host ehi.hazardhouse.ai fronts a different bucket — do not reuse it).
+IMAGES_TRANSFORM_BASE = "https://img.hazardhouse.ai"
+IMAGES_TRANSFORM_OPTS = "format=auto,quality=80,width=1920"
 
 # Secrets (set via `wrangler secret put`):
 #   FRAMER_API_KEY       — Framer "Token" credential (Site Settings > General). Sent as

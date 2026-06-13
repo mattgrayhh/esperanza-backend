@@ -61,7 +61,7 @@ export interface Env extends ConsumerEnv {
   CRON_LOOKBACK_MINUTES?: string | number;
   /**
    * Cloudflare Images delivery origin fronting the R2 bucket, e.g.
-   * "https://ehi.hazardhouse.ai". UNSET → image URLs pass through unchanged
+   * "https://img.hazardhouse.ai". UNSET → image URLs pass through unchanged
    * (compression off). See image-transform.ts.
    */
   IMAGES_TRANSFORM_BASE?: string;
