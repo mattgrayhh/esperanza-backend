@@ -310,8 +310,8 @@ const communities: EntityFieldConfig = {
     { field: 'longitude', label: 'Longitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
     { field: 'master_planned', label: 'Master Planned', widget: 'boolean', bucket: 'admin', halfWidth: true },
     { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin', halfWidth: true, visibleInForm: false }, // [P1] hidden from form — header Status control owns it
-    { field: 'description', label: 'Description', widget: 'textarea', bucket: 'admin' },
     // richtext (markdown)
+    { field: 'description', label: 'Description (md)', widget: 'richtext', bucket: 'admin' },
     { field: 'amenities', label: 'Amenities (md)', widget: 'richtext', bucket: 'admin' },
     { field: 'education_rich', label: 'Education (md)', widget: 'richtext', bucket: 'admin' },
     { field: 'design_copy_rich', label: 'Design Copy (md)', widget: 'richtext', bucket: 'admin' },

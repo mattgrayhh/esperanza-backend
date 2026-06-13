@@ -78,6 +78,9 @@ describe('Communities mapper — rich text, HOA links, coords, gates', () => {
     expect(sval(f['secondary_image'])).toContain('/2.jpg');
 
     // markdown → HTML formattedText
+    // description is rich text (ftIf): plain copy is wrapped in <p>…</p>.
+    expect(f['description']?.type).toBe('formattedText');
+    expect(String(sval(f['description']))).toContain('<p>A lakeside community.</p>');
     expect(f['amenities_rich']?.type).toBe('formattedText');
     expect(String(sval(f['amenities_rich']))).toContain('<ul>');
     expect(String(sval(f['amenities_rich']))).toContain('<li>Pool</li>');
