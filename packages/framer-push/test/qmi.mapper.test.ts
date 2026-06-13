@@ -67,6 +67,7 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
       available_now: 1,
       image_url: 'https://media.esperanzahomes.com/qmi/recQMI0001/og.jpg',
       viewer_slug: 'tres-lagos-200-override-ave',
+      nter_now: 'https://www.webflow.nternow.com/EsperanzaHomes/property/55009',
       updated_at: '2026-05-30T12:00:00.000Z',
     });
 
@@ -88,6 +89,11 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
     expect(sval(f['price'])).toBe(425000); // override
     expect(sval(f['bathroom_count'])).toBe(2.5); // synced (no override)
     expect(sval(f['city'])).toBe('Conroe');
+    // NterNow "Enter Now" self-tour link must be emitted (regression: previously
+    // absent from the QMI mapper, so populated values never reached Framer).
+    expect(sval(f['nter_now'])).toBe(
+      'https://www.webflow.nternow.com/EsperanzaHomes/property/55009',
+    );
     expect(sval(f['community'])).toBe('Tres Lagos');
     expect(sval(f['postal_code'])).toBe('77384');
     expect(f['postal_code']?.type).toBe('string'); // live Framer field "ZIP" is type string
