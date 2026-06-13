@@ -46,6 +46,12 @@ sync automatically. So:
 - Only the plans you actually changed are touched and re-pushed to the site —
   leaving the others alone keeps things fast and avoids needless churn.
 
+Behind the names, each plan also carries a hidden list of the **community IDs**
+it's offered in. You never see or edit this — the panel keeps it in sync with the
+names automatically. It exists so the website can filter floor plans by community
+reliably (matching on stable IDs instead of names, which avoids mix-ups when two
+communities have similar names or a name later changes).
+
 ## Notes
 
 - A community needs a **Name** before you can link plans (the link is by name).

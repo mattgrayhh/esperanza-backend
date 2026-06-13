@@ -407,6 +407,7 @@ export const floorPlans = sqliteTable(
 
     communities: text('communities'),
     communityCount: integer('community_count'),
+    communityIds: text('community_ids'),
     quickMoveInIds: text('quick_move_in_ids'),
     promotionIds: text('promotion_ids'),
 

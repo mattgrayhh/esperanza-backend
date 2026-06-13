@@ -461,6 +461,7 @@ const floorPlans: CollectionDef = {
       energy_cost_monthly_savings: nIf(row['energy_cost_avg']),
       communities: sIf(row['communities']),
       community_count: nIf(row['community_count']),
+      community_ids: sIf(row['community_ids']),
       photo_gallery: galIf(photo),
       elevation_renderings: sIf(row['elevation_renderings']),
       elevation_gallery: galIf(elevGallery),

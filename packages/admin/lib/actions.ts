@@ -831,25 +831,40 @@ export async function saveCommunityFloorPlans(
 
   const selected = new Set(floorPlanIds.map((s) => s.trim()).filter(Boolean));
   const plans = (await db
-    .select({ id: floorPlans.id, communities: floorPlans.communities })
-    .from(floorPlans)) as Array<{ id: string; communities: string | null }>;
+    .select({
+      id: floorPlans.id,
+      communities: floorPlans.communities,
+      communityIds: floorPlans.communityIds,
+    })
+    .from(floorPlans)) as Array<{ id: string; communities: string | null; communityIds: string | null }>;
 
   let changed = 0;
   for (const p of plans) {
-    const res = applyMembership(p.communities, communityName, selected.has(p.id));
-    if (!res.changed) continue;
+    const isMember = selected.has(p.id);
+    // Maintain BOTH denormalized CSVs in lockstep: names (for linking / display)
+    // and rec-IDs (Framer's "Contains" source of truth). applyMembership is token-
+    // agnostic; communityId comes verbatim from communities.id on add AND remove,
+    // so its case-insensitive match is always byte-identical (safe for rec-IDs).
+    const nameRes = applyMembership(p.communities, communityName, isMember);
+    const idRes = applyMembership(p.communityIds, communityId, isMember);
+    if (!nameRes.changed && !idRes.changed) continue;
     await db
       .update(floorPlans)
-      .set({ communities: res.value || null, communityCount: res.count, updatedAt: at })
+      .set({
+        communities: nameRes.value || null,
+        communityCount: nameRes.count,
+        communityIds: idRes.value || null,
+        updatedAt: at,
+      })
       .where(eq(floorPlans.id, p.id));
     await postWrite(db, 'floor_plans', p.id, [
       {
         entity: 'floor_plans',
         entityId: p.id,
         field: 'communities',
-        action: selected.has(p.id) ? 'community_added' : 'community_removed',
+        action: isMember ? 'community_added' : 'community_removed',
         oldValue: p.communities ?? null,
-        newValue: res.value || null,
+        newValue: nameRes.value || null,
         actor,
       },
     ]);

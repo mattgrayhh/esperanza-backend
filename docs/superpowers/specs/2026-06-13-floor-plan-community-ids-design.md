@@ -96,11 +96,9 @@ After merge to `master` (prod deploys on push to `master`):
 2. Run the backfill `--remote`; review the unmatched-name report.
 3. `POST /schema` with body
    `{ "collection": "floorPlans", "fields": [{ "key": "community_ids", "framer_type": "string", "label": "Community IDs" }] }`
-   (Bearer `WEBHOOK_TOKEN`). This creates the Framer field and re-pushes the
-   collection so values populate.
-4. If the `/schema` re-push does not cover all rows, `POST /backfill?keys=floorPlans`
-   (Bearer `WEBHOOK_TOKEN`) to flush. (Confirm during implementation whether step 4
-   is redundant with the `/schema` re-push.)
+   (Bearer `WEBHOOK_TOKEN`). `applySchema` creates the Framer field then re-pushes
+   the WHOLE collection via `runBackfill` (consumer.ts:604), so all rows repopulate
+   with `community_ids` in one call. **No separate `/backfill` step is needed.**
 
 ## Data flow
 

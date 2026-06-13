@@ -63,6 +63,38 @@ describe('Floor Plans mapper — floor_plan_image', () => {
   });
 });
 
+describe('Floor Plans mapper — community_ids (migration 0016)', () => {
+  it('emits community_ids as a string field from the floor_plans column', () => {
+    const db = freshDb();
+    insertRow(db, 'floor_plans', {
+      id: 'recFPci1',
+      name: 'Lorenzo',
+      slug: 'lorenzo',
+      published: 1,
+      communities: 'Aquero, Cielo Vista',
+      community_ids: 'recCOMaquero, recCOMcielo',
+    });
+    const item = mapOne(db, 'recFPci1');
+    expect(item.fieldData['community_ids']).toEqual({
+      type: 'string',
+      value: 'recCOMaquero, recCOMcielo',
+    });
+  });
+
+  it('drops community_ids when null/empty', () => {
+    const db = freshDb();
+    insertRow(db, 'floor_plans', {
+      id: 'recFPci2',
+      name: 'Marzano',
+      slug: 'marzano',
+      published: 1,
+      community_ids: null,
+    });
+    const item = mapOne(db, 'recFPci2');
+    expect(item.fieldData['community_ids']).toBeUndefined();
+  });
+});
+
 describe('Floor Plans mapper — interior_photos (migration 0011)', () => {
   const G1 = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFP4/gallery-0-kitchen.jpg';
   const G2 = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFP4/gallery-1-living.jpg';

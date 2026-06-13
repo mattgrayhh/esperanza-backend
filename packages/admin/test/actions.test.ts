@@ -371,12 +371,14 @@ describe('schema wiring sanity', () => {
 // =============================================================================
 describe('saveCommunityFloorPlans', () => {
   beforeEach(() => {
+    // community_ids mirrors communities (post-backfill state): Aquero → cAquero.
+    // fpBirch's 'Cielo Vista' has no community row, so its community_ids stays NULL.
     H.sqlite.exec(`
       INSERT INTO communities (id, name) VALUES ('cAquero', 'Aquero');
-      INSERT INTO floor_plans (id, name, communities, community_count) VALUES
-        ('fpMarz', 'Marzano', NULL, 0),
-        ('fpBirch','Birch','Cielo Vista', 1),
-        ('fpKept', 'Kept', 'Aquero', 1);
+      INSERT INTO floor_plans (id, name, communities, community_count, community_ids) VALUES
+        ('fpMarz', 'Marzano', NULL, 0, NULL),
+        ('fpBirch','Birch','Cielo Vista', 1, NULL),
+        ('fpKept', 'Kept', 'Aquero', 1, 'cAquero');
     `);
   });
 
@@ -386,13 +388,17 @@ describe('saveCommunityFloorPlans', () => {
     expect(res).toEqual({ ok: true, changed: 1 }); // only Marzano changed
 
     const fp = (id: string) =>
-      H.sqlite.prepare('SELECT communities, community_count FROM floor_plans WHERE id = ?').get(id) as {
+      H.sqlite
+        .prepare('SELECT communities, community_count, community_ids FROM floor_plans WHERE id = ?')
+        .get(id) as {
         communities: string | null;
         community_count: number;
+        community_ids: string | null;
       };
-    expect(fp('fpMarz')).toEqual({ communities: 'Aquero', community_count: 1 });
-    expect(fp('fpKept')).toEqual({ communities: 'Aquero', community_count: 1 }); // unchanged
-    expect(fp('fpBirch')).toEqual({ communities: 'Cielo Vista', community_count: 1 }); // untouched
+    // names and ids move together: Aquero ↔ cAquero
+    expect(fp('fpMarz')).toEqual({ communities: 'Aquero', community_count: 1, community_ids: 'cAquero' });
+    expect(fp('fpKept')).toEqual({ communities: 'Aquero', community_count: 1, community_ids: 'cAquero' }); // unchanged
+    expect(fp('fpBirch')).toEqual({ communities: 'Cielo Vista', community_count: 1, community_ids: null }); // untouched
 
     // one framer push for the single changed plan; audit row records the add
     expect(H.queue).toEqual([{ collection: 'floor_plans', action: 'upsert', id: 'fpMarz' }]);
@@ -402,18 +408,24 @@ describe('saveCommunityFloorPlans', () => {
 
   it('removing a plan strips the community + decrements count (multi-community preserved)', async () => {
     H.sqlite
-      .prepare(`UPDATE floor_plans SET communities='Aquero, Cielo Vista', community_count=2 WHERE id='fpMarz'`)
+      .prepare(
+        `UPDATE floor_plans SET communities='Aquero, Cielo Vista', community_count=2, community_ids='cAquero' WHERE id='fpMarz'`
+      )
       .run();
     // deselect everything → fpMarz loses Aquero (keeps Cielo Vista), fpKept loses Aquero (→ empty)
     const res = await saveCommunityFloorPlans('cAquero', []);
     expect(res).toEqual({ ok: true, changed: 2 });
     const fp = (id: string) =>
-      H.sqlite.prepare('SELECT communities, community_count FROM floor_plans WHERE id = ?').get(id) as {
+      H.sqlite
+        .prepare('SELECT communities, community_count, community_ids FROM floor_plans WHERE id = ?')
+        .get(id) as {
         communities: string | null;
         community_count: number;
+        community_ids: string | null;
       };
-    expect(fp('fpMarz')).toEqual({ communities: 'Cielo Vista', community_count: 1 });
-    expect(fp('fpKept')).toEqual({ communities: null, community_count: 0 });
+    // names keep Cielo Vista; ids drop cAquero → null (Cielo Vista has no known id)
+    expect(fp('fpMarz')).toEqual({ communities: 'Cielo Vista', community_count: 1, community_ids: null });
+    expect(fp('fpKept')).toEqual({ communities: null, community_count: 0, community_ids: null });
   });
 
   it('errors on a missing community', async () => {
