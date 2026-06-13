@@ -81,16 +81,22 @@ dead_letter_queue = "esperanza-framer-queue-dlq"
 # FRAMER_COLLECTION_CITIES      = "Cities"
 # FRAMER_COLLECTION_TESTIMONIALS = "Testimonials"
 
-# Cloudflare Images compression. Rewrites *.r2.dev image URLs to a /cdn-cgi/image/
-# transform (format=auto,quality=80,width=1920) served from the delivery domain
-# below, so Framer ingests a compressed source instead of the full-res original.
-# UNSET = passthrough (no compression). ACTIVATION ORDER: (1) confirm the delivery
-# host serves the bucket + Transformations are enabled on its zone, (2) set the
-# base, (3) deploy, (4) run a backfill so Framer re-ingests the compressed URLs.
-# img.hazardhouse.ai is a public R2 custom domain on esperanza-cms (the brochures
-# host ehi.hazardhouse.ai fronts a different bucket — do not reuse it).
-IMAGES_TRANSFORM_BASE = "https://img.hazardhouse.ai"
-IMAGES_TRANSFORM_OPTS = "format=auto,quality=80,width=1920"
+# Cloudflare Images compression (img.hazardhouse.ai is a ready public R2 custom
+# domain on esperanza-cms; ehi.hazardhouse.ai fronts the brochures bucket — don't
+# reuse it). Rewrites *.r2.dev image URLs to a /cdn-cgi/image/ transform.
+#
+# CURRENTLY DISABLED (passthrough) — DO NOT re-enable on the Framer path as-is:
+# Framer's asset fetcher sends a generic Accept header, so format=auto returns a
+# re-encoded JPEG (~7% smaller, NOT AVIF — AVIF only for browsers that ask for it)
+# and Framer re-hosts/re-optimizes anyway, so the net page-weight win is ~nil.
+# Worse, the re-encoded JPEG/AVIF tripped Framer's strict decoder on some sources
+# (luma/chroma subsampling; AVIF 415), breaking floor_plans/cities/blogs ingest.
+# Better approach for real savings: compress at UPLOAD time (sharp in the admin)
+# so the R2 ORIGINAL is already optimized — benefits Framer, admin, and any direct
+# consumer without per-fetch transforms or Accept-negotiation surprises.
+# To re-enable the transform anyway, set IMAGES_TRANSFORM_BASE + deploy + backfill.
+# IMAGES_TRANSFORM_BASE = "https://img.hazardhouse.ai"
+# IMAGES_TRANSFORM_OPTS = "format=auto,quality=80,width=1920"
 
 # Secrets (set via `wrangler secret put`):
 #   FRAMER_API_KEY       — Framer "Token" credential (Site Settings > General). Sent as
