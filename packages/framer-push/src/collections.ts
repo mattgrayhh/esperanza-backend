@@ -681,7 +681,7 @@ const communities: CollectionDef = {
       bed_range: sIf(row['bed_count']),
       bath_range: sIf(row['bath_count']),
       sqft_range: sIf(row['square_footage_range']),
-      description: sIf(row['description']),
+      description: ftIf(row['description']),
       amenities_rich: ftIf(row['amenities']),
       image_url: imgIf(row['featured_image_url']),
       featured_image_alt: sIf(row['featured_image_alt']),

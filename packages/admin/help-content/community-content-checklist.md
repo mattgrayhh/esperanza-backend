@@ -12,7 +12,11 @@ entity: communities
 A complete community page has:
 
 ## Essentials
-- `Description` — the main marketing copy.
+- `Description` — the main marketing copy. This is a **rich-text (markdown)**
+  field: use the editor's bold / italic / link controls or markdown (`**bold**`,
+  `*italic*`, `- ` lists, blank line for a new paragraph) and your formatting
+  carries through to the live site. Plain text still works — existing copy keeps
+  its line breaks.
 - `Featured Image`, `Secondary Image`, photo gallery, and the community logo.
 - Map coordinates (drives the map pin and *Get Directions*).
 

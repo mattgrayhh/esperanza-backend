@@ -181,7 +181,10 @@ const MAPPER_FRAMER_TYPE: Record<string, string> = {
   'qmi.upgrades': 'string',
   'qmi.incentive': 'string',
   'qmi.move_in_date': 'string',
-  'communities.description': 'string',
+  // communities.description: rich text — widget 'richtext' (→ 'rich' → framerType
+  // 'formattedText'); mapper emits ftIf (markdown→HTML). No pin needed, matching
+  // amenities_rich / education_rich. (Was pinned 'string' when the field was a
+  // plain textarea.)
   'communities.directions': 'string',
   'communities.community_map_embed': 'string',
   'communities.security_details': 'string',
