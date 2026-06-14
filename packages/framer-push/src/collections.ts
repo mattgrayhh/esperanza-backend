@@ -952,12 +952,39 @@ const CITY_COPY_STR_KEYS = new Set<string>([
   // from dedicated row columns below; they're intentionally excluded here.
 ]);
 
+// Live, city-scoped counts for the three stat fields on the Framer city page.
+// The stored cities.{community_count,move_in_homes_count,floor_plans_count}
+// columns are frozen legacy-Airtable snapshots that nothing recomputes, so they
+// drift the moment inventory changes (e.g. McAllen showed 99 move-ins / 67 plans
+// when reality was ~46 / 39). We derive them from live published data instead and
+// emit under *_live aliases that map() prefers, leaving the stored columns intact.
+//   • communities: published communities whose city_id = this city
+//   • move-in homes: published QMIs whose effective city = this city
+//       (override_city_id wins over synced_city_id, mirroring the QMI mapper)
+//   • floor plans: published plans linked (community_ids CSV) to a PUBLISHED
+//       community in this city — "plans available in this city". Plans with no
+//       community linkage are intentionally excluded (not available anywhere).
+const CITY_COUNTS_SQL = `
+  (SELECT COUNT(*) FROM communities cm
+     WHERE cm.city_id = c.id AND cm.published = 1) AS community_count_live,
+  (SELECT COUNT(*) FROM qmi q
+     WHERE COALESCE(q.override_city_id, q.synced_city_id) = c.id
+       AND q.published = 1) AS move_in_homes_count_live,
+  (SELECT COUNT(DISTINCT fp.id) FROM floor_plans fp
+     WHERE fp.published = 1
+       AND EXISTS (
+         SELECT 1 FROM communities cm2
+          WHERE cm2.city_id = c.id AND cm2.published = 1
+            AND ',' || REPLACE(IFNULL(fp.community_ids, ''), ' ', '') || ','
+                LIKE '%,' || cm2.id || ',%'
+       )) AS floor_plans_count_live`;
+
 const cities: CollectionDef = {
   key: 'cities',
   defaultCollectionName: 'Cities',
   collectionEnvVar: 'FRAMER_COLLECTION_CITIES',
-  selectByIdSql: `SELECT * FROM cities WHERE id = ?`,
-  selectAllSql: `SELECT * FROM cities`,
+  selectByIdSql: `SELECT c.*, ${CITY_COUNTS_SQL} FROM cities c WHERE c.id = ?`,
+  selectAllSql: `SELECT c.*, ${CITY_COUNTS_SQL} FROM cities c`,
   map(row) {
     const id = String(row['id']);
     const slug =
@@ -994,9 +1021,11 @@ const cities: CollectionDef = {
       hero_image: imgIf(row['hero_image_url']),
       hero_description: sIf(row['hero_description']),
       national_recognition: sIf(row['national_recognition']),
-      community_count: nIf(row['community_count']),
-      floor_plans_count: nIf(row['floor_plans_count']),
-      move_in_homes_count: nIf(row['move_in_homes_count']),
+      // Prefer the live computed counts (CITY_COUNTS_SQL); fall back to the
+      // stored snapshot columns only if a caller selects rows without them.
+      community_count: nIf(row['community_count_live'] ?? row['community_count']),
+      floor_plans_count: nIf(row['floor_plans_count_live'] ?? row['floor_plans_count']),
+      move_in_homes_count: nIf(row['move_in_homes_count_live'] ?? row['move_in_homes_count']),
       incentive: sIf(row['incentive']),
       coming_soon: bool(asBool(row['coming_soon'])), // live Cities (Managed) has the field (added 2026-06)
       ...copyFields,
