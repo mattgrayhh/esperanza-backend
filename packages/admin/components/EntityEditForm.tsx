@@ -61,6 +61,7 @@ export type FieldView =
         | 'currency'
         | 'boolean'
         | 'richtext'
+        | 'wysiwyg'
         | 'date'
         | 'select'
         | 'synced';
@@ -321,6 +322,8 @@ export function EntityEditForm({
                           optionItems={f.optionItems}
                           readOnly={f.readOnly}
                           help={f.help}
+                          entity={segment}
+                          id={id}
                         />
                       </div>
                     );

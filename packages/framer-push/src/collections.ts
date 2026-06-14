@@ -256,6 +256,18 @@ const ftIf = (v: unknown) => {
   const html = markdownToHtml(asString(v));
   return html === '' ? undefined : formattedText(html);
 };
+// htmlFt — for fields whose D1 value is already sanitized HTML (Framer-subset:
+// h2-h6/p/strong/em/a/ul/ol/li/blockquote/br/img), e.g. blogs.content after the
+// legacy re-scrape and the admin TipTap WYSIWYG. Passes HTML through verbatim so
+// inline images/links/headings survive. Falls back to markdownToHtml for any
+// legacy plain-text/markdown value (no tags yet) so paragraphs still render. The
+// field_definitions pin (formattedText) makes applyTypeOverrides a no-op here.
+const htmlFt = (v: unknown) => {
+  const raw = asString(v) ?? '';
+  if (raw.trim() === '') return undefined;
+  const html = /<[a-z][\s\S]*>/i.test(raw) ? raw : markdownToHtml(raw);
+  return html === '' ? undefined : formattedText(html);
+};
 const galIf = (urls: string[]) => (urls.length ? galleryArray(urls) : undefined);
 // Lot number stripped to its numeric part for display: drops the community
 // letter-prefix and any leading zeros ("RC169" → "169", "RC069" → "69"), falling
@@ -818,7 +830,10 @@ const blogs: CollectionDef = {
       slug: str(slug),
       category: sIf(row['category']),
       excerpt: sIf(row['excerpt']),
-      content: sIf(row['content']),
+      // Rich text: D1 stores Framer-subset HTML (re-scraped legacy + TipTap WYSIWYG).
+      // formattedText so headings/links/inline images render. field_definitions pins
+      // blogs.content → formattedText (was string).
+      content: htmlFt(row['content']),
       publish_date: sIf(row['publish_date']),
       featured_image: imgIf(row['featured_image']),
       // 0012: Vimeo URL string, same convention as communities.featured_video.

@@ -17,8 +17,18 @@ entity: blogs
      shared links.
    - `Category` — used for filtering on the blog index.
    - `Excerpt` — 1–2 sentences shown on blog cards.
-3. Write the `Content`. Use headings to break up sections; images can be
-   placed inline from the library.
+3. Write the `Content` in the rich-text editor. The toolbar gives you:
+   - Headings (H2 / H3) to break up sections.
+   - Bold and italic.
+   - Bulleted and numbered lists.
+   - Blockquotes for pull-quotes.
+   - Links — select text, click the link button, and paste a URL.
+   - Inline images — click the image button, pick a file, and it uploads to
+     the media library and drops in at your cursor. (You never paste an image
+     URL; the upload is handled for you.)
+
+   What you see is what you get — formatting is saved as-is and matches how the
+   post renders on the live site. You no longer write markdown here.
 4. Upload the `Featured Image` (wide/landscape — it's the card and hero).
    If the post has a video, paste its Vimeo URL into `Video URL` — same
    convention as a community's Featured Video.

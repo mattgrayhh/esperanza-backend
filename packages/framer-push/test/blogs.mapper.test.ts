@@ -34,6 +34,51 @@ describe('Blogs mapper — video_url (migration 0012)', () => {
     });
   });
 
+  it('emits content as formattedText, passing sanitized HTML through verbatim', () => {
+    const db = freshDb();
+    const html =
+      '<h2>A new chapter</h2><p>Visit <a href="https://example.com">Example</a>.</p>' +
+      '<p><img src="https://pub.r2.dev/blogs/recBLOG003/photo.jpg"></p>';
+    insertRow(db, 'blogs', {
+      id: 'recBLOG003',
+      title: 'Rich post',
+      slug: 'rich-post',
+      published: 1,
+      content: html,
+    });
+    const item = mapOne(db, 'recBLOG003');
+    expect(item.fieldData['content']).toEqual({ type: 'formattedText', value: html });
+  });
+
+  it('wraps legacy plain-text content (no tags) into HTML paragraphs', () => {
+    const db = freshDb();
+    insertRow(db, 'blogs', {
+      id: 'recBLOG004',
+      title: 'Plain post',
+      slug: 'plain-post',
+      published: 1,
+      content: 'First line.\nSecond line.',
+    });
+    const item = mapOne(db, 'recBLOG004');
+    const cv = item.fieldData['content'] as { type: string; value: string };
+    expect(cv.type).toBe('formattedText');
+    expect(cv.value).toContain('<p>');
+    expect(cv.value).toContain('First line.');
+  });
+
+  it('drops content when empty (no key emitted)', () => {
+    const db = freshDb();
+    insertRow(db, 'blogs', {
+      id: 'recBLOG005',
+      title: 'Empty content',
+      slug: 'empty-content',
+      published: 1,
+      content: '',
+    });
+    const item = mapOne(db, 'recBLOG005');
+    expect('content' in item.fieldData).toBe(false);
+  });
+
   it('emits an explicit empty string for video_url when null (clear propagates to Framer)', () => {
     // String fields mirror D1 exactly: a null/cleared column emits str('') (not dropped)
     // so the clear reaches Framer. addItems merges, so a dropped field would keep the

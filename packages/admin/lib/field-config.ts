@@ -606,7 +606,11 @@ const blogs: EntityFieldConfig = {
     { field: 'slug', label: 'Slug', widget: 'text', bucket: 'admin' },
     { field: 'category', label: 'Category', widget: 'text', bucket: 'admin', halfWidth: true },
     { field: 'excerpt', label: 'Excerpt', widget: 'textarea', bucket: 'admin' },
-    { field: 'content', label: 'Content (md)', widget: 'richtext', bucket: 'admin' },
+    // NOTE: configured `richtext` to keep the shared `Widget` union (consumed by
+    // packages/db's exhaustive seed switch) unchanged. The BLOG content field is upgraded
+    // to a true WYSIWYG editor by a TARGETED entity+field rule in build-edit-view
+    // (BLOG_WYSIWYG_FIELDS), which emits the FieldView widget 'wysiwyg' → BlogContentEditor.
+    { field: 'content', label: 'Content', widget: 'richtext', bucket: 'admin', help: 'Rich-text editor. Headings, bold/italic, links, lists, quotes, and inline images (uploaded to the media library). Stored as Framer-safe HTML.' },
     { field: 'publish_date', label: 'Publish Date', widget: 'date', bucket: 'admin', halfWidth: true },
     { field: 'featured_image', label: 'Featured Image', widget: 'image', bucket: 'admin' },
     { field: 'video_url', label: 'Video URL', widget: 'text', bucket: 'admin', help: 'Vimeo URL for this post (same convention as a community’s Featured Video).' },

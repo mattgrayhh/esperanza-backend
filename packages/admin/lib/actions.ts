@@ -215,6 +215,24 @@ export async function createEntity(
   return { ok: true, id };
 }
 
+// Belt-and-suspenders sanitize for blog rich-text HTML. The BlogContentEditor (TipTap
+// StarterKit + Link + Image) already restricts output to the Framer-safe node/mark set,
+// so this is a SECOND line of defense against anything that slips in (e.g. a future
+// paste-handler regression). Minimal + dependency-free (the Worker has no DOM): drop
+// <script>/<style>/<iframe> blocks entirely and strip inline on*= event handlers. Not a
+// full HTML parser — intentionally narrow, mirroring the editor's known-good output.
+function sanitizeBlogHtml(html: string): string {
+  return html
+    // Remove <script>/<style>/<iframe> elements and their contents.
+    .replace(/<(script|style|iframe)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+    // Drop any orphan/self-closing forms of those tags too.
+    .replace(/<\/?(script|style|iframe)\b[^>]*>/gi, '')
+    // Strip inline event-handler attributes (onclick=, onerror=, …), quoted or bare.
+    .replace(/\s+on[a-z]+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\s+on[a-z]+\s*=\s*'[^']*'/gi, '')
+    .replace(/\s+on[a-z]+\s*=\s*[^\s>]+/gi, '');
+}
+
 export async function saveEntity(
   entity: string,
   id: string,
@@ -332,7 +350,12 @@ export async function saveEntity(
     if (typeof rawValue === 'string' && rawValue.includes('airtableusercontent.com')) {
       return { ok: false, error: `Refusing to store an Airtable attachment URL in ${field}` };
     }
-    const coerced = rawValue === '' ? null : coerceForColumn(def.key, field, rawValue);
+    // Belt-and-suspenders: scrub blog rich-text HTML before it's written (the WYSIWYG
+    // editor already constrains output to the Framer-safe tag subset; this strips any
+    // <script>/<style>/<iframe>/on*= that could slip through).
+    const cleanValue =
+      def.key === 'blogs' && field === 'content' ? sanitizeBlogHtml(rawValue) : rawValue;
+    const coerced = cleanValue === '' ? null : coerceForColumn(def.key, field, cleanValue);
     const oldValue = row[col.column];
     // Skip no-op writes so we don't spam audit_log.
     if (toStr(oldValue) === toStr(coerced)) continue;
