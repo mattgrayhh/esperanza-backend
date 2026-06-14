@@ -175,6 +175,16 @@ const MAPPER_FRAMER_TYPE: Record<string, string> = {
   'qmi.dynamic_pdf': 'link',
   'floor_plans.brochure_pdf_url': 'link',
   'communities.brochure_pdf_url': 'link',
+  // communities.{featured_video,schedule_visit,lending}: the mapper emits these as
+  // strings (sIf) but the live Framer fields are LINK. They previously dropped when
+  // empty (sIf → undefined) so the mismatch was invisible; once sIf began emitting
+  // str('') for cleared fields, an empty string hit a Link field and aborted the
+  // whole communities batch (vista-verde). Pinning 'link' makes applyTypeOverrides
+  // coerce the URL → link and DROP empties. Hand-fixed on remote 2026-06-14; pinned
+  // here so a reseed can't regress it (the "durability" follow-up to PR #30).
+  'communities.featured_video': 'link',
+  'communities.schedule_visit': 'link',
+  'communities.lending': 'link',
   'floor_plans.description': 'string',
   'qmi.postal_code': 'string',
   'qmi.description': 'string',
@@ -187,7 +197,10 @@ const MAPPER_FRAMER_TYPE: Record<string, string> = {
   // plain textarea.)
   'communities.directions': 'string',
   'communities.community_map_embed': 'string',
-  'communities.security_details': 'string',
+  // Live Framer field is formattedText (reconciled in PR #30). Mapper emits sIf
+  // (string); pin coerces string → formattedText (empties drop). Was 'string', which
+  // a reseed re-applied and re-broke the communities push on 2026-06-14.
+  'communities.security_details': 'formattedText',
   'collections.content': 'string',
   'collections.incentive': 'string',
   'images.caption': 'string',
