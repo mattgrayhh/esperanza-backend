@@ -983,8 +983,19 @@ const cities: CollectionDef = {
   key: 'cities',
   defaultCollectionName: 'Cities',
   collectionEnvVar: 'FRAMER_COLLECTION_CITIES',
-  selectByIdSql: `SELECT c.*, ${CITY_COUNTS_SQL} FROM cities c WHERE c.id = ?`,
-  selectAllSql: `SELECT c.*, ${CITY_COUNTS_SQL} FROM cities c`,
+  // community_ids: CSV of the community rec-IDs linked to this city (communities.city_id
+  // = cities.id), aggregated at query time (same correlated-subquery shape as the
+  // promotions target lists / CITY_COUNTS_SQL above). Emitted as a plain string so a
+  // City page can filter communities by `community_ids Contains {cityId}` — IDs as the
+  // stable key (no name-drift). All linked communities are listed; the Communities
+  // collection's own publish gate (draft:!published) still controls render visibility.
+  // NB: communities aliased `cm` here (the city is `c`, matching CITY_COUNTS_SQL).
+  selectByIdSql: `SELECT c.*, ${CITY_COUNTS_SQL},
+    (SELECT group_concat(cm.id) FROM communities cm WHERE cm.city_id = c.id) AS community_ids
+    FROM cities c WHERE c.id = ?`,
+  selectAllSql: `SELECT c.*, ${CITY_COUNTS_SQL},
+    (SELECT group_concat(cm.id) FROM communities cm WHERE cm.city_id = c.id) AS community_ids
+    FROM cities c`,
   map(row) {
     const id = String(row['id']);
     const slug =
@@ -1028,6 +1039,10 @@ const cities: CollectionDef = {
       move_in_homes_count: nIf(row['move_in_homes_count_live'] ?? row['move_in_homes_count']),
       incentive: sIf(row['incentive']),
       coming_soon: bool(asBool(row['coming_soon'])), // live Cities (Managed) has the field (added 2026-06)
+      // CSV of community rec-IDs in this city (group_concat in the SQL above) — same
+      // string/passthrough posture as floor_plans/qmi community_ids (no field_definitions
+      // row). Lets a City page filter communities by `community_ids Contains {cityId}`.
+      community_ids: sIf(row['community_ids']),
       ...copyFields,
       ...venueFields,
     });
@@ -1070,6 +1085,10 @@ const testimonials: CollectionDef = {
           : str(toUnderscore(kebab(String(row['community_name'])))),
       town: sIf(row['town']),
       status: sIf(row['status']),
+      // A testimonial belongs to ONE community (testimonials.community_id) → single
+      // rec-ID under the SAME `community_ids` key/string shape as floor_plans/qmi, so a
+      // community CMS page can filter testimonials with `community_ids Contains {communityId}`.
+      community_ids: sIf(row['community_id']),
     });
     return { id, slug, draft, fieldData };
   },
