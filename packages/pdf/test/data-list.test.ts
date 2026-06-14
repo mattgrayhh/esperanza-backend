@@ -24,6 +24,31 @@ describe('loadListData', () => {
   it('returns null for an unknown city', async () => {
     expect(await loadListData(db(), 'nope', 'locations')).toBeNull();
   });
+  it('master locations (city="all") = every published community across cities', async () => {
+    const raw = new Database(':memory:');
+    readdirSync(join(DB, 'migrations')).filter(f => f.endsWith('.sql')).sort().forEach(f => raw.exec(readFileSync(join(DB, 'migrations', f), 'utf8')));
+    raw.exec(readFileSync(join(DB, 'views.sql'), 'utf8'));
+    raw.exec(`INSERT INTO cities (id,slug,city_name) VALUES ('ci1','mcallen','McAllen'),('ci2','laredo','Laredo')`);
+    raw.exec(`INSERT INTO communities (id,name,slug,city_id,published) VALUES ('c1','Anaqua','anaqua','ci1',1),('c2','Wolf Creek','wolf-creek','ci2',1),('c3','Hidden','hidden','ci1',0)`);
+    const data = await loadListData(d1FromSqlite(raw), 'all', 'locations');
+    expect(data?.isMaster).toBe(true);
+    const names = data?.cards.map((c) => c.name) ?? [];
+    expect(names).toContain('Anaqua');
+    expect(names).toContain('Wolf Creek');
+    expect(names).not.toContain('Hidden'); // unpublished excluded
+  });
+  it('master plans (city="all") = every published floor plan (not gated on a QMI)', async () => {
+    const raw = new Database(':memory:');
+    readdirSync(join(DB, 'migrations')).filter(f => f.endsWith('.sql')).sort().forEach(f => raw.exec(readFileSync(join(DB, 'migrations', f), 'utf8')));
+    raw.exec(readFileSync(join(DB, 'views.sql'), 'utf8'));
+    raw.exec(`INSERT INTO floor_plans (id,name,slug,published) VALUES ('fp1','Hickory','hickory',1),('fp2','Oak','oak',1),('fp3','Draft','draft',0)`);
+    const data = await loadListData(d1FromSqlite(raw), 'all', 'plans');
+    expect(data?.isMaster).toBe(true);
+    const names = data?.cards.map((c) => c.name) ?? [];
+    expect(names).toContain('Hickory');
+    expect(names).toContain('Oak');
+    expect(names).not.toContain('Draft');
+  });
   it('qmis list resolves from v_public_qmi (no raw address column)', async () => {
     const raw = new Database(':memory:');
     readdirSync(join(DB, 'migrations')).filter(f => f.endsWith('.sql')).sort().forEach(f => raw.exec(readFileSync(join(DB, 'migrations', f), 'utf8')));

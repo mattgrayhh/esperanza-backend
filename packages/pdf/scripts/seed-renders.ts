@@ -264,12 +264,18 @@ async function seedLists(
     }
   }
 
-  // Master "Quick Move-In Homes" doc — all QMIs across cities, grouped by community.
-  // entity_id 'list:all:qmis' → loadListData(citySlug='all') loads every QMI.
-  {
+  // All-cities master docs — entity_id 'list:all:<kind>' → loadListData(citySlug='all').
+  //   quick-move-in-homes : every QMI, grouped by community
+  //   all-locations       : every published community
+  //   all-plans           : every published floor plan
+  const MASTER_LISTS: Array<{ slug: string; kind: (typeof LIST_KINDS)[number] }> = [
+    { slug: 'quick-move-in-homes', kind: 'qmis' },
+    { slug: 'all-locations', kind: 'locations' },
+    { slug: 'all-plans', kind: 'plans' },
+  ];
+  for (const { slug, kind } of MASTER_LISTS) {
     const type: PdfType = 'list';
-    const slug = 'quick-move-in-homes';
-    const entityId = 'list:all:qmis';
+    const entityId = `list:all:${kind}`;
     const r2Key = r2KeyFor(type, entityId);
     sink.add(
       `INSERT OR IGNORE INTO pdf_renders (type, slug, entity_id, city_slug, community_id, r2_key, status)` +

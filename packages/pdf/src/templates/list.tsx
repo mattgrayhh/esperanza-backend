@@ -50,7 +50,7 @@ export function ListBrochure({ theme, data }: { theme: Theme; data: ListData }) 
     <div>
       {pages.map((cards, pi) => (
         <div key={pi} className={pi < pages.length - 1 ? 'page-break' : undefined}>
-          <CoverBand theme={theme} title={data.cityName} subtitle={TITLES[data.kind]} />
+          <CoverBand theme={theme} title={data.cityName || 'Esperanza Homes'} subtitle={TITLES[data.kind]} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginTop: 14 }}>
             {cards.map((c) => <FloorPlanCard key={c.id} plan={c} />)}
           </div>
