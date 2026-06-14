@@ -1,15 +1,18 @@
 // =============================================================================
-// Cities mapper test. The three stat fields on the Framer city page
-// (community_count / move_in_homes_count / floor_plans_count) are derived LIVE
-// from published inventory via CITY_COUNTS_SQL (selectByIdSql/selectAllSql), NOT
-// from the frozen legacy-Airtable snapshot columns of the same name. These tests
-// pin the city-scoped definitions and prove the live counts override any stale
-// stored values.
-//   • communities: published communities whose city_id = this city
-//   • move-in homes: published QMIs whose effective city = this city
-//       (override_city_id wins over synced_city_id)
-//   • floor plans: published plans whose community_ids CSV references a PUBLISHED
-//       community in this city; unlinked plans / other-city plans are excluded
+// Cities mapper test. Two concerns:
+//  1. The three stat fields on the Framer city page (community_count /
+//     move_in_homes_count / floor_plans_count) are derived LIVE from published
+//     inventory via CITY_COUNTS_SQL (selectByIdSql/selectAllSql), NOT from the
+//     frozen legacy-Airtable snapshot columns of the same name.
+//       • communities: published communities whose city_id = this city
+//       • move-in homes: published QMIs whose effective city = this city
+//           (override_city_id wins over synced_city_id)
+//       • floor plans: published plans whose community_ids CSV references a
+//           PUBLISHED community in this city; unlinked / other-city plans excluded
+//  2. community_ids: the City carries a CSV of the community rec-IDs linked to it
+//     (communities.city_id = cities.id), aggregated via a group_concat subquery and
+//     emitted as a plain string so a City page can filter communities by
+//     `community_ids Contains {cityId}` — IDs as the stable source of truth.
 // =============================================================================
 
 import { describe, it, expect } from 'vitest';
@@ -118,5 +121,30 @@ describe('Cities mapper — live city-scoped counts override stored snapshots', 
     expect(sval(f['community_count'])).toBe(0);
     expect(sval(f['move_in_homes_count'])).toBe(0);
     expect(sval(f['floor_plans_count'])).toBe(0);
+  });
+});
+
+describe('Cities mapper — community_ids (group_concat of linked communities)', () => {
+  it('emits community_ids as a CSV string of the communities whose city_id = this city', () => {
+    const db = freshDb();
+    insertRow(db, 'cities', { id: 'recCITYmckinney1', city_name: 'McKinney', published: 1 });
+    insertRow(db, 'communities', { id: 'recCOMaquero01', name: 'Aquero', city_id: 'recCITYmckinney1' });
+    insertRow(db, 'communities', { id: 'recCOMcielo002', name: 'Cielo Vista', city_id: 'recCITYmckinney1' });
+    // a community in a DIFFERENT city must not appear
+    insertRow(db, 'cities', { id: 'recCITYfrisco002', city_name: 'Frisco', published: 1 });
+    insertRow(db, 'communities', { id: 'recCOMother0003', name: 'Elsewhere', city_id: 'recCITYfrisco002' });
+
+    const cids = mapOne(db, 'recCITYmckinney1').fieldData['community_ids'];
+    expect(cids?.type).toBe('string');
+    // group_concat order follows row order; assert membership not exact ordering
+    const ids = String(sval(cids)).split(',');
+    expect(ids.sort()).toEqual(['recCOMaquero01', 'recCOMcielo002']);
+  });
+
+  it('drops community_ids when the city has no linked communities', () => {
+    const db = freshDb();
+    insertRow(db, 'cities', { id: 'recCITYempty0001', city_name: 'Lonesome', published: 1 });
+    const item = mapOne(db, 'recCITYempty0001');
+    expect(item.fieldData['community_ids']).toBeUndefined();
   });
 });
