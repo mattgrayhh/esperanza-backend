@@ -393,6 +393,8 @@ const cities: EntityFieldConfig = {
     { field: 'hero_description', label: 'Hero Description', widget: 'textarea', bucket: 'admin' },
     { field: 'national_recognition', label: 'National Recognition', widget: 'text', bucket: 'admin' },
     { field: 'incentive', label: 'Incentive', widget: 'textarea', bucket: 'admin' },
+    // "Where We Build" image — bottom-of-page image (0017), Framer key `where_we_build_image`.
+    { field: 'where_we_build_image_url', label: 'Where We Build Image', widget: 'image', bucket: 'admin' },
     // custom widget (handled out-of-band via saveCityBlocks); both JSON blobs are one widget instance each.
     { field: 'city_copy_blocks_json', label: 'Copy Blocks', widget: 'jsonBlocks', bucket: 'admin' },
     { field: 'city_venue_blocks_json', label: 'Venue Blocks', widget: 'jsonBlocks', bucket: 'admin' },

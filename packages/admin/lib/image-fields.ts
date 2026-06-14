@@ -32,6 +32,7 @@ const KNOWN_IMAGE_COLUMNS: ReadonlySet<string> = new Set([
   'community_logo_url',
   // cities
   'hero_image_url',
+  'where_we_build_image_url',
   // floor_plans
   'hero_image_2',
   'hero_image_3',

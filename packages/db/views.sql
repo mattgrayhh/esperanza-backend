@@ -153,6 +153,7 @@ SELECT
   ci.published, ci.coming_soon,
   ci.map_latitude, ci.map_longitude,
   ci.hero_image_url, ci.hero_description, ci.national_recognition, ci.incentive,
+  ci.where_we_build_image_url,
   ci.city_copy_blocks_json, ci.city_venue_blocks_json
 FROM cities ci
 WHERE ci.published = 1;   -- live publish gate (added in 0005)
