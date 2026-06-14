@@ -25,6 +25,7 @@ export type FieldType =
   | 'image'
   | 'link'
   | 'formattedText'
+  | 'date'
   | 'array';
 
 /** One scalar field value: { type, value }. */
@@ -78,6 +79,18 @@ export const formattedText = (value: string): FieldValue => ({
   type: 'formattedText',
   value,
 });
+// Framer's date field expects an ISO-8601 datetime string. D1 stores plain dates
+// ("YYYY-MM-DD", e.g. blogs.publish_date) — normalise to midnight UTC here (the
+// single choke point) so Framer parses them. Already-ISO values pass through; an
+// unparseable value is carried verbatim (Framer drops it rather than us guessing).
+export const toIsoDate = (value: string): string => {
+  const v = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return `${v}T00:00:00.000Z`;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(v)) return v;
+  const parsed = new Date(v);
+  return Number.isNaN(parsed.getTime()) ? v : parsed.toISOString();
+};
+export const date = (value: string): FieldValue => ({ type: 'date', value: toIsoDate(value) });
 
 /** Build an array field from a list of image urls (1 nested image per entry). */
 export const galleryArray = (urls: string[]): ArrayFieldValue => ({

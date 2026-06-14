@@ -31,6 +31,7 @@ import {
   image,
   link,
   formattedText,
+  date,
 } from './framer-types.js';
 import type { CollectionKey, D1Like } from './types.js';
 
@@ -56,6 +57,7 @@ const SCALAR_TYPES = new Set<FieldType>([
   'image',
   'link',
   'formattedText',
+  'date',
 ]);
 
 /** Unwrap a stored field value: a FieldValue/{value} → its inner value, else raw. */
@@ -115,10 +117,14 @@ export function coerceToFramerType(value: unknown, type: string): AnyFieldValue 
   const inner = unwrap(value);
 
   switch (type) {
+    case 'date': {
+      // Real Framer date field — normalise to ISO via date(). Empty → drop.
+      const s = nonEmptyStr(inner);
+      return s === undefined ? undefined : date(s);
+    }
     case 'string':
-    case 'date': // admin date carrier → string (mappers push these as sIf/string)
     case 'enum': {
-      // enum/date have no dedicated value constructor; carry as string.
+      // enum has no dedicated value constructor; carry as string.
       const s = nonEmptyStr(inner);
       return s === undefined ? undefined : str(s);
     }
