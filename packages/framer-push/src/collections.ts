@@ -215,11 +215,11 @@ export function joinUrls(urls: string[]): string | undefined {
 }
 
 /**
- * compactFields: drop entries whose value is undefined / empty-string / NaN-number.
- * Mirrors the esperanza-sync contract — undefined numbers must be DROPPED, never
- * sent as 0. Note: explicit `false` booleans and the number 0 ARE kept when the
- * mapper deliberately emits them (e.g. published=false); only `undefined` builders
- * are dropped because the builders below return `undefined` (not a 0-value) for absent.
+ * compactFields: drop only entries whose value is `undefined`. The conditional builders
+ * (nIf/imgIf/linkIf/ftIf/galIf) return `undefined` for absent values so they're dropped
+ * here — undefined numbers must NEVER be sent as 0, and empty links/images would throw.
+ * Note: explicit `false` booleans, the number 0, and explicit empty strings (str(''),
+ * emitted by sIf to propagate a cleared field) ARE kept — only `undefined` is dropped.
  */
 export function compactFields(entries: Record<string, AnyFieldValue | undefined>): FieldData {
   const out: FieldData = {};
@@ -231,10 +231,15 @@ export function compactFields(entries: Record<string, AnyFieldValue | undefined>
 }
 
 // -- conditional builders: return undefined (→ dropped) when the source is absent --
-const sIf = (v: unknown) => {
-  const s = asString(v);
-  return s === undefined ? undefined : str(s);
-};
+// EXCEPT sIf: string fields mirror D1 exactly, including the empty case. An empty/null
+// column emits str('') (NOT undefined) so a cleared value actually reaches Framer.
+// addItems MERGES — a field dropped from the payload keeps its previous value on the
+// live site, so dropping an emptied string field made it "repopulate" with the stale
+// value (a space was the only workaround). Emitting str('') propagates the clear and
+// lets "hide field when empty" fire. Safe: str('') passes applyTypeOverrides untouched
+// for string-typed fields; sIf fields pinned to link/image (e.g. *_pdf_url) are coerced
+// there and an empty URL is dropped, so this never sends an invalid empty link/image.
+const sIf = (v: unknown) => str(asString(v) ?? '');
 const nIf = (v: unknown) => {
   const n = numField(v);
   return n === undefined ? undefined : num(n);
@@ -256,10 +261,10 @@ const galIf = (urls: string[]) => (urls.length ? galleryArray(urls) : undefined)
 // letter-prefix and any leading zeros ("RC169" → "169", "RC069" → "69"), falling
 // back to the raw value when it has no digits ("MODEL" → "MODEL"). Same rule the
 // PDF renderer applies (packages/pdf/src/data/qmi.ts lotDisplay). Absent/empty →
-// undefined (field dropped), matching sIf.
+// str('') (matching sIf), so a cleared lot number propagates to Framer.
 const lotShortIf = (v: unknown) => {
   const s = asString(v);
-  if (s === undefined) return undefined;
+  if (s === undefined) return str(''); // mirror sIf: a cleared lot_number clears the short form too
   const digits = s.replace(/\D/g, '').replace(/^0+/, '');
   return str(digits || s);
 };
@@ -278,7 +283,7 @@ const availabilityBadgeValue = (availabilityText: unknown, moveInDate: unknown) 
   const at = asString(availabilityText);
   if (at !== undefined) {
     const stripped = at.replace(/^available\s*/i, '').trim();
-    return stripped === '' ? undefined : str(stripped);
+    return str(stripped); // mirror sIf: empty → str('') so a cleared badge propagates
   }
   return sIf(moveInDate);
 };

@@ -126,7 +126,7 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
       ['RC069', 'RC069', '69'], // drop leading zeros too
       ['169', '169', '169'], // already numeric → unchanged
       ['MODEL', 'MODEL', 'MODEL'], // no digits → fall back to raw
-      [null, undefined, undefined], // absent → both dropped
+      [null, '', ''], // absent → both emit str('') so a cleared lot number propagates to Framer
     ];
     let n = 0;
     for (const [lot, expRaw, expShort] of cases) {
@@ -342,12 +342,15 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
     expect(sval(item.fieldData['description'])).toBe('Plan copy wins over an empty override.');
   });
 
-  it('description is dropped entirely when neither qmi nor FP has copy', () => {
+  it('emits an explicit empty description when neither qmi nor FP has copy (clear propagates)', () => {
+    // String fields mirror D1 exactly: with no copy from either source, description emits
+    // str('') (not dropped) so Framer clears it rather than retaining a stale value
+    // (addItems merges — a dropped field keeps its previous value on the live site).
     const db = freshDb();
     insertRow(db, 'qmi', { id: 'recQMIdescNONE01', published: 1, synced_address: '13 Bare Rd' });
     const row = db.prepare(qmiDef.selectByIdSql).get('recQMIdescNONE01') as Record<string, unknown>;
     const item = qmiDef.map(row);
-    expect(item.fieldData['description']).toBeUndefined();
+    expect(item.fieldData['description']).toEqual({ type: 'string', value: '' });
   });
 
   it('photo_gallery: dropped while qmi.photo_gallery_json does not exist (tolerant probe)', async () => {
@@ -492,9 +495,12 @@ describe('QMI mapper — community_ids (community rec-ID for CMS matching)', () 
     expect(sval(mapOne(db, 'recQMIci0002').fieldData['community_ids'])).toBe('recCOMoverride01');
   });
 
-  it('drops community_ids when the QMI has no community', () => {
+  it('emits an explicit empty community_ids when the QMI has no community (clear propagates)', () => {
+    // String fields mirror D1 exactly: no community → str('') (not dropped) so Framer's
+    // "Contains" matching sees an empty value instead of the stale prior community id
+    // (addItems merges — a dropped field keeps its previous value on the live site).
     const db = freshDb();
     insertRow(db, 'qmi', { id: 'recQMIci0003', published: 1, synced_address: '2 No Comm Rd' });
-    expect(mapOne(db, 'recQMIci0003').fieldData['community_ids']).toBeUndefined();
+    expect(mapOne(db, 'recQMIci0003').fieldData['community_ids']).toEqual({ type: 'string', value: '' });
   });
 });
