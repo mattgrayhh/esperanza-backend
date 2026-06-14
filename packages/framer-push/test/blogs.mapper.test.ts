@@ -66,6 +66,35 @@ describe('Blogs mapper — video_url (migration 0012)', () => {
     expect(cv.value).toContain('First line.');
   });
 
+  it('emits publish_date as a Framer date field (ISO from YYYY-MM-DD)', () => {
+    const db = freshDb();
+    insertRow(db, 'blogs', {
+      id: 'recBLOG006',
+      title: 'Dated post',
+      slug: 'dated-post',
+      published: 1,
+      publish_date: '2024-06-10',
+    });
+    const item = mapOne(db, 'recBLOG006');
+    expect(item.fieldData['publish_date']).toEqual({
+      type: 'date',
+      value: '2024-06-10T00:00:00.000Z',
+    });
+  });
+
+  it('drops publish_date when empty (no key emitted)', () => {
+    const db = freshDb();
+    insertRow(db, 'blogs', {
+      id: 'recBLOG007',
+      title: 'Undated',
+      slug: 'undated',
+      published: 1,
+      publish_date: null,
+    });
+    const item = mapOne(db, 'recBLOG007');
+    expect('publish_date' in item.fieldData).toBe(false);
+  });
+
   it('drops content when empty (no key emitted)', () => {
     const db = freshDb();
     insertRow(db, 'blogs', {

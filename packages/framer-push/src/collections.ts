@@ -43,6 +43,7 @@ import {
   image,
   link,
   formattedText,
+  date,
   galleryArray,
 } from './framer-types.js';
 import { markdownToHtml } from './markdown.js';
@@ -267,6 +268,13 @@ const htmlFt = (v: unknown) => {
   if (raw.trim() === '') return undefined;
   const html = /<[a-z][\s\S]*>/i.test(raw) ? raw : markdownToHtml(raw);
   return html === '' ? undefined : formattedText(html);
+};
+// dateIf — emits a real Framer date field (ISO via framer-types' date()). Empty
+// drops the field (you can't set an empty date; clears don't propagate, which is
+// fine for publish dates). field_definitions must pin the column to 'date'.
+const dateIf = (v: unknown) => {
+  const s = asString(v);
+  return s && s.trim() !== '' ? date(s) : undefined;
 };
 const galIf = (urls: string[]) => (urls.length ? galleryArray(urls) : undefined);
 // Lot number stripped to its numeric part for display: drops the community
@@ -834,7 +842,8 @@ const blogs: CollectionDef = {
       // formattedText so headings/links/inline images render. field_definitions pins
       // blogs.content → formattedText (was string).
       content: htmlFt(row['content']),
-      publish_date: sIf(row['publish_date']),
+      // Real Framer date field (was string). field_definitions pins blogs.publish_date → date.
+      publish_date: dateIf(row['publish_date']),
       featured_image: imgIf(row['featured_image']),
       // 0012: Vimeo URL string, same convention as communities.featured_video.
       video_url: sIf(row['video_url']),

@@ -30,6 +30,7 @@
 // =============================================================================
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { D1Sink, type SinkOptions } from './lib/d1.js';
 import { migrateImageUrl, type MigrateOptions } from './lib/r2.js';
 import { parseArgs, getMode } from './lib/cli.js';
@@ -48,7 +49,6 @@ interface BlogRow {
 
 /** Read id/slug/title/video_url for every blog from D1 via wrangler. */
 function loadBlogs(mode: 'local' | 'remote'): BlogRow[] {
-  const { execFileSync } = require('node:child_process') as typeof import('node:child_process');
   const out = execFileSync(
     'npx',
     [
@@ -144,6 +144,14 @@ async function main(): Promise<void> {
       }
     }
 
+    // D1 caps a single SQL statement at 100KB. Skip pathological bodies so one bad
+    // post can't fail the batch (inline base64 is already dropped by the sanitizer).
+    if (html.length > 90_000) {
+      failed++;
+      failures.push(`${b.slug}: content ${html.length}b exceeds D1 statement limit — skipped`);
+      continue;
+    }
+
     const setVideo = s.video && !(b.video_url && b.video_url.trim());
     if (setVideo) videosSet++;
 
@@ -157,7 +165,10 @@ async function main(): Promise<void> {
     console.log(`  ✓ ${b.slug}  (html=${html.length}b, imgs=${s.images.length}${s.video ? ', video' : ''})`);
   }
 
-  sink.close(); // flushes (no-op writes under --dry-run)
+  // Flush in small chunks: one oversized statement (or a transient API error) then
+  // affects only its chunk, not all 125 writes.
+  sink.flush(20);
+  sink.close();
 
   console.log(`\n=== summary ===`);
   console.log(`processed OK   : ${ok}`);

@@ -25,7 +25,7 @@ import { buildItem, applySchema } from '../src/consumer.js';
 import type { ConsumerEnv } from '../src/consumer.js';
 import { COLLECTION_DEFS } from '../src/collections.js';
 import { createMockFramer, type ManagedField } from '../src/framer.js';
-import { str, num, bool, image, link, formattedText, galleryArray } from '../src/framer-types.js';
+import { str, num, bool, image, link, formattedText, date, galleryArray } from '../src/framer-types.js';
 import type { FieldData } from '../src/framer-types.js';
 
 function consumerEnv(db: ReturnType<typeof freshDb>): ConsumerEnv {
@@ -106,8 +106,9 @@ describe('coerceToFramerType', () => {
     expect(coerceToFramerType('relative/path.jpg', 'image')).toBeUndefined();
   });
 
-  it('date/enum carry as string', () => {
-    expect(coerceToFramerType('2026-06-02', 'date')).toEqual(str('2026-06-02'));
+  it('date → real Framer date (ISO); enum carries as string', () => {
+    expect(coerceToFramerType('2026-06-02', 'date')).toEqual(date('2026-06-02'));
+    expect(date('2026-06-02')).toEqual({ type: 'date', value: '2026-06-02T00:00:00.000Z' });
     expect(coerceToFramerType('Live', 'enum')).toEqual(str('Live'));
     expect(coerceToFramerType('', 'date')).toBeUndefined();
   });

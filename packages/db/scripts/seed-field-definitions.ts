@@ -197,7 +197,9 @@ const MAPPER_FRAMER_TYPE: Record<string, string> = {
   // Framer-subset HTML (re-scraped legacy + admin TipTap WYSIWYG). Pin must match
   // the emitted type or applyTypeOverrides would coerce/abort the batch.
   'blogs.content': 'formattedText',
-  'blogs.publish_date': 'string',
+  // Real Framer date field (mapper emits date()/ISO). Must match the Framer field
+  // type or applyTypeOverrides coerces; pushed via POST /schema (date is settable).
+  'blogs.publish_date': 'date',
   'blogs.seo_description': 'string',
   'promotions.copy': 'string',
   'cities.hero_description': 'string',

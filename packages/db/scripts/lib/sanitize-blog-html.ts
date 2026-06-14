@@ -97,6 +97,10 @@ export function sanitizeBlogHtml(rawHtml: string): SanitizedBlog {
       case 'img': {
         const src = decodeEntities(node.getAttribute?.('src') || '');
         if (!src) return '';
+        // Drop inline base64 data: URIs — they bloat the field (some legacy posts embed
+        // ~500KB images inline) and blow D1's 100KB per-statement limit. The post keeps
+        // its hosted images; a dropped inline image can be re-added via the WYSIWYG.
+        if (/^data:/i.test(src)) return '';
         ctx.images.push(src);
         const alt = node.getAttribute?.('alt') || '';
         return `<img src="${escAttr(src)}"${alt ? ` alt="${escAttr(alt)}"` : ''}>`;
