@@ -237,6 +237,8 @@ export function resolveCollectionKey(collection: unknown): CollectionKey | null 
 interface SchemaPayload {
   collection?: unknown;
   fields?: Array<{ key?: unknown; framer_type?: unknown; label?: unknown }>;
+  /** Field keys to DELETE from the collection (drop + its values). Runs before creates. */
+  drop?: unknown;
 }
 
 async function handleSchema(request: Request, env: Env): Promise<Response> {
@@ -270,14 +272,19 @@ async function handleSchema(request: Request, env: Env): Promise<Response> {
     });
   }
 
-  // Empty fields list → valid no-op (route health-check): resolve, return 200.
-  if (reqFields.length === 0) {
+  // Field keys to drop (delete from the collection). Runs before creates in applySchema.
+  const dropKeys = Array.isArray(payload.drop)
+    ? payload.drop.filter((d): d is string => typeof d === 'string' && d.trim() !== '').map((d) => d.trim())
+    : [];
+
+  // Empty fields AND empty drop → valid no-op (route health-check): resolve, return 200.
+  if (reqFields.length === 0 && dropKeys.length === 0) {
     return json({ ok: true, collection: key, fields: [], deploymentId: null, noop: true });
   }
 
   const framer = await connectFramer(env);
   try {
-    const result = await applySchema(env, framer, key, reqFields);
+    const result = await applySchema(env, framer, key, reqFields, { drop: dropKeys });
     return json({ ok: !result.error, ...result });
   } finally {
     // applySchema's re-push already disconnects via runBackfill; this is a harmless

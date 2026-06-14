@@ -561,7 +561,7 @@ export interface SchemaFieldRequest {
   label?: string; // display name (for a newly-created field; existing names preserved)
 }
 
-export type SchemaFieldAction = 'retyped' | 'created' | 'unchanged' | 'error';
+export type SchemaFieldAction = 'retyped' | 'created' | 'unchanged' | 'dropped' | 'error';
 
 export interface SchemaFieldResult {
   key: string;
@@ -625,7 +625,7 @@ export async function applySchema(
   framer: FramerClient,
   collectionKey: CollectionKey,
   requests: SchemaFieldRequest[],
-  opts: { backoff?: BackoffOptions; repush?: boolean } = {}
+  opts: { backoff?: BackoffOptions; repush?: boolean; drop?: string[] } = {}
 ): Promise<ApplySchemaResult> {
   const def = COLLECTION_DEFS[collectionKey];
   if (!def) throw new Error(`unknown collection key: ${collectionKey}`);
@@ -667,6 +667,20 @@ export async function applySchema(
   for (const f of existing) nextById.set(f.id, preserveFieldInput(f));
 
   const fieldResults: SchemaFieldResult[] = [];
+
+  // Drops first: remove a field (and its values) from the set. Needed because Framer
+  // won't retype a populated field to certain types in place (e.g. string → date is
+  // silently ignored) — the field must be dropped, then re-created as the new type in
+  // a SEPARATE call. A pure drop does not repush (no values to set).
+  for (const key of opts.drop ?? []) {
+    if (byId.has(key)) {
+      nextById.delete(key);
+      fieldResults.push({ key, action: 'dropped', detail: 'removed from collection' });
+    } else {
+      fieldResults.push({ key, action: 'unchanged', detail: 'not present' });
+    }
+  }
+
   for (const req of requests) {
     if (!SETTABLE_TYPES.has(req.framer_type)) {
       fieldResults.push({
@@ -699,8 +713,10 @@ export async function applySchema(
   }
   result.fields = fieldResults;
 
-  // Only call setFields when something actually changed (created/retyped present).
-  const changed = fieldResults.some((r) => r.action === 'created' || r.action === 'retyped');
+  // Only call setFields when something actually changed (created/retyped/dropped).
+  const changed = fieldResults.some(
+    (r) => r.action === 'created' || r.action === 'retyped' || r.action === 'dropped'
+  );
   if (!changed) return result; // pure no-op: leave the schema + values untouched.
 
   const nextSet = [...nextById.values()];
@@ -719,8 +735,10 @@ export async function applySchema(
   }
 
   // Re-push the collection so values repopulate in the new type. Reuse the backfill
-  // path for this single key. (Re-typing a field clears its Framer values.)
-  if (opts.repush !== false) {
+  // path for this single key. (Re-typing a field clears its Framer values.) A pure
+  // drop (no created/retyped) has no values to set, so skip the repush.
+  const needsRepush = fieldResults.some((r) => r.action === 'created' || r.action === 'retyped');
+  if (opts.repush !== false && needsRepush) {
     const [bf] = await runBackfill(
       env,
       { keys: [collectionKey], reconcileOrphans: false, backoff: opts.backoff },

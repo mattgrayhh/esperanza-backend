@@ -418,6 +418,37 @@ describe('applySchema (/schema core)', () => {
     expect(result.deploymentId).toBeNull(); // no re-push
   });
 
+  it('drops a field: removes it from the set, no re-push', async () => {
+    // Drop is the escape hatch for type changes Framer won't apply in place (e.g.
+    // string → date): drop the field, then re-create it as the new type in a later call.
+    const env = envWithRow();
+    const mock = createMockFramer(['Quick Move-Ins'], { 'Quick Move-Ins': baseFields });
+    const framer = await mock.connect(env);
+    const result = await applySchema(env, framer, 'qmi', [], { drop: ['postal_code'] });
+
+    const byKey = Object.fromEntries(result.fields.map((f) => [f.key, f.action]));
+    expect(byKey['postal_code']).toBe('dropped');
+    expect(result.error).toBeUndefined();
+
+    const state = mock.collections.get('Quick Move-Ins')!;
+    expect(state.setFieldsCalls.length).toBe(1);
+    const set = state.setFieldsCalls[0]!;
+    expect(set.find((f) => f.id === 'postal_code')).toBeUndefined(); // gone
+    expect(set.find((f) => f.id === 'address')).toBeDefined(); // others preserved
+    expect(state.addItemsCalls.length).toBe(0); // pure drop → no re-push
+    expect(result.deploymentId).toBeNull();
+  });
+
+  it('drop of a non-existent field is a no-op for that key', async () => {
+    const env = envWithRow();
+    const mock = createMockFramer(['Quick Move-Ins'], { 'Quick Move-Ins': baseFields });
+    const framer = await mock.connect(env);
+    const result = await applySchema(env, framer, 'qmi', [], { drop: ['nope'] });
+    expect(result.fields[0]).toMatchObject({ key: 'nope', action: 'unchanged' });
+    const state = mock.collections.get('Quick Move-Ins')!;
+    expect(state.setFieldsCalls.length).toBe(0); // nothing changed
+  });
+
   it('ABORTS (no setFields) when an existing field is type "unsupported"', async () => {
     const env = envWithRow();
     const mock = createMockFramer(['Quick Move-Ins'], {
