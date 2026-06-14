@@ -25,10 +25,19 @@ first/second floor) for a plan — not an exterior elevation or a photo.
 - It is a separate field from `Main Image` and the hero images, which are the
   exterior/marketing shots. Keep the layout drawing here and the exterior shots
   in those fields.
-- **Interior photos** (kitchen, living room, baths…) go in the plan's
-  `Interior Photos` gallery — drag several photos onto the gallery at once
-  (they keep the order you dropped them in) or click `Add images`. Like the
-  layout image, they live on the plan and show on every home of that plan.
+- A plan has **three separate photo galleries**, each shown in its own section
+  on the live plan page — keep the right photos in the right one:
+  - **Photo Gallery** — the exterior / listing photos (front elevation, street
+    view, model-home shots). These came across from the original catalog; you
+    can add, remove, or reorder them here.
+  - **Elevation Gallery** — the elevation renderings (brick / stucco / stone
+    variants) for the plan.
+  - **Interior Photos** — kitchen, living room, baths, and other inside shots.
+    This one starts empty; add the interior photos you want shown.
+- For any gallery, drag several photos onto it at once (they keep the order you
+  dropped them in) or click `Add images`. To reorder use the arrows on each
+  thumbnail; to delete, hover and click the ✕. Like the layout image, every
+  gallery lives on the **plan** and shows on every home of that plan.
 - Uploads are stored in the central image library and served from our own CDN.
 - After saving, the image reaches the live site on the next publish (see
   *How changes reach the site*). If a plan has no layout image yet, the plan and

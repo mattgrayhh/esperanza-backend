@@ -18,6 +18,7 @@
 import { useRef, useState, useTransition } from 'react';
 import { uploadGalleryImage } from '../../lib/actions';
 import { filterAcceptedFiles } from '../../lib/dropped-files';
+import { parseGalleryUrls } from '../../lib/gallery-urls';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -26,18 +27,6 @@ import { UploadIcon, XIcon, ChevronUpIcon, ChevronDownIcon, ImageIcon } from 'lu
 const ACCEPT = 'image/*';
 
 const AIRTABLE_HOST = 'airtableusercontent.com';
-
-function parseUrls(raw: string): string[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed.filter((u) => typeof u === 'string' && u.length > 0);
-  } catch {
-    // legacy newline-separated fallback
-    return raw.split('\n').map((u) => u.trim()).filter(Boolean);
-  }
-  return [];
-}
 
 export function ImageGalleryEditor({
   entity,
@@ -54,7 +43,7 @@ export function ImageGalleryEditor({
   initialValue: string;
   help?: string;
 }) {
-  const [urls, setUrls] = useState<string[]>(() => parseUrls(initialValue));
+  const [urls, setUrls] = useState<string[]>(() => parseGalleryUrls(initialValue));
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
