@@ -31,8 +31,13 @@ export async function loadData(env: Env, type: PdfType, entityId: string, theme:
     case 'qmi': return loadQmiData(env.DB, entityId, { appendFloorPlanPages: theme.qmi.appendFloorPlanPages, imgProxyBase: env.PDF_PUBLIC_BASE_URL });
     case 'floorplan': return loadFloorPlanData(env.DB, entityId);
     case 'list': {
-      const [, citySlug, kind] = entityId.split(':'); // "list:<citySlug>:<kind>"
-      return loadListData(env.DB, citySlug!, kind as ListKind, env.PDF_PUBLIC_BASE_URL);
+      const parts = entityId.split(':');
+      if (parts[1] === 'community') {
+        // "list:community:<communitySlug>:<kind>"
+        return loadListData(env.DB, parts[2]!, parts[3] as ListKind, env.PDF_PUBLIC_BASE_URL, 'community');
+      }
+      const [, citySlug, kind] = parts; // "list:<citySlug>:<kind>"
+      return loadListData(env.DB, citySlug!, kind as ListKind, env.PDF_PUBLIC_BASE_URL, 'city');
     }
     default: throw new Error(`loadData not implemented for ${type}`);
   }

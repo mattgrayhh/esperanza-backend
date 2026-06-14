@@ -284,6 +284,31 @@ async function seedLists(
     count++;
   }
 
+  // Per-community list docs (the legacy /pdf-list "Plan List" + "Sale List" columns).
+  //   community-<slug>-plans → entity_id 'list:community:<slug>:plans' (plans in the community)
+  //   community-<slug>-qmis  → entity_id 'list:community:<slug>:qmis'  (homes in the community)
+  const communities = queryD1<{ id: string; slug: string }>(
+    `SELECT id, slug FROM communities WHERE published = 1 AND slug IS NOT NULL`,
+    mode,
+    dryRun
+  );
+  const COMMUNITY_KINDS: ListKind[] = ['plans', 'qmis'];
+  for (const c of communities) {
+    const communitySlug = c.slug ?? '';
+    if (!communitySlug) continue;
+    for (const kind of COMMUNITY_KINDS) {
+      const type: PdfType = 'list';
+      const slug = `community-${communitySlug}-${kind}`;
+      const entityId = `list:community:${communitySlug}:${kind}`;
+      const r2Key = r2KeyFor(type, entityId);
+      sink.add(
+        `INSERT OR IGNORE INTO pdf_renders (type, slug, entity_id, city_slug, community_id, r2_key, status)` +
+          ` VALUES (${q(type)}, ${q(slug)}, ${q(entityId)}, NULL, ${q(c.id)}, ${q(r2Key)}, 'not_built')`
+      );
+      count++;
+    }
+  }
+
   return count;
 }
 
