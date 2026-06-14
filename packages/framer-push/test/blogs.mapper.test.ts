@@ -34,7 +34,10 @@ describe('Blogs mapper — video_url (migration 0012)', () => {
     });
   });
 
-  it('drops video_url when null', () => {
+  it('emits an explicit empty string for video_url when null (clear propagates to Framer)', () => {
+    // String fields mirror D1 exactly: a null/cleared column emits str('') (not dropped)
+    // so the clear reaches Framer. addItems merges, so a dropped field would keep the
+    // stale value on the live site.
     const db = freshDb();
     insertRow(db, 'blogs', {
       id: 'recBLOG002',
@@ -44,6 +47,6 @@ describe('Blogs mapper — video_url (migration 0012)', () => {
       video_url: null,
     });
     const item = mapOne(db, 'recBLOG002');
-    expect(item.fieldData['video_url']).toBeUndefined();
+    expect(item.fieldData['video_url']).toEqual({ type: 'string', value: '' });
   });
 });

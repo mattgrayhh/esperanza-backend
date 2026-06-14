@@ -160,4 +160,36 @@ describe('Communities mapper — rich text, HOA links, coords, gates', () => {
     expect(f['design_copy_rich']).toBeUndefined();
     expect(f['latitude']).toBeUndefined();
   });
+
+  it('emits an EXPLICIT empty string when a string field is cleared (propagates the clear to Framer)', () => {
+    // Regression: clearing a community link/text field in the admin set the D1 column
+    // to NULL, but the mapper dropped the empty value from the payload. Framer's
+    // addItems MERGES, so a dropped field keeps its previous (stale, 404) value — the
+    // field "repopulated" on the live site. A space was the only workaround because it
+    // wasn't empty. String fields must mirror D1 exactly: empty → str('') so the clear
+    // actually reaches Framer (and the operator's "hide field when empty" rule fires).
+    const db = freshDb();
+    insertRow(db, 'communities', {
+      id: 'recCOM0005ABCDEF',
+      name: 'Cleared Links',
+      published: 1,
+      featured_video: null, // cleared in the admin
+      schedule_visit: '', // cleared in the admin
+      // lending omitted entirely (never set)
+      updated_at: '2026-05-30T12:00:00.000Z',
+    });
+    const f = mapOne(db, 'recCOM0005ABCDEF').fieldData;
+
+    // Present in the payload, typed string, value '' — NOT dropped.
+    expect(f['featured_video']?.type).toBe('string');
+    expect(sval(f['featured_video'])).toBe('');
+    expect(f['schedule_visit']?.type).toBe('string');
+    expect(sval(f['schedule_visit'])).toBe('');
+    expect(f['lending']?.type).toBe('string');
+    expect(sval(f['lending'])).toBe('');
+
+    // Numbers still drop empties (no "0" leak) and formattedText still drops blanks.
+    expect(f['price_from']).toBeUndefined();
+    expect(f['amenities_rich']).toBeUndefined();
+  });
 });

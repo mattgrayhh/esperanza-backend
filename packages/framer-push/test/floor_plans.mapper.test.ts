@@ -81,7 +81,10 @@ describe('Floor Plans mapper — community_ids (migration 0016)', () => {
     });
   });
 
-  it('drops community_ids when null/empty', () => {
+  it('emits an explicit empty community_ids when null/empty (clear propagates to Framer)', () => {
+    // String fields mirror D1 exactly: a cleared community_ids emits str('') (not dropped)
+    // so Framer's "Contains" matching sees an empty list rather than the stale prior value
+    // (addItems merges — a dropped field keeps its previous value on the live site).
     const db = freshDb();
     insertRow(db, 'floor_plans', {
       id: 'recFPci2',
@@ -91,7 +94,7 @@ describe('Floor Plans mapper — community_ids (migration 0016)', () => {
       community_ids: null,
     });
     const item = mapOne(db, 'recFPci2');
-    expect(item.fieldData['community_ids']).toBeUndefined();
+    expect(item.fieldData['community_ids']).toEqual({ type: 'string', value: '' });
   });
 });
 
