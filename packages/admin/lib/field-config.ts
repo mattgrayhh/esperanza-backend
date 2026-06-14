@@ -489,6 +489,11 @@ const floor_plans: EntityFieldConfig = {
     { field: 'hero_image_3', label: 'Hero Image 3', widget: 'image', bucket: 'admin' },
     { field: 'floor_plan_image', label: 'Floor Plan Image', widget: 'image', bucket: 'admin' },
     { field: 'interior_photos_json', label: 'Interior Photos', widget: 'imageGallery', bucket: 'admin', help: 'Ordered gallery of interior room photos for this plan (kitchen, living, baths…). Shown in the floor plan image section.' },
+    // Legacy Airtable-synced galleries — exterior/listing + elevation sets. NOT touched by
+    // ingest (static data), so they're operator-editable here. Each maps to its own live
+    // Framer field (photo_gallery / elevation_gallery), not the interior_photos set.
+    { field: 'photo_gallery', label: 'Photo Gallery', widget: 'imageGallery', bucket: 'admin', help: 'Exterior / listing photos for this plan (synced from the original catalog). Shown as the plan’s photo gallery.' },
+    { field: 'elevation_gallery', label: 'Elevation Gallery', widget: 'imageGallery', bucket: 'admin', help: 'Elevation renderings (brick / stucco / stone variants) for this plan.' },
     { field: 'description', label: 'Description (md)', widget: 'richtext', bucket: 'admin' },
     { field: 'plan_viewer_url', label: 'Plan Viewer URL', widget: 'text', bucket: 'admin' },
     { field: 'virtual_tour_url', label: 'Virtual Tour URL', widget: 'text', bucket: 'admin' },
