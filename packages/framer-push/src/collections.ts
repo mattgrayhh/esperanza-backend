@@ -1030,6 +1030,7 @@ const cities: CollectionDef = {
       map_latitude: nIf(row['map_latitude']),
       map_longitude: nIf(row['map_longitude']),
       hero_image: imgIf(row['hero_image_url']),
+      where_we_build_image: imgIf(row['where_we_build_image_url']),
       hero_description: sIf(row['hero_description']),
       national_recognition: sIf(row['national_recognition']),
       // Prefer the live computed counts (CITY_COUNTS_SQL); fall back to the

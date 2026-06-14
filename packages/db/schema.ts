@@ -323,6 +323,8 @@ export const cities = sqliteTable(
     heroDescription: text('hero_description'),
     nationalRecognition: text('national_recognition'),
     incentive: text('incentive'),
+    // admin-owned single image, surfaced to Framer as `where_we_build_image` (0017).
+    whereWeBuildImageUrl: text('where_we_build_image_url'),
 
     cityCopyBlocksJson: text('city_copy_blocks_json'),
     cityVenueBlocksJson: text('city_venue_blocks_json'),
