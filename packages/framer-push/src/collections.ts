@@ -639,17 +639,30 @@ const communities: CollectionDef = {
   key: 'communities',
   defaultCollectionName: 'Communities',
   collectionEnvVar: 'FRAMER_COLLECTION_COMMUNITIES',
+  // floor_plan_ids: reciprocal of floor_plans.community_ids — the CSV of floor-plan
+  // rec-IDs offered in this community, aggregated at query time. The membership test
+  // mirrors CITY_COUNTS_SQL's plan match: normalize the plan's community_ids CSV
+  // (strip spaces, comma-wrap) and look for the comma-delimited community id, so a
+  // Floor Plan page can filter communities by `floor_plan_ids Contains {floorPlanId}`
+  // (the Available Locations section) in the natural direction. All linked plans are
+  // listed; the Floor Plans collection's own draft gate controls render visibility.
   selectByIdSql: `SELECT *,
     COALESCE(override_square_footage_range, synced_square_footage_range) AS square_footage_range,
     COALESCE(override_bed_count,  synced_bed_count)  AS bed_count,
     COALESCE(override_bath_count, synced_bath_count) AS bath_count,
-    COALESCE(override_price_from, synced_price_from) AS price_from
+    COALESCE(override_price_from, synced_price_from) AS price_from,
+    (SELECT group_concat(fp.id) FROM floor_plans fp
+      WHERE ',' || REPLACE(IFNULL(fp.community_ids, ''), ' ', '') || ','
+            LIKE '%,' || communities.id || ',%') AS floor_plan_ids
   FROM communities WHERE id = ?`,
   selectAllSql: `SELECT *,
     COALESCE(override_square_footage_range, synced_square_footage_range) AS square_footage_range,
     COALESCE(override_bed_count,  synced_bed_count)  AS bed_count,
     COALESCE(override_bath_count, synced_bath_count) AS bath_count,
-    COALESCE(override_price_from, synced_price_from) AS price_from
+    COALESCE(override_price_from, synced_price_from) AS price_from,
+    (SELECT group_concat(fp.id) FROM floor_plans fp
+      WHERE ',' || REPLACE(IFNULL(fp.community_ids, ''), ' ', '') || ','
+            LIKE '%,' || communities.id || ',%') AS floor_plan_ids
   FROM communities`,
   map(row) {
     const id = String(row['id']);
@@ -721,6 +734,12 @@ const communities: CollectionDef = {
       master_planned: bool(asBool(row['master_planned'])),
       coming_soon: bool(asBool(row['coming_soon'])),
       published: bool(asBool(row['published'])),
+      // CSV of floor-plan rec-IDs offered in this community (group_concat in the SQL
+      // above) — same string/passthrough posture as the other *_ids fields (no
+      // field_definitions row). Lets a Floor Plan page filter the communities list by
+      // `floor_plan_ids Contains {floorPlanId}` (Available Locations) in the natural
+      // direction (the multi-value CSV is the haystack, the page's id is the needle).
+      floor_plan_ids: sIf(row['floor_plan_ids']),
       featured_video: sIf(row['featured_video']),
       office_phone: sIf(row['office_phone']),
       office_hours: sIf(row['office_hours']),

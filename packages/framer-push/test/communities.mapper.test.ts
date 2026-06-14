@@ -192,4 +192,66 @@ describe('Communities mapper — rich text, HOA links, coords, gates', () => {
     expect(f['price_from']).toBeUndefined();
     expect(f['amenities_rich']).toBeUndefined();
   });
+
+  it('derives floor_plan_ids as the reciprocal of floor_plans.community_ids (CSV membership, space-tolerant, exact-id)', () => {
+    const db = freshDb();
+    insertRow(db, 'communities', {
+      id: 'recCOMaqualina01',
+      name: 'Aqualina at Tres Lagos',
+      published: 1,
+      updated_at: '2026-06-14T12:00:00.000Z',
+    });
+    // A second community — guards against a bare substring match leaking plans.
+    insertRow(db, 'communities', {
+      id: 'recCOMsapphire02',
+      name: 'Sapphire at La Sienna',
+      published: 1,
+      updated_at: '2026-06-14T12:00:00.000Z',
+    });
+    // Blanco lists BOTH communities with the live ", " (comma-space) separator.
+    insertRow(db, 'floor_plans', {
+      id: 'recFPblanco0001',
+      name: 'Blanco',
+      slug: 'blanco',
+      published: 1,
+      community_ids: 'recCOMaqualina01, recCOMsapphire02',
+    });
+    // Agave is only in Aqualina (no surrounding space).
+    insertRow(db, 'floor_plans', {
+      id: 'recFPagave00001',
+      name: 'Agave',
+      slug: 'agave',
+      published: 1,
+      community_ids: 'recCOMaqualina01',
+    });
+    // A draft plan still appears in the list (the Floor Plans collection's own
+    // draft gate controls render visibility, not this membership CSV).
+    insertRow(db, 'floor_plans', {
+      id: 'recFPdraft00001',
+      name: 'Draft Plan',
+      slug: 'draft-plan',
+      published: 0,
+      community_ids: 'recCOMaqualina01',
+    });
+    // An unrelated plan that references neither community.
+    insertRow(db, 'floor_plans', {
+      id: 'recFPother00001',
+      name: 'Other',
+      slug: 'other',
+      published: 1,
+      community_ids: 'recCOMsomewhere9',
+    });
+
+    const aqualina = mapOne(db, 'recCOMaqualina01').fieldData['floor_plan_ids'];
+    expect(aqualina?.type).toBe('string');
+    const aqualinaIds = String(sval(aqualina)).split(',');
+    expect(aqualinaIds).toEqual(
+      expect.arrayContaining(['recFPblanco0001', 'recFPagave00001', 'recFPdraft00001'])
+    );
+    expect(aqualinaIds).not.toContain('recFPother00001');
+
+    // Sapphire only gets Blanco — and the ", " separator must not break the match.
+    const sapphire = String(sval(mapOne(db, 'recCOMsapphire02').fieldData['floor_plan_ids']));
+    expect(sapphire.split(',')).toEqual(['recFPblanco0001']);
+  });
 });
