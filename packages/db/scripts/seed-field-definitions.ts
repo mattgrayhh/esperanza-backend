@@ -193,7 +193,10 @@ const MAPPER_FRAMER_TYPE: Record<string, string> = {
   'images.caption': 'string',
   'images.caption_clean': 'string',
   'blogs.excerpt': 'string',
-  'blogs.content': 'string',
+  // blogs.content is rich text: mapper emits formattedText (htmlFt) from
+  // Framer-subset HTML (re-scraped legacy + admin TipTap WYSIWYG). Pin must match
+  // the emitted type or applyTypeOverrides would coerce/abort the batch.
+  'blogs.content': 'formattedText',
   'blogs.publish_date': 'string',
   'blogs.seo_description': 'string',
   'promotions.copy': 'string',
