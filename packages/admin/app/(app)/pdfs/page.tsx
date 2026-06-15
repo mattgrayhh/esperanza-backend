@@ -42,6 +42,8 @@ export default async function PdfsPage() {
       community_id: pdfRenders.communityId,
       status: pdfRenders.status,
       entity_id: pdfRenders.entityId,
+      last_rendered_at: pdfRenders.lastRenderedAt,
+      theme_version: pdfRenders.themeVersion,
     })
     .from(pdfRenders);
 
@@ -52,6 +54,8 @@ export default async function PdfsPage() {
     community_id: r.community_id ?? null,
     status: r.status,
     entity_id: r.entity_id ?? null,
+    last_rendered_at: r.last_rendered_at ?? null,
+    theme_version: r.theme_version ?? null,
   }));
 
   const tree = buildPdfTree(rows);
@@ -77,7 +81,7 @@ export default async function PdfsPage() {
         ) : null}
       </div>
 
-      <PdfTree tree={tree} publicBase={PDF_PUBLIC_BASE_URL} themeVersion={themeVersion} />
+      <PdfTree tree={tree} publicBase={PDF_PUBLIC_BASE_URL} themeVersion={themeVersion} now={Date.now()} />
     </div>
   );
 }

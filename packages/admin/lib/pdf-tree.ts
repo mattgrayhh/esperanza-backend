@@ -14,6 +14,8 @@ export interface PdfRenderRowLite {
   community_id: string | null;
   status: string;
   entity_id: string | null;
+  last_rendered_at: string | null;
+  theme_version: number | null;
 }
 
 export interface PdfLeaf {
@@ -21,6 +23,61 @@ export interface PdfLeaf {
   status: string;
   entityId: string | null;
   type: string;
+  lastRenderedAt: string | null;
+  themeVersion: number | null;
+}
+
+// =============================================================================
+// Freshness — the green / orange / red indicator (hybrid: currency + age).
+// =============================================================================
+export type PdfFreshness = 'green' | 'orange' | 'red';
+
+// A render older than this (and not otherwise flagged) is shown orange even if it
+// still matches the active theme — a nudge to regenerate against current data.
+export const PDF_STALE_DAYS = 30;
+const DAY_MS = 86_400_000;
+
+/**
+ * Hybrid freshness for one render (pure, time injected for testability):
+ *   • red    — last render errored, or it has never been built
+ *   • orange — stale, behind the active theme version, OR older than PDF_STALE_DAYS
+ *   • green  — built against the current theme, no error, and recent
+ * 'rendering' is a transient state handled separately in the UI (not green/orange/red).
+ */
+export function pdfFreshness(
+  leaf: Pick<PdfLeaf, 'status' | 'lastRenderedAt' | 'themeVersion'>,
+  activeThemeVersion: number | null,
+  nowMs: number,
+): PdfFreshness {
+  if (leaf.status === 'error') return 'red';
+  if (leaf.status === 'not_built' || !leaf.lastRenderedAt) return 'red';
+
+  if (leaf.status === 'stale') return 'orange';
+  if (activeThemeVersion != null && leaf.themeVersion != null && leaf.themeVersion < activeThemeVersion) {
+    return 'orange';
+  }
+  const t = Date.parse(leaf.lastRenderedAt);
+  if (!Number.isFinite(t) || nowMs - t > PDF_STALE_DAYS * DAY_MS) return 'orange';
+
+  return 'green';
+}
+
+/** Compact "generated N ago" label (pure, time injected). Null timestamp → "never". */
+export function formatGeneratedAt(iso: string | null, nowMs: number): string {
+  if (!iso) return 'never';
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return 'unknown';
+  const s = Math.max(0, Math.floor((nowMs - t) / 1000));
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  const mo = Math.floor(d / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.floor(mo / 12)}y ago`;
 }
 
 export interface PdfCommunityNode {
@@ -52,7 +109,10 @@ export function buildPdfTree(rows: PdfRenderRowLite[]): PdfCityNode[] {
     c.communities[c.communities.length - 1]!);
 
   for (const r of rows) {
-    const leaf: PdfLeaf = { slug: r.slug, status: r.status, entityId: r.entity_id, type: r.type };
+    const leaf: PdfLeaf = {
+      slug: r.slug, status: r.status, entityId: r.entity_id, type: r.type,
+      lastRenderedAt: r.last_rendered_at, themeVersion: r.theme_version,
+    };
     const cs = r.city_slug ?? '—';
     if (r.type === 'list') {
       city(cs).lists.push(leaf);
