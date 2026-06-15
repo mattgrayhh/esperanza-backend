@@ -4,8 +4,9 @@
 //
 // Collapsible City → Community → {Plans (floorplan), Specs (qmi)} tree with
 // city-level list renders. Each leaf shows:
-//   • a status dot (live=green, stale=amber, not_built=grey, error=red, rendering=blue)
-//   • the slug
+//   • a freshness dot (green=up to date, orange=out of date, red=error/never built,
+//     blue=rendering) — hybrid of currency + age, see pdfFreshness()
+//   • the slug + a "Generated 2d ago" timestamp
 //   • a Download link (opens the R2 PDF in a new tab)
 //   • a Regenerate button (calls regeneratePdf server action)
 // Each city header has a "Rebuild stale" button (calls rebuildStaleForCity).
@@ -23,37 +24,47 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { regeneratePdf, rebuildStaleForCity } from '@/lib/pdf-actions';
-import type { PdfCityNode, PdfLeaf } from '@/lib/pdf-tree';
+import { pdfFreshness, formatGeneratedAt, type PdfCityNode, type PdfLeaf } from '@/lib/pdf-tree';
 
 // =============================================================================
-// Status dot
+// Freshness dot — green / orange / red (+ blue while rendering)
 // =============================================================================
-// Display model: four buckets — Live, Rendering, Missing, Error.
-// DB statuses fold in: 'stale' → Live (a stale PDF still exists & serves),
-// 'not_built' → Missing.
-const STATUS_DOT: Record<string, string> = {
-  live: 'bg-green-500',
-  stale: 'bg-green-500',
-  rendering: 'bg-blue-500',
-  not_built: 'bg-muted-foreground/40',
-  error: 'bg-red-500',
-};
+const FRESHNESS_DOT = {
+  green: 'bg-green-500',
+  orange: 'bg-amber-500',
+  red: 'bg-red-500',
+} as const;
+const FRESHNESS_LABEL = {
+  green: 'Up to date',
+  orange: 'Out of date',
+  red: 'Error or never built',
+} as const;
 
-const STATUS_LABEL: Record<string, string> = {
-  live: 'Live',
-  stale: 'Live',
-  rendering: 'Rendering',
-  not_built: 'Missing',
-  error: 'Error',
-};
-
-function StatusDot({ status }: { status: string }) {
-  const label = STATUS_LABEL[status] ?? 'Missing';
+/** Status dot driven by hybrid freshness; 'rendering' is a transient blue state. */
+function StatusDot({
+  leaf,
+  themeVersion,
+  now,
+}: {
+  leaf: Pick<PdfLeaf, 'status' | 'lastRenderedAt' | 'themeVersion'>;
+  themeVersion: number | null;
+  now: number;
+}) {
+  if (leaf.status === 'rendering') {
+    return (
+      <span
+        className="inline-block size-2 shrink-0 rounded-full bg-blue-500"
+        title="Rendering"
+        aria-label="Rendering"
+      />
+    );
+  }
+  const fresh = pdfFreshness(leaf, themeVersion, now);
   return (
     <span
-      className={cn('inline-block size-2 shrink-0 rounded-full', STATUS_DOT[status] ?? 'bg-muted-foreground/40')}
-      title={label}
-      aria-label={label}
+      className={cn('inline-block size-2 shrink-0 rounded-full', FRESHNESS_DOT[fresh])}
+      title={FRESHNESS_LABEL[fresh]}
+      aria-label={FRESHNESS_LABEL[fresh]}
     />
   );
 }
@@ -64,14 +75,19 @@ function StatusDot({ status }: { status: string }) {
 function LeafRow({
   leaf,
   publicBase,
+  themeVersion,
+  now,
   indent,
 }: {
   leaf: PdfLeaf;
   publicBase: string;
+  themeVersion: number | null;
+  now: number;
   indent?: boolean;
 }) {
   const [pending, startTransition] = React.useTransition();
   const href = `${publicBase}/pdf/${leaf.type}/${leaf.slug}`;
+  const generated = formatGeneratedAt(leaf.lastRenderedAt, now);
 
   function handleRegenerate() {
     startTransition(async () => {
@@ -87,13 +103,16 @@ function LeafRow({
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
-        <StatusDot status={leaf.status} />
+        <StatusDot leaf={leaf} themeVersion={themeVersion} now={now} />
         <span className="truncate font-mono text-xs text-foreground/80">{leaf.slug}</span>
         <Badge variant="outline" className="h-4 px-1 text-[10px] leading-none text-muted-foreground">
           {leaf.type}
         </Badge>
       </div>
       <div className="flex shrink-0 items-center gap-1">
+        <span className="mr-1 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground" title={leaf.lastRenderedAt ?? 'never generated'}>
+          {generated === 'never' ? 'Never generated' : `Generated ${generated}`}
+        </span>
         {leaf.status !== 'not_built' ? (
           <a href={href} target="_blank" rel="noopener noreferrer">
             <Button variant="ghost" size="icon-sm" title="Download PDF" aria-label="Download PDF">
@@ -122,9 +141,13 @@ function LeafRow({
 function CommunitySection({
   node,
   publicBase,
+  themeVersion,
+  now,
 }: {
   node: import('@/lib/pdf-tree').PdfCommunityNode;
   publicBase: string;
+  themeVersion: number | null;
+  now: number;
 }) {
   const [open, setOpen] = React.useState(false);
   const total = (node.self ? 1 : 0) + node.plans.length + node.specs.length;
@@ -145,13 +168,13 @@ function CommunitySection({
         <FileText className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="flex-1 truncate text-left">{node.communityId}</span>
         <span className="text-xs text-muted-foreground">{total}</span>
-        {node.self ? <StatusDot status={node.self.status} /> : null}
+        {node.self ? <StatusDot leaf={node.self} themeVersion={themeVersion} now={now} /> : null}
       </button>
 
       {open ? (
         <div className="mt-0.5 flex flex-col gap-0.5">
           {/* Community brochure self-render */}
-          {node.self ? <LeafRow leaf={node.self} publicBase={publicBase} indent /> : null}
+          {node.self ? <LeafRow leaf={node.self} publicBase={publicBase} themeVersion={themeVersion} now={now} indent /> : null}
 
           {/* Floor plan renders */}
           {node.plans.length > 0 ? (
@@ -160,7 +183,7 @@ function CommunitySection({
                 Floor Plans ({node.plans.length})
               </p>
               {node.plans.map((leaf) => (
-                <LeafRow key={leaf.slug} leaf={leaf} publicBase={publicBase} indent />
+                <LeafRow key={leaf.slug} leaf={leaf} publicBase={publicBase} themeVersion={themeVersion} now={now} indent />
               ))}
             </div>
           ) : null}
@@ -172,7 +195,7 @@ function CommunitySection({
                 QMI Specs ({node.specs.length})
               </p>
               {node.specs.map((leaf) => (
-                <LeafRow key={leaf.slug} leaf={leaf} publicBase={publicBase} indent />
+                <LeafRow key={leaf.slug} leaf={leaf} publicBase={publicBase} themeVersion={themeVersion} now={now} indent />
               ))}
             </div>
           ) : null}
@@ -188,9 +211,13 @@ function CommunitySection({
 function CitySection({
   node,
   publicBase,
+  themeVersion,
+  now,
 }: {
   node: PdfCityNode;
   publicBase: string;
+  themeVersion: number | null;
+  now: number;
 }) {
   const [open, setOpen] = React.useState(false);
   const [rebuilding, startRebuild] = React.useTransition();
@@ -245,7 +272,7 @@ function CitySection({
                 Lists ({node.lists.length})
               </p>
               {node.lists.map((leaf) => (
-                <LeafRow key={leaf.slug} leaf={leaf} publicBase={publicBase} />
+                <LeafRow key={leaf.slug} leaf={leaf} publicBase={publicBase} themeVersion={themeVersion} now={now} />
               ))}
             </div>
           ) : null}
@@ -254,7 +281,7 @@ function CitySection({
           {node.communities.length > 0 ? (
             <div className="flex flex-col gap-1">
               {node.communities.map((comm) => (
-                <CommunitySection key={comm.communityId} node={comm} publicBase={publicBase} />
+                <CommunitySection key={comm.communityId} node={comm} publicBase={publicBase} themeVersion={themeVersion} now={now} />
               ))}
             </div>
           ) : null}
@@ -275,10 +302,12 @@ export function PdfTree({
   tree,
   publicBase,
   themeVersion,
+  now,
 }: {
   tree: PdfCityNode[];
   publicBase: string;
   themeVersion: number | null;
+  now: number;
 }) {
   if (tree.length === 0) {
     return (
@@ -295,17 +324,17 @@ export function PdfTree({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Status legend */}
+      {/* Freshness legend */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
         <span className="font-medium">Status:</span>
         {[
-          { key: 'live', label: 'Live' },
-          { key: 'rendering', label: 'Rendering' },
-          { key: 'not_built', label: 'Missing' },
-          { key: 'error', label: 'Error' },
-        ].map(({ key, label }) => (
-          <span key={key} className="flex items-center gap-1">
-            <StatusDot status={key} />
+          { cls: 'bg-green-500', label: 'Up to date' },
+          { cls: 'bg-amber-500', label: 'Out of date (stale, older theme, or >30d)' },
+          { cls: 'bg-red-500', label: 'Error / never built' },
+          { cls: 'bg-blue-500', label: 'Rendering' },
+        ].map(({ cls, label }) => (
+          <span key={label} className="flex items-center gap-1">
+            <span className={cn('inline-block size-2 shrink-0 rounded-full', cls)} />
             {label}
           </span>
         ))}
@@ -316,7 +345,7 @@ export function PdfTree({
 
       {/* Cities */}
       {tree.map((city) => (
-        <CitySection key={city.citySlug} node={city} publicBase={publicBase} />
+        <CitySection key={city.citySlug} node={city} publicBase={publicBase} themeVersion={themeVersion} now={now} />
       ))}
     </div>
   );

@@ -317,6 +317,29 @@ export const HELP_ARTICLES: HelpArticle[] = [
     "html": "<h2>The pipeline</h2><ol><li>You <code>Save</code> in the admin → the change lands in the database instantly.</li><li>The website is pushed the change <strong>immediately</strong> (typically under a</li></ol><p>   minute). A nightly sweep re-pushes everything as a safety net.</p><ol><li>Snowflake-driven changes (prices, new homes, sold homes) arrive on the</li></ol><p>   sync schedule — every 4 hours — then push to the site the same way.</p><ol><li>PDF brochures regenerate automatically after content changes.</li></ol><h2>Don't want to wait for the 4-hour sync?</h2><p>Use the <strong>Sync now</strong> button at the top of the Dashboard. It runs the same<br>MarkSystems/Snowflake sync immediately (it takes a minute or so to finish), and<br>anything it pulls in pushes to the website right after. You only need this for<br><em>upstream</em> changes — your own admin edits already reach the site in moments<br>without it.</p><h2>\"My change isn't showing\" checklist</h2><ol><li><strong>Is the record <code>Live</code>?</strong> A <code>Draft</code> never appears, and <code>Coming Soon</code> shows</li></ol><p>   only the teaser page.</p><ol><li><strong>Hard-refresh</strong> the page (Cmd+Shift+R) — your browser may be showing its</li></ol><p>   own cached copy.</p><ol><li><strong>Wait one minute</strong> and refresh again — pushes are fast but not literally</li></ol><p>   instant.</p><ol><li><strong>Is the field synced (lock badge)?</strong> If you edited upstream in</li></ol><p>   MarkSystems, it appears after the next 4-hour sync. If you need it now,<br>   hit <strong>Sync now</strong> on the Dashboard, or use <code>Unlock to override</code>.</p><ol><li>Still stuck after ~10 minutes? Tell a Full Admin — they can check the sync</li></ol><p>   dashboard and re-push.</p>"
   },
   {
+    "slug": "pdf-status-indicators",
+    "title": "\"PDFs: status colors and when they were generated\"",
+    "category": "Publishing",
+    "categorySort": 60,
+    "sort": 20,
+    "summary": "What the green / orange / red dots on the PDFs page mean and how to refresh an out-of-date PDF.",
+    "keywords": [
+      "pdf",
+      "pdfs",
+      "status",
+      "color",
+      "green",
+      "orange",
+      "red",
+      "generated",
+      "stale",
+      "regenerate",
+      "last updated"
+    ],
+    "entity": null,
+    "html": "<p>The <strong>PDFs</strong> page lists every generated PDF (community brochures, floor-plan and<br>QMI spec sheets, and the city / master lists), grouped City → Community. Each row<br>shows a colored dot, the file, and <strong>when it was last generated</strong> (e.g. \"Generated<br>2d ago\", or \"Never generated\").</p><h2>What the colors mean</h2><p>The dot is a hybrid signal — it reflects both whether the PDF is current and how<br>long ago it was built. The worst-case wins:</p><ul><li>🟢 <strong>Green — up to date.</strong> Built against the current PDF theme, no errors, and</li></ul><p>  generated within the last 30 days.</p><ul><li>🟠 <strong>Orange — out of date.</strong> The PDF still exists and downloads, but it should be</li></ul><p>  refreshed because one of these is true: it's marked stale, it was built against an<br>  older theme version, or it's more than 30 days old (its data may have changed<br>  since).</p><ul><li>🔴 <strong>Red — error or never built.</strong> The last attempt to generate it failed, or it</li></ul><p>  has never been generated. There may be no downloadable file.</p><ul><li>🔵 <strong>Blue — rendering.</strong> It's being generated right now; the dot turns green/orange</li></ul><p>  shortly after.</p><h2>Refreshing a PDF</h2><ul><li>Click the <strong>↻ (Regenerate)</strong> button on any row to rebuild that single PDF on the</li></ul><p>  next request.</p><ul><li>Use <strong>Rebuild stale</strong> on a city header to refresh every out-of-date PDF in that</li></ul><p>  city at once.</p><p>A regenerated PDF returns to green once it finishes building. If it goes red after<br>a regenerate, the render is failing — see <a href=\"how-changes-reach-the-site\">How changes reach the live site</a>.</p><h2>Notes</h2><ul><li>\"Generated X ago\" is the last successful render time, not the last data change.</li></ul><p>  A green PDF can still be regenerated manually any time you want to be certain it<br>  reflects the very latest data.</p><ul><li>The <strong>Theme v…</strong> badge shows the active PDF theme version; any PDF built against an</li></ul><p>  older version is flagged orange until rebuilt.</p>"
+  },
+  {
     "slug": "update-the-mortgage-rate",
     "title": "Update the Mortgage Rate (site-wide)",
     "category": "Publishing",
