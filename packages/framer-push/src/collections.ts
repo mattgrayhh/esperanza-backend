@@ -48,6 +48,7 @@ import {
 } from './framer-types.js';
 import { markdownToHtml } from './markdown.js';
 import type { CollectionKey } from './types.js';
+import { qmiPublicSlug } from '@esperanza/db/slug';
 
 export type Row = Record<string, unknown>;
 
@@ -557,16 +558,9 @@ const qmi: CollectionDef = {
   selectAllSql: `SELECT ${QMI_PROJECTION}`,
   map(row) {
     const id = String(row['id']);
-    const recSuffix = id.length >= 11 ? id.slice(3, 11) : id.replace(/^rec/, '');
-    const baseSlug =
-      asString(row['viewer_slug']) ??
-      asString(row['seo_slug']) ??
-      asString(row['rich_slug']) ??
-      asString(row['slug']) ??
-      (asString(row['address'])
-        ? `${kebab(String(row['address']))}-${recSuffix}`
-        : id);
-    const slug = toUnderscore(baseSlug);
+    // Canonical public slug (shared with the api sitesearch index so search links
+    // never diverge from the live page URL). See @esperanza/db/slug.
+    const slug = qmiPublicSlug(row);
     const draft = !asBool(row['published']);
 
     const fpImageUrl = fpScalarUrl(row['fp_image']);

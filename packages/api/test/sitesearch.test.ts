@@ -66,7 +66,7 @@ describe('buildIndex — serializer logic', () => {
     });
   });
 
-  it('emits TWO records for a QMI — address + lot — sharing one href', () => {
+  it('emits TWO records for a QMI — address + lot — sharing one href (underscore slug)', () => {
     const out = buildIndex({
       communities: [],
       floorPlans: [],
@@ -79,8 +79,29 @@ describe('buildIndex — serializer logic', () => {
     const lot = out.find((r) => r.type === 'lot number')!;
     expect(qmi.label).toBe('1000 W Star Flower St at Rogers Coves');
     expect(lot.label).toBe('Lot 151 — Rogers Coves');
-    expect(qmi.href).toBe('/new-homes/available/1000-w-star-flower-st');
+    // QMI page slugs are dash→underscore normalized (matches the live Framer URL).
+    expect(qmi.href).toBe('/new-homes/available/1000_w_star_flower_st');
     expect(lot.href).toBe(qmi.href); // same destination, exactly like O'Neil
+  });
+
+  it('QMI href uses the live (underscored) slug + slug-column precedence', () => {
+    const out = buildIndex({
+      communities: [],
+      floorPlans: [],
+      blogs: [],
+      qmis: [
+        // dash→underscore normalization (the bug this fixes: hyphen slug → 404)
+        { id: 'q1', address: '1728 E Marquise St', community: 'Antlers Crossing', lot_number: null, slug: '1728-e-marquise-st' },
+        // viewer_slug wins over slug, and is also underscore-normalized
+        { id: 'q2', address: '7023 Cypress Springs Dr', community: 'Aquero', lot_number: null, slug: 'ignored-slug', viewer_slug: '7023-cypress-springs-dr' },
+        // address fallback when no slug columns: kebab(address)-recSuffix → underscored
+        { id: 'recABCDEFGH', address: '123 Main St', community: '', lot_number: null },
+      ],
+    });
+    const href = (addr: string) => out.find((r) => r.type === 'quick move in' && r.label.startsWith(addr))!.href;
+    expect(href('1728 E Marquise St')).toBe('/new-homes/available/1728_e_marquise_st');
+    expect(href('7023 Cypress Springs Dr')).toBe('/new-homes/available/7023_cypress_springs_dr');
+    expect(href('123 Main St')).toBe('/new-homes/available/123_main_st_ABCDEFGH');
   });
 
   it('omits the QMI " at <community>" suffix when community is blank', () => {
@@ -184,8 +205,9 @@ describe('SITESEARCH_SQL against the real public views', () => {
     expect(labels).not.toContain('Draft Post');
     expect(out.some((r) => r.href.includes('hidden-qmi'))).toBe(false);
 
-    // The one published QMI yields exactly two records (address + lot).
-    const qmiRecords = out.filter((r) => r.href === '/new-homes/available/1000-w-star-flower-st');
+    // The one published QMI yields exactly two records (address + lot), with the
+    // dash→underscore normalized slug that matches the live Framer page URL.
+    const qmiRecords = out.filter((r) => r.href === '/new-homes/available/1000_w_star_flower_st');
     expect(qmiRecords.map((r) => r.type).sort()).toEqual(['lot number', 'quick move in']);
 
     // Published community / floor plan / blog all present with correct hrefs.

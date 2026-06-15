@@ -9,6 +9,7 @@
   "exports": {
     ".": "./schema.ts",
     "./promo": "./lib/promo.ts",
+    "./slug": "./lib/slug.ts",
     "./override": "./lib/override.ts",
     "./pdf-invalidate": "./lib/pdf-invalidate.ts",
     "./pdf-ensure": "./lib/pdf-ensure.ts"
