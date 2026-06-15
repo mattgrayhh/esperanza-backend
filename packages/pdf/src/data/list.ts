@@ -21,6 +21,12 @@ export interface QmiCardData {
   promo: ResolvedPromo | null;
 }
 
+/** A product-type section in the floor-plan list (e.g. "Single Family", "Villa"). */
+export interface PlanSection {
+  title: string;
+  cards: PlanCardData[];
+}
+
 export interface ListData {
   citySlug: string;
   cityName: string;
@@ -29,6 +35,8 @@ export interface ListData {
   cards: PlanCardData[];   // locations / plans
   qmis: QmiCardData[];     // qmis
   templateBgUrl?: string;  // branded full-page template artwork (qmis grid renders over it)
+  sections?: PlanSection[]; // plans grouped by product type (marketing "Floor Plan List" layout)
+  listBandTitle?: string;   // green header band title for the plans layout
 }
 
 // The Quick Move-In Homes one-pager artwork (logo + contact + green band header, website +
@@ -37,6 +45,44 @@ const QMI_TEMPLATE_PNG = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/pd
 
 const num = (v: unknown): number | null => (v == null || v === '' ? null : Number(v));
 const str = (v: unknown): string => (v == null ? '' : String(v));
+
+// ── Floor-plan product types ─────────────────────────────────────────────────
+// The marketing "Floor Plan List" PDF groups plans by PRODUCT TYPE (Single Family,
+// Villa, RV Living, Courtyard Home). D1's `collection` field is the price-tier
+// collection (Haven/Hearth/Villas/…), not the product type, so we derive the type
+// from collection + a small curated override that mirrors the live PDF exactly:
+//   • Retama Collection            → RV Living  (1:1 with the live PDF)
+//   • Capistrano, Cimarron         → Courtyard Home
+//   • Villas Collection            → Villa      (except Allegrini, sold as Single Family)
+//   • everything else              → Single Family
+const PLAN_SECTION_ORDER = ['Single Family', 'Villa', 'RV Living', 'Courtyard Home'] as const;
+const COURTYARD_PLANS = new Set(['Capistrano', 'Cimarron']);
+const VILLA_COLLECTION_AS_SINGLE_FAMILY = new Set(['Allegrini']);
+
+export function productTypeOf(name: string, collection: string): string {
+  if (collection === 'Retama Collection') return 'RV Living';
+  if (COURTYARD_PLANS.has(name)) return 'Courtyard Home';
+  if (collection === 'Villas Collection' && !VILLA_COLLECTION_AS_SINGLE_FAMILY.has(name)) return 'Villa';
+  return 'Single Family';
+}
+
+/** Group plan cards into the ordered product-type sections, alphabetical within each. */
+export function sectionizePlans(cards: PlanCardData[]): PlanSection[] {
+  const byType = new Map<string, PlanCardData[]>();
+  for (const c of cards) {
+    const t = c.productType || 'Single Family';
+    (byType.get(t) ?? byType.set(t, []).get(t)!).push(c);
+  }
+  const order = [...PLAN_SECTION_ORDER, ...[...byType.keys()].filter((t) => !PLAN_SECTION_ORDER.includes(t as any))];
+  const sections: PlanSection[] = [];
+  for (const title of order) {
+    const list = byType.get(title);
+    if (!list || list.length === 0) continue;
+    list.sort((a, b) => a.name.localeCompare(b.name));
+    sections.push({ title, cards: list });
+  }
+  return sections;
+}
 
 export type ListScope = 'city' | 'community';
 
@@ -50,9 +96,9 @@ export async function loadListData(
   // Card images go through the worker's /img resizer (Cloudflare Image Resizing) on the
   // ORIGINAL image — reliable (originals always exist; w600 renditions are incomplete) and
   // small (Chrome re-encodes embedded images, so source pixel size is the file-size lever).
-  const cardImage = (src: string): string => {
+  const cardImage = (src: string, w = 300): string => {
     if (!src) return '';
-    return imgProxyBase ? `${imgProxyBase.replace(/\/$/, '')}/img?w=300&u=${encodeURIComponent(src)}` : src;
+    return imgProxyBase ? `${imgProxyBase.replace(/\/$/, '')}/img?w=${w}&u=${encodeURIComponent(src)}` : src;
   };
   const isCommunity = scope === 'community';
   const isMaster = !isCommunity && scopeSlug === 'all';
@@ -132,19 +178,44 @@ export async function loadListData(
     // Community "Plan List" = every published floor plan offered in this community.
     // floor_plans.community_ids is a CSV of community rec-ids (migration 0016) — the same
     // linkage the Framer community page filters on with `community_ids Contains {id}`.
-    rows = ((await db.prepare(`SELECT fp.id, fp.name, fp.image_url img, COALESCE(fp.override_starting_price, fp.synced_starting_price) price, COALESCE(fp.override_total_square_footage, fp.synced_total_square_footage) sqft, COALESCE(fp.override_bedroom_max, fp.synced_bedroom_max) beds, COALESCE(fp.override_bathroom_max, fp.synced_bathroom_max) baths, fp.car_garage_count garage, fp.stories_count stories FROM floor_plans fp WHERE fp.published=1 AND (','||COALESCE(fp.community_ids,'')||',') LIKE '%,'||?||',%' ORDER BY fp.name`).bind(cityId).all<any>()).results) ?? [];
+    rows = ((await db.prepare(`SELECT ${PLAN_COLS} AND (','||COALESCE(fp.community_ids,'')||',') LIKE '%,'||?||',%' ORDER BY fp.name`).bind(cityId).all<any>()).results) ?? [];
   } else {
     rows = isMaster
-      ? ((await db.prepare(`SELECT fp.id, fp.name, fp.image_url img, COALESCE(fp.override_starting_price, fp.synced_starting_price) price, COALESCE(fp.override_total_square_footage, fp.synced_total_square_footage) sqft, COALESCE(fp.override_bedroom_max, fp.synced_bedroom_max) beds, COALESCE(fp.override_bathroom_max, fp.synced_bathroom_max) baths, fp.car_garage_count garage, fp.stories_count stories FROM floor_plans fp WHERE fp.published=1 ORDER BY fp.name`).all<any>()).results) ?? []
-      : ((await db.prepare(`SELECT DISTINCT fp.id, fp.name, fp.image_url img, COALESCE(fp.override_starting_price, fp.synced_starting_price) price, COALESCE(fp.override_total_square_footage, fp.synced_total_square_footage) sqft, COALESCE(fp.override_bedroom_max, fp.synced_bedroom_max) beds, COALESCE(fp.override_bathroom_max, fp.synced_bathroom_max) baths, fp.car_garage_count garage, fp.stories_count stories FROM floor_plans fp JOIN qmi q ON q.synced_floor_plan_id=fp.id WHERE COALESCE(q.override_city_id,q.synced_city_id)=? AND fp.published=1`).bind(cityId).all<any>()).results) ?? [];
+      ? ((await db.prepare(`SELECT ${PLAN_COLS} ORDER BY fp.name`).all<any>()).results) ?? []
+      : ((await db.prepare(`SELECT DISTINCT ${PLAN_COLS} AND fp.id IN (SELECT q.synced_floor_plan_id FROM qmi q WHERE COALESCE(q.override_city_id,q.synced_city_id)=?)`).bind(cityId).all<any>()).results) ?? [];
   }
-  const cards: PlanCardData[] = rows.map((r) => ({
-    id: String(r.id), name: String(r.name ?? ''), price: num(r.price), sqft: num(r.sqft),
-    beds: num(r.beds), baths: num(r.baths), garage: num(r.garage), stories: num(r.stories),
-    imageUrl: renditionUrl(String(r.img ?? ''), 'w600'),
-  }));
+  const cards: PlanCardData[] = rows.map((r) => {
+    const bmin = num(r.bmin), bmax = num(r.bmax), bamin = num(r.bamin), bamax = num(r.bamax);
+    return {
+      id: String(r.id), name: String(r.name ?? ''), price: num(r.price), sqft: num(r.sqft),
+      beds: bmax ?? bmin, baths: bamax ?? bamin, garage: num(r.garage), stories: num(r.stories),
+      bedsMin: bmin, bedsMax: bmax, bathsMin: bamin, bathsMax: bamax,
+      productType: productTypeOf(String(r.name ?? ''), str(r.collection)),
+      // Plan elevations go through the /img resizer on the ORIGINAL (originals always exist;
+      // w600 renditions are incomplete and 404 for some plans). Locations keep the rendition.
+      imageUrl: kind === 'plans' ? cardImage(String(r.img ?? ''), 480) : renditionUrl(String(r.img ?? ''), 'w600'),
+    };
+  });
+  // The plans list is laid out as the marketing "Floor Plan List": product-type sections
+  // (Single Family / Villa / RV Living / Courtyard Home), no prices, bed/bath ranges.
+  if (kind === 'plans') {
+    return { citySlug, cityName, kind, isMaster, cards, qmis: [], sections: sectionizePlans(cards), listBandTitle: 'Floor Plan List' };
+  }
   return { citySlug, cityName, kind, isMaster, cards, qmis: [] };
 }
+
+// Shared SELECT list for every floor-plan query (master / per-city / per-community). The
+// trailing `WHERE fp.published=1` lets each caller append further AND-clauses.
+const PLAN_COLS =
+  `fp.id, fp.name, fp.image_url img, fp.collection collection,
+   COALESCE(fp.override_starting_price, fp.synced_starting_price) price,
+   COALESCE(fp.override_total_square_footage, fp.synced_total_square_footage) sqft,
+   COALESCE(fp.override_bedroom_min, fp.synced_bedroom_min) bmin,
+   COALESCE(fp.override_bedroom_max, fp.synced_bedroom_max) bmax,
+   COALESCE(fp.override_bathroom_min, fp.synced_bathroom_min) bamin,
+   COALESCE(fp.override_bathroom_max, fp.synced_bathroom_max) bamax,
+   fp.car_garage_count garage, fp.stories_count stories
+   FROM floor_plans fp WHERE fp.published=1`;
 
 // ---------------------------------------------------------------------------
 // Filtered, on-demand lists — the "download the currently-filtered results"
@@ -175,9 +246,9 @@ export async function loadFilteredListData(
   f: ListFilters,
   imgProxyBase?: string,
 ): Promise<ListData> {
-  const cardImage = (src: string): string => {
+  const cardImage = (src: string, w = 300): string => {
     if (!src) return '';
-    return imgProxyBase ? `${imgProxyBase.replace(/\/$/, '')}/img?w=300&u=${encodeURIComponent(src)}` : src;
+    return imgProxyBase ? `${imgProxyBase.replace(/\/$/, '')}/img?w=${w}&u=${encodeURIComponent(src)}` : src;
   };
 
   if (kind === 'qmis') {

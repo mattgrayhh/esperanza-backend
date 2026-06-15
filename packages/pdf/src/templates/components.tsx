@@ -39,6 +39,9 @@ export function SectionLabel({ children }: { children: React.ReactNode }) {
 export interface PlanCardData {
   id: string; name: string; beds: number | null; baths: number | null; garage: number | null;
   stories: number | null; sqft: number | null; price: number | null; imageUrl: string;
+  // Floor-plan list extras (marketing "Floor Plan List" layout): bed/bath ranges + product type.
+  bedsMin?: number | null; bedsMax?: number | null; bathsMin?: number | null; bathsMax?: number | null;
+  productType?: string;
 }
 export function FloorPlanCard({ plan }: { plan: PlanCardData }) {
   return (
@@ -96,8 +99,14 @@ export function EqualHousingMark() {
   );
 }
 
-/** Header for the Quick Move-In Homes list: logo · contact lines · green title band. */
-export function QmiListHeader({ theme }: { theme: Theme }) {
+/** Marketing one-pager header: logo · contact lines · green title band.
+ *  `title` sets the band text ("Quick Move-In Homes", "Floor Plan List", …).
+ *  Contact phone is shown in the brand's hyphenated form (956-275-8069). */
+function fmtPhone(raw: string): string {
+  const d = (raw || '').replace(/\D/g, '');
+  return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}` : raw;
+}
+export function QmiListHeader({ theme, title = 'Quick Move-In Homes' }: { theme: Theme; title?: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
       <div style={{ width: '28%', display: 'flex', alignItems: 'center' }}>
@@ -106,12 +115,53 @@ export function QmiListHeader({ theme }: { theme: Theme }) {
           : <span style={{ fontFamily: 'var(--pdf-font-heading)', color: 'var(--pdf-primary)', fontSize: 30, fontWeight: 700 }}>Esperanza</span>}
       </div>
       <div style={{ flex: 1 }}>
-        <div style={{ textAlign: 'center', fontWeight: 700, color: 'var(--pdf-primary)', fontSize: 12.5, lineHeight: 1.35, marginBottom: 8 }}>
-          Call or Text {theme.footer.phone} or<br />Visit our Sales Office Monday - Sunday for more info!
+        <div style={{ textAlign: 'center', fontWeight: 700, color: '#222', fontSize: 12.5, lineHeight: 1.35, marginBottom: 8 }}>
+          Call or Text {fmtPhone(theme.footer.phone)} or<br />Visit our Sales Office Monday - Sunday for more info!
         </div>
         <div className="pdf-band" style={{ padding: '12px', textAlign: 'center', borderRadius: 2, fontFamily: 'var(--pdf-font-heading)', fontSize: 24 }}>
-          Quick Move-In Homes
+          {title}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Left-aligned product-type heading with an underline rule (e.g. "Single Family"). */
+export function PlanSectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ fontFamily: 'var(--pdf-font-body)', fontWeight: 700, fontSize: 19, color: '#1a1a1a',
+      margin: '12px 0 0', paddingBottom: 7, borderBottom: '1px solid #2a2a2a' }}>
+      {children}
+    </div>
+  );
+}
+
+/** Format a bed/bath value range: "3 Bed", "3 - 4 Bed", "2.5 Bath", "2.5 - 4 Bath". */
+function rangeLabel(min: number | null | undefined, max: number | null | undefined, unit: string): string | null {
+  const lo = min ?? max, hi = max ?? min;
+  if (lo == null || hi == null) return null;
+  return lo === hi ? `${lo} ${unit}` : `${lo} - ${hi} ${unit}`;
+}
+
+/** One floor-plan card for the marketing "Floor Plan List": landscape elevation, plan name,
+ *  bed/garage/bath ranges and stories/sq.ft. — bullet-separated, no price. */
+export function ProductPlanCard({ plan }: { plan: PlanCardData }) {
+  const beds = rangeLabel(plan.bedsMin ?? plan.beds, plan.bedsMax ?? plan.beds, 'Bed');
+  const baths = rangeLabel(plan.bathsMin ?? plan.baths, plan.bathsMax ?? plan.baths, 'Bath');
+  const garage = plan.garage ? `${plan.garage} Car Garage` : null;
+  const line1 = [beds, garage, baths].filter(Boolean).join(' • ');
+  const line2 = [
+    plan.stories != null && `${plan.stories} ${plan.stories === 1 ? 'Story' : 'Stories'}`,
+    plan.sqft && `${plan.sqft.toLocaleString('en-US')} Sq. Ft.`,
+  ].filter(Boolean).join(' • ');
+  return (
+    <div style={{ textAlign: 'center', breakInside: 'avoid' }}>
+      <div style={{ height: 118, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        {plan.imageUrl ? <img src={plan.imageUrl} alt={plan.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : null}
+      </div>
+      <div style={{ fontFamily: 'var(--pdf-font-heading)', fontSize: 18, fontWeight: 600, color: 'var(--pdf-primary)', marginTop: 4 }}>{plan.name}</div>
+      <div style={{ fontSize: 9.5, color: '#222', lineHeight: 1.45, marginTop: 1 }}>
+        {line1}<br />{line2}
       </div>
     </div>
   );

@@ -1,13 +1,15 @@
 import type { Theme } from '../theme';
-import type { ListData, QmiCardData } from '../data/list';
-import { CoverBand, Footer, FloorPlanCard, QmiCard } from './components';
+import type { ListData, QmiCardData, PlanSection } from '../data/list';
+import type { PlanCardData } from './components';
+import { CoverBand, Footer, FloorPlanCard, QmiCard, QmiListHeader, BrandFooter, ProductPlanCard, PlanSectionTitle } from './components';
 
 const PER_PAGE = 9;
+const PLANS_PER_PAGE = 12;        // marketing "Floor Plan List" grid is 3 × 4
 const TITLES = { locations: 'Locations', qmis: 'Quick Move-In Homes', plans: 'Floor Plans' } as const;
 
-function paginate<T>(items: T[]): T[][] {
+function paginate<T>(items: T[], perPage = PER_PAGE): T[][] {
   const pages: T[][] = [];
-  for (let i = 0; i < items.length; i += PER_PAGE) pages.push(items.slice(i, i + PER_PAGE));
+  for (let i = 0; i < items.length; i += perPage) pages.push(items.slice(i, i + perPage));
   if (pages.length === 0) pages.push([]);
   return pages;
 }
@@ -44,7 +46,39 @@ export function ListBrochure({ theme, data }: { theme: Theme; data: ListData }) 
     );
   }
 
-  // locations / plans — existing styling.
+  // Floor Plans — the marketing "Floor Plan List": product-type sections, each starting on a
+  // fresh page, 3 × 4 grid, branded header band + brand footer (no prices).
+  if (data.kind === 'plans' && data.sections) {
+    // Flatten sections into pages; a section never shares a page with another section.
+    const pageList: { title: string; cards: PlanCardData[] }[] = [];
+    for (const section of data.sections as PlanSection[]) {
+      for (const chunk of paginate(section.cards, PLANS_PER_PAGE)) {
+        pageList.push({ title: section.title, cards: chunk });
+      }
+    }
+    if (pageList.length === 0) pageList.push({ title: '', cards: [] });
+    return (
+      <div>
+        {pageList.map((pg, pi) => (
+          <div key={pi} style={{ display: 'flex', flexDirection: 'column', minHeight: '9.85in', ...(pi < pageList.length - 1 ? { breakAfter: 'page' } : {}) }}>
+            <QmiListHeader theme={theme} title={data.listBandTitle || 'Floor Plan List'} />
+            <PlanSectionTitle>{pg.title}</PlanSectionTitle>
+            <div style={{ flex: 1 }}>
+              {/* Flex-wrap + centered so a partial final row centers like the marketing PDF. */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', columnGap: '4%', rowGap: 16, marginTop: 14 }}>
+                {pg.cards.map((c) => (
+                  <div key={c.id} style={{ width: '30%' }}><ProductPlanCard plan={c} /></div>
+                ))}
+              </div>
+            </div>
+            <BrandFooter theme={theme} disclaimer={theme.disclaimers.list} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // locations — existing styling.
   const pages = paginate(data.cards);
   return (
     <div>
