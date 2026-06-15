@@ -487,6 +487,11 @@ const floorPlans: CollectionDef = {
       communities: sIf(row['communities']),
       community_count: nIf(row['community_count']),
       community_ids: sIf(row['community_ids']),
+      // The plan's OWN rec-ID as a string, mirroring communities.community_id. Framer's
+      // filter value-picker binds CMS *fields* (not an item's internal id), so the Floor
+      // Plan page needs this to bind as the needle in the Available-Locations Communities
+      // filter: `Community.floor_plan_ids Contains {floor_plan_id}` (reciprocal of #42).
+      floor_plan_id: str(id),
       photo_gallery: galIf(photo),
       elevation_renderings: sIf(row['elevation_renderings']),
       elevation_gallery: galIf(elevGallery),

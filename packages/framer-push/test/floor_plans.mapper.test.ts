@@ -98,6 +98,25 @@ describe('Floor Plans mapper — community_ids (migration 0016)', () => {
   });
 });
 
+describe('Floor Plans mapper — floor_plan_id self-id (needle for Available Locations)', () => {
+  it('emits floor_plan_id as the plan\'s own rec-ID string (mirrors communities.community_id)', () => {
+    const db = freshDb();
+    insertRow(db, 'floor_plans', {
+      id: 'recZsLzAeAnXF7Kks',
+      name: 'Blanco',
+      slug: 'blanco',
+      published: 1,
+    });
+    const item = mapOne(db, 'recZsLzAeAnXF7Kks');
+    expect(item.fieldData['floor_plan_id']).toEqual({
+      type: 'string',
+      value: 'recZsLzAeAnXF7Kks',
+    });
+    // Always equals the upsert key (item.id) so it stays correct without a column.
+    expect(sval(item.fieldData['floor_plan_id'] as never)).toBe(item.id);
+  });
+});
+
 describe('Floor Plans mapper — interior_photos (migration 0011)', () => {
   const G1 = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFP4/gallery-0-kitchen.jpg';
   const G2 = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFP4/gallery-1-living.jpg';
