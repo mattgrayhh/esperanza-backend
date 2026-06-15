@@ -15,7 +15,14 @@
 // This module is intentionally self-contained (no imports from index.ts) so it
 // can evolve independently of the main serializer file. index.ts wires it in
 // with a single `case 'sitesearch'` (see docs/sitesearch-clone-design.md).
+//
+// QMI hrefs MUST use the same public slug framer-push pushes to Framer (dashes
+// normalized to underscores, with the viewer/seo/rich/slug precedence), so the
+// QMI slug is derived via the shared `qmiPublicSlug` rather than the raw `slug`
+// column — otherwise every QMI/lot-number result 404s.
 // =============================================================================
+
+import { qmiPublicSlug } from '@esperanza/db/slug';
 
 export type SiteSearchType =
   | 'community'
@@ -52,14 +59,25 @@ export const DEFAULT_BASE_URLS: BaseUrls = {
 export const SITESEARCH_SQL = {
   communities: 'SELECT name, slug FROM v_public_communities',
   floorPlans: 'SELECT name, slug FROM v_public_floor_plans',
-  qmis: 'SELECT address, community, lot_number, slug FROM v_public_qmi',
+  // id + all slug-source columns so the QMI href matches the live Framer page
+  // slug exactly (see qmiPublicSlug). The raw `slug` alone is dash-cased and 404s.
+  qmis: 'SELECT id, address, community, lot_number, slug, seo_slug, rich_slug, viewer_slug FROM v_public_qmi',
   blogs: 'SELECT title, slug FROM v_public_blogs',
 } as const;
 
 interface RawRows {
   communities: ReadonlyArray<{ name?: unknown; slug?: unknown }>;
   floorPlans: ReadonlyArray<{ name?: unknown; slug?: unknown }>;
-  qmis: ReadonlyArray<{ address?: unknown; community?: unknown; lot_number?: unknown; slug?: unknown }>;
+  qmis: ReadonlyArray<{
+    id?: unknown;
+    address?: unknown;
+    community?: unknown;
+    lot_number?: unknown;
+    slug?: unknown;
+    seo_slug?: unknown;
+    rich_slug?: unknown;
+    viewer_slug?: unknown;
+  }>;
   blogs: ReadonlyArray<{ title?: unknown; slug?: unknown }>;
 }
 
@@ -87,7 +105,7 @@ export function buildIndex(rows: RawRows, base: BaseUrls = DEFAULT_BASE_URLS): S
   }
 
   for (const q of rows.qmis) {
-    const slug = str(q.slug);
+    const slug = qmiPublicSlug(q);
     if (!slug) continue;
     const href = joinUrl(base.qmi, slug);
     const community = str(q.community);
