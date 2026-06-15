@@ -12,28 +12,41 @@ function db() {
   readdirSync(join(DB, 'migrations')).filter(f => f.endsWith('.sql')).sort().forEach(f => d.exec(readFileSync(join(DB, 'migrations', f), 'utf8')));
   d.exec(readFileSync(join(DB, 'views.sql'), 'utf8'));
   d.exec(`INSERT INTO cities (id,slug,city_name) VALUES ('ci1','mcallen','McAllen')`);
-  d.exec(`INSERT INTO communities (id,name,slug,city_id,published) VALUES ('c1','Anaqua','anaqua','ci1',1)`);
+  // Sellable community (has price + sqft range) → appears in the Communities table.
+  d.exec(`INSERT INTO communities (id,name,slug,city_id,published,synced_price_from,synced_square_footage_range,synced_bed_count,synced_bath_count,featured_image_url)
+          VALUES ('c1','Anaqua','anaqua','ci1',1,313990,'1,633 - 3,037','3 - 6','2 - 4','https://x/anaqua')`);
+  // Master-planned shell (price 0, no sqft range) → excluded.
+  d.exec(`INSERT INTO communities (id,name,slug,city_id,published,synced_price_from) VALUES ('c2','Shell','shell','ci1',1,0)`);
   return d1FromSqlite(d);
 }
 
 describe('loadListData', () => {
-  it('locations list = published communities in the city', async () => {
+  it('locations = the Communities table for the city, with computed columns', async () => {
     const data = await loadListData(db(), 'mcallen', 'locations');
-    expect(data?.cityName).toBe('McAllen');
-    expect(data?.cards.map((c) => c.name)).toContain('Anaqua');
+    expect(data?.kind).toBe('locations');
+    const anaqua = data?.communities.find((c) => c.name === 'Anaqua');
+    expect(anaqua).toBeTruthy();
+    expect(anaqua?.city).toBe('McAllen, TX');
+    expect(anaqua?.sqft).toBe('1,633 - 3,037');
+    expect(anaqua?.beds).toBe('3 - 6');
+    expect(anaqua?.price).toBe('From $313,990'); // no floor plans → single "From" price
+    expect(data?.communities.map((c) => c.name)).not.toContain('Shell'); // shell excluded
   });
   it('returns null for an unknown city', async () => {
     expect(await loadListData(db(), 'nope', 'locations')).toBeNull();
   });
-  it('master locations (city="all") = every published community across cities', async () => {
+  it('master locations (city="all") = every published, sellable community across cities', async () => {
     const raw = new Database(':memory:');
     readdirSync(join(DB, 'migrations')).filter(f => f.endsWith('.sql')).sort().forEach(f => raw.exec(readFileSync(join(DB, 'migrations', f), 'utf8')));
     raw.exec(readFileSync(join(DB, 'views.sql'), 'utf8'));
     raw.exec(`INSERT INTO cities (id,slug,city_name) VALUES ('ci1','mcallen','McAllen'),('ci2','laredo','Laredo')`);
-    raw.exec(`INSERT INTO communities (id,name,slug,city_id,published) VALUES ('c1','Anaqua','anaqua','ci1',1),('c2','Wolf Creek','wolf-creek','ci2',1),('c3','Hidden','hidden','ci1',0)`);
+    raw.exec(`INSERT INTO communities (id,name,slug,city_id,published,synced_price_from,synced_square_footage_range) VALUES
+      ('c1','Anaqua','anaqua','ci1',1,313990,'1,633 - 3,037'),
+      ('c2','Wolf Creek','wolf-creek','ci2',1,207990,'1,148 - 1,415'),
+      ('c3','Hidden','hidden','ci1',0,250000,'1,000 - 2,000')`);
     const data = await loadListData(d1FromSqlite(raw), 'all', 'locations');
     expect(data?.isMaster).toBe(true);
-    const names = data?.cards.map((c) => c.name) ?? [];
+    const names = data?.communities.map((c) => c.name) ?? [];
     expect(names).toContain('Anaqua');
     expect(names).toContain('Wolf Creek');
     expect(names).not.toContain('Hidden'); // unpublished excluded
