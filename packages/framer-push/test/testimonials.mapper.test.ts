@@ -37,7 +37,11 @@ describe('Testimonials mapper — community_ids (single community rec-ID)', () =
     });
   });
 
-  it('drops community_ids when the testimonial has no linked community', () => {
+  it('emits an explicit empty community_ids when the testimonial has no linked community', () => {
+    // String fields mirror D1 exactly: an absent/cleared community_id emits str('') (not
+    // dropped) so a community→testimonials "Contains" filter sees an empty value rather than
+    // the stale prior id — addItems MERGES, so a dropped field keeps its previous live value.
+    // Same clear-propagation posture as floor_plans.community_ids.
     const db = freshDb();
     insertRow(db, 'testimonials', {
       id: 'recTSTnocomm002',
@@ -45,6 +49,6 @@ describe('Testimonials mapper — community_ids (single community rec-ID)', () =
       status: 'Live',
     });
     const item = mapOne(db, 'recTSTnocomm002');
-    expect(item.fieldData['community_ids']).toBeUndefined();
+    expect(item.fieldData['community_ids']).toEqual({ type: 'string', value: '' });
   });
 });
