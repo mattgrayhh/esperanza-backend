@@ -44,7 +44,8 @@ export type Widget =
   | 'hoaLinks'
   | 'promoScopeTag'
   | 'communityFloorPlans'
-  | 'imageGallery';
+  | 'imageGallery'
+  | 'elevationGallery';
 
 export type Bucket = 'synced' | 'override' | 'admin' | 'publish' | 'target' | 'system';
 
@@ -493,7 +494,7 @@ const floor_plans: EntityFieldConfig = {
     // ingest (static data), so they're operator-editable here. Each maps to its own live
     // Framer field (photo_gallery / elevation_gallery), not the interior_photos set.
     { field: 'photo_gallery', label: 'Photo Gallery', widget: 'imageGallery', bucket: 'admin', help: 'Exterior / listing photos for this plan (synced from the original catalog). Shown as the plan’s photo gallery.' },
-    { field: 'elevation_gallery', label: 'Elevation Gallery', widget: 'imageGallery', bucket: 'admin', help: 'Elevation renderings (brick / stucco / stone variants) for this plan.' },
+    { field: 'elevation_gallery', label: 'Elevation Gallery', widget: 'elevationGallery', bucket: 'admin', help: 'Elevation renderings for this plan. The elevation type (Tuscan Brick, Farmhouse…) is auto-detected from each filename — edit it per image with the dropdown. Drives the labeled elevation grid on the live plan page.' },
     { field: 'description', label: 'Description (md)', widget: 'richtext', bucket: 'admin' },
     { field: 'plan_viewer_url', label: 'Plan Viewer URL', widget: 'text', bucket: 'admin' },
     { field: 'virtual_tour_url', label: 'Virtual Tour URL', widget: 'text', bucket: 'admin' },

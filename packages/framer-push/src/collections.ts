@@ -210,6 +210,33 @@ export function galleryUrls(raw: unknown): string[] {
   return out;
 }
 
+/**
+ * Build the `elevations_json` string field from `elevation_gallery`: a JSON array of
+ * { url, type } so the live plan page can render a labeled elevation grid. The admin
+ * stores the elevation type per image (auto-derived from the filename, editable); we
+ * emit it verbatim (empty string when unset). Accepts the {url,type}, legacy
+ * {url,filename}, and bare-string array shapes. Returns undefined when empty so the
+ * field is omitted rather than emitted blank.
+ */
+export function elevationsJson(raw: unknown): string | undefined {
+  if (raw == null || raw === '') return undefined;
+  const arr = parseJsonArray(raw);
+  const out: { url: string; type: string }[] = [];
+  for (const item of arr) {
+    if (typeof item === 'string') {
+      const u = item.trim();
+      if (u) out.push({ url: u, type: '' });
+    } else if (item && typeof item === 'object') {
+      const rec = item as Record<string, unknown>;
+      const u = typeof rec['url'] === 'string' ? rec['url'].trim() : '';
+      if (!u) continue;
+      const t = typeof rec['type'] === 'string' ? rec['type'].trim() : '';
+      out.push({ url: u, type: t });
+    }
+  }
+  return out.length ? JSON.stringify(out) : undefined;
+}
+
 /** Newline-join a list of urls (the *_urls string-field shape). */
 export function joinUrls(urls: string[]): string | undefined {
   return urls.length ? urls.join('\n') : undefined;
@@ -495,6 +522,8 @@ const floorPlans: CollectionDef = {
       photo_gallery: galIf(photo),
       elevation_renderings: sIf(row['elevation_renderings']),
       elevation_gallery: galIf(elevGallery),
+      // Labeled elevations ([{url,type}] JSON) for the captioned grid on the plan page.
+      elevations_json: sIf(elevationsJson(row['elevation_gallery'])),
       additional_images: sIf(row['additional_images']),
       additional_images_gallery: galIf(addl),
       // 0011: admin-owned interior room photos (interior_photos_json {url,alt} array).

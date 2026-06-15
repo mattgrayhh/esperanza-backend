@@ -31,6 +31,7 @@ import { SyncedOverrideField } from './fields/SyncedOverrideField';
 import { PublishedToggle } from './fields/PublishedToggle';
 import { HoaLinksEditor } from './fields/HoaLinksEditor';
 import { ImageGalleryEditor } from './fields/ImageGalleryEditor';
+import { ElevationGalleryEditor } from './fields/ElevationGalleryEditor';
 import { JsonBlocksEditor } from './fields/JsonBlocksEditor';
 import { PromoScopeTagPicker } from './fields/PromoScopeTagPicker';
 import { CommunityFloorPlansPicker } from './fields/CommunityFloorPlansPicker';
@@ -89,6 +90,14 @@ export type FieldView =
       field: string;
       label: string;
       value: string; // serialized JSON array of URLs
+      help?: string;
+      group?: string;
+    }
+  | {
+      kind: 'elevationGallery';
+      field: string;
+      label: string;
+      value: string; // serialized JSON array of { url, type }
       help?: string;
       group?: string;
     }
@@ -299,6 +308,20 @@ export function EntityEditForm({
                       return (
                         <div key={f.field} className="col-span-1 sm:col-span-2">
                           <ImageGalleryEditor
+                            entity={segment}
+                            id={id}
+                            field={f.field}
+                            label={f.label}
+                            initialValue={f.value}
+                            help={f.help}
+                          />
+                        </div>
+                      );
+                    }
+                    if (f.kind === 'elevationGallery') {
+                      return (
+                        <div key={f.field} className="col-span-1 sm:col-span-2">
+                          <ElevationGalleryEditor
                             entity={segment}
                             id={id}
                             field={f.field}

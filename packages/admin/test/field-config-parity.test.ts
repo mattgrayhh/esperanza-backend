@@ -105,6 +105,8 @@ function widgetToType(f: FieldConfig): string {
       return 'communityFloorPlans';
     case 'imageGallery':
       return 'imageGallery';
+    case 'elevationGallery':
+      return 'elevationGallery';
   }
 }
 

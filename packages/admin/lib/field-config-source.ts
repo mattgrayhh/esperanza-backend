@@ -93,6 +93,8 @@ function typeToWidget(type: string): Widget {
       return 'communityFloorPlans';
     case 'imageGallery':
       return 'imageGallery';
+    case 'elevationGallery':
+      return 'elevationGallery';
     default:
       return 'text';
   }
