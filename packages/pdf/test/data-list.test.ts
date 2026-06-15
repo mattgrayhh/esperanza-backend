@@ -3,7 +3,8 @@ import Database from 'better-sqlite3';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { d1FromSqlite } from './_d1adapter';
-import { loadListData, loadFilteredListData } from '../src/data/list';
+import { loadListData, loadFilteredListData, productTypeOf, sectionizePlans } from '../src/data/list';
+import type { PlanCardData } from '../src/templates/components';
 
 const DB = join(__dirname, '../../db');
 function db() {
@@ -127,5 +128,33 @@ describe('loadFilteredListData', () => {
     expect(names).toContain('Hickory');
     expect(names).not.toContain('Oak');   // 3bd
     expect(names).not.toContain('Birch'); // wrong collection
+  });
+});
+
+describe('floor-plan product-type grouping', () => {
+  it('derives product type from collection + curated overrides (mirrors the live PDF)', () => {
+    expect(productTypeOf('Barbados', 'Retama Collection')).toBe('RV Living');
+    expect(productTypeOf('Capistrano', 'Homestead Collection')).toBe('Courtyard Home');
+    expect(productTypeOf('Cimarron', 'Homestead Collection')).toBe('Courtyard Home');
+    expect(productTypeOf('Antinori', 'Villas Collection')).toBe('Villa');
+    expect(productTypeOf('Allegrini', 'Villas Collection')).toBe('Single Family'); // sold as SF
+    expect(productTypeOf('Acuna II', 'Haven Collection')).toBe('Single Family');
+    expect(productTypeOf('Santa Cruz', '')).toBe('Single Family');                 // null collection
+  });
+
+  it('orders sections and sorts plans alphabetically within each', () => {
+    const card = (name: string, productType: string): PlanCardData => ({
+      id: name, name, productType, price: null, sqft: null, beds: null, baths: null,
+      garage: null, stories: null, imageUrl: '',
+    });
+    const sections = sectionizePlans([
+      card('Cimarron', 'Courtyard Home'),
+      card('Antinori', 'Villa'),
+      card('Bear', 'Single Family'),
+      card('Acuna II', 'Single Family'),
+      card('Barbados', 'RV Living'),
+    ]);
+    expect(sections.map((s) => s.title)).toEqual(['Single Family', 'Villa', 'RV Living', 'Courtyard Home']);
+    expect(sections[0]!.cards.map((c) => c.name)).toEqual(['Acuna II', 'Bear']); // alphabetical
   });
 });
