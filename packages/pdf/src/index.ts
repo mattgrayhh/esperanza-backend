@@ -76,9 +76,16 @@ export default {
       const u = url.searchParams.get('u');
       if (!u) return new Response('missing u', { status: 400 });
       const w = Math.min(2000, Math.max(40, Number(url.searchParams.get('w') || '300')));
-      const upstream = await fetch(u, {
+      const fetchImg = (src: string) => fetch(src, {
         cf: { image: { width: w, quality: 72, fit: 'scale-down', format: 'auto' }, cacheTtl: 86400, cacheEverything: true },
       } as any);
+      let upstream = await fetchImg(u);
+      // Renditions (…-w600.jpg) are incomplete — some plans only have the original. When the
+      // requested rendition 404s, retry the original (suffix stripped) so the image still loads.
+      if (!upstream.ok) {
+        const original = u.replace(/-(w600|w1200|w2000)(\.[a-z0-9]+)?($|\?)/i, '$2$3');
+        if (original !== u) upstream = await fetchImg(original);
+      }
       if (!upstream.ok) return new Response('img fetch failed', { status: 502 });
       const h = new Headers();
       h.set('content-type', upstream.headers.get('content-type') || 'image/jpeg');

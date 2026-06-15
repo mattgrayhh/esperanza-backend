@@ -191,9 +191,10 @@ export async function loadListData(
       beds: bmax ?? bmin, baths: bamax ?? bamin, garage: num(r.garage), stories: num(r.stories),
       bedsMin: bmin, bedsMax: bmax, bathsMin: bamin, bathsMax: bamax,
       productType: productTypeOf(String(r.name ?? ''), str(r.collection)),
-      // Plan elevations go through the /img resizer on the ORIGINAL (originals always exist;
-      // w600 renditions are incomplete and 404 for some plans). Locations keep the rendition.
-      imageUrl: kind === 'plans' ? cardImage(String(r.img ?? ''), 480) : renditionUrl(String(r.img ?? ''), 'w600'),
+      // Plan elevations use the small w600 rendition (full originals are ~700KB each and the
+      // /img resizer is passthrough on workers.dev), routed through /img so it transparently
+      // falls back to the original when a rendition is missing (e.g. Birch has none → 404).
+      imageUrl: kind === 'plans' ? cardImage(renditionUrl(String(r.img ?? ''), 'w600'), 480) : renditionUrl(String(r.img ?? ''), 'w600'),
     };
   });
   // The plans list is laid out as the marketing "Floor Plan List": product-type sections
