@@ -141,10 +141,13 @@ describe('Cities mapper — community_ids (group_concat of linked communities)',
     expect(ids.sort()).toEqual(['recCOMaquero01', 'recCOMcielo002']);
   });
 
-  it('drops community_ids when the city has no linked communities', () => {
+  it('emits an explicit empty community_ids when the city has no linked communities', () => {
+    // Empty group_concat → NULL → str('') (not dropped), same clear-propagation posture as
+    // floor_plans/testimonials: a stale CSV must not persist via addItems' merge on the live
+    // site when a city loses all its community linkages.
     const db = freshDb();
     insertRow(db, 'cities', { id: 'recCITYempty0001', city_name: 'Lonesome', published: 1 });
     const item = mapOne(db, 'recCITYempty0001');
-    expect(item.fieldData['community_ids']).toBeUndefined();
+    expect(item.fieldData['community_ids']).toEqual({ type: 'string', value: '' });
   });
 });
