@@ -209,3 +209,34 @@ describe('Floor Plans mapper — elevations_json (labeled elevation grid)', () =
     expect(item.fieldData['elevations_json']).toEqual({ type: 'string', value: '' });
   });
 });
+
+describe('Floor Plans mapper — brochure_pdf (R2 designed brochure)', () => {
+  const BR_URL =
+    'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFP9/brochure_pdf-Barbados_3072025.pdf';
+
+  it('emits brochure_pdf as a string field from the floor_plans column', () => {
+    const db = freshDb();
+    insertRow(db, 'floor_plans', {
+      id: 'recFP9',
+      name: 'Barbados',
+      slug: 'barbados',
+      published: 1,
+      brochure_pdf: BR_URL,
+    });
+    const item = mapOne(db, 'recFP9');
+    expect(item.fieldData['brochure_pdf']).toEqual({ type: 'string', value: BR_URL });
+  });
+
+  it('emits an explicit empty brochure_pdf when null/empty (clear propagates to Framer)', () => {
+    const db = freshDb();
+    insertRow(db, 'floor_plans', {
+      id: 'recFP10',
+      name: 'Bluebonnet',
+      slug: 'bluebonnet',
+      published: 1,
+      brochure_pdf: null,
+    });
+    const item = mapOne(db, 'recFP10');
+    expect(item.fieldData['brochure_pdf']).toEqual({ type: 'string', value: '' });
+  });
+});

@@ -506,7 +506,12 @@ const floorPlans: CollectionDef = {
       // link before push. The live Framer field MUST be Link type to match (else addItems
       // aborts) — keep field_definitions and the Framer field type in sync.
       brochure_pdf_url: sIf(row['brochure_pdf_url']),
-      // [P2] brochure_pdf (legacy attachment dup of brochure_pdf_url) no longer emitted.
+      // brochure_pdf = the designed InDesign floor-plan brochure (R2-hosted, migrated off
+      // the retired media.esperanzahomes.com host). Re-enabled 2026-06-15 so operators can
+      // link the static brochure on the live CMS. Emitted as a string; field_definitions
+      // pins floor_plans.brochure_pdf framer_type to 'string' and the live Framer field is
+      // String type, so applyTypeOverrides is a no-op (no addItems abort risk).
+      brochure_pdf: sIf(row['brochure_pdf']),
       hers_score: nIf(row['hers_score']),
       energy_cost_esperanza_monthly: nIf(row['energy_cost_low']),
       energy_cost_preowned_monthly: nIf(row['energy_cost_high']),
