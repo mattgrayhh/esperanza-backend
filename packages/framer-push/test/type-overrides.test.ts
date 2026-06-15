@@ -404,6 +404,46 @@ describe('applySchema (/schema core)', () => {
     expect(gallery!.fields).toEqual(itemSchema);
   });
 
+  it('CREATES a missing gallery (array) field with a valid nested item sub-schema', async () => {
+    // Creating an array field needs a nested `fields` ([ManagedArrayItemFieldInput]) or
+    // Framer rejects the rebuild. Reuse an existing gallery's sub-schema on the same
+    // collection (here photo_gallery) so the new field's item shape is guaranteed valid.
+    const env = envWithRow();
+    const itemSchema = [{ fieldData: { image: { type: 'image' } } }];
+    const mock = createMockFramer(['Quick Move-Ins'], {
+      'Quick Move-Ins': [
+        ...baseFields,
+        { id: 'photo_gallery', name: 'Photo Gallery', type: 'array', fields: itemSchema },
+      ],
+    });
+    const framer = await mock.connect(env);
+    const result = await applySchema(env, framer, 'qmi', [
+      { key: 'interior_photos', framer_type: 'array', label: 'Interior Photos' },
+    ]);
+
+    expect(result.error).toBeUndefined();
+    expect(result.fields.find((f) => f.key === 'interior_photos')?.action).toBe('created');
+    const set = mock.collections.get('Quick Move-Ins')!.setFieldsCalls[0]!;
+    const created = set.find((f) => f.id === 'interior_photos');
+    expect(created!.type).toBe('array');
+    // Must carry a nested item sub-schema (reused from photo_gallery) — not bare.
+    expect(created!.fields).toEqual(itemSchema);
+  });
+
+  it('CREATES a gallery field with a fallback image item when the collection has no existing gallery', async () => {
+    const env = envWithRow();
+    const mock = createMockFramer(['Quick Move-Ins'], { 'Quick Move-Ins': baseFields });
+    const framer = await mock.connect(env);
+    const result = await applySchema(env, framer, 'qmi', [
+      { key: 'interior_photos', framer_type: 'array', label: 'Interior Photos' },
+    ]);
+    expect(result.error).toBeUndefined();
+    const created = mock.collections
+      .get('Quick Move-Ins')!
+      .setFieldsCalls[0]!.find((f) => f.id === 'interior_photos');
+    expect(created!.fields).toEqual([{ id: 'image', type: 'image', name: 'Image' }]);
+  });
+
   it('is a pure no-op (no setFields) when every requested field already matches', async () => {
     const env = envWithRow();
     const mock = createMockFramer(['Quick Move-Ins'], { 'Quick Move-Ins': baseFields });

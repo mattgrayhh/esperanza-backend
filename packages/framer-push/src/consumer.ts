@@ -693,11 +693,21 @@ export async function applySchema(
     const cur = byId.get(req.key);
     if (!cur) {
       // create missing
-      nextById.set(req.key, {
+      const input: ManagedFieldInput = {
         id: req.key,
         type: req.framer_type,
         name: req.label ?? req.key,
-      });
+      };
+      // A gallery (array) field MUST carry a nested item sub-schema or Framer's
+      // setFields validator rejects the whole rebuild ("expect to be
+      // [ManagedArrayItemFieldInput]"). Reuse an existing array field's sub-schema on
+      // this same collection (guaranteed-valid shape, e.g. photo_gallery's image item);
+      // fall back to a single image item when the collection has no gallery yet.
+      if (req.framer_type === 'array') {
+        const template = existing.find((f) => f.type === 'array' && f.fields !== undefined);
+        input.fields = template?.fields ?? [{ id: 'image', type: 'image', name: 'Image' }];
+      }
+      nextById.set(req.key, input);
       fieldResults.push({ key: req.key, action: 'created', detail: `created as ${req.framer_type}` });
     } else if (cur.type === req.framer_type) {
       fieldResults.push({ key: req.key, action: 'unchanged', detail: `already ${req.framer_type}` });
