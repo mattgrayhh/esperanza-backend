@@ -33,9 +33,9 @@ export function renderTemplate(type: PdfType, theme: Theme, data: unknown): stri
       return wrapHtml(theme, <FloorPlanBrochure theme={theme} data={data as FloorPlanData} />);
     case 'list': {
       const ld = data as ListData;
-      // The QMI grid renders full-bleed over the branded template artwork (header/footer are
-      // baked into the background image), so it uses zero page margins.
-      const margins = ld.kind === 'qmis' ? { top: 0, right: 0, bottom: 0, left: 0 } : undefined;
+      // The QMI grid renders full-bleed over branded template artwork, and the Communities
+      // table (locations) paints its own full-page layout — both use zero page margins.
+      const margins = ld.kind === 'qmis' || ld.kind === 'locations' ? { top: 0, right: 0, bottom: 0, left: 0 } : undefined;
       return wrapHtml(theme, <ListBrochure theme={theme} data={ld} />, margins);
     }
     default:

@@ -2,6 +2,7 @@ import type { Theme } from '../theme';
 import type { ListData, QmiCardData, PlanSection } from '../data/list';
 import type { PlanCardData } from './components';
 import { CoverBand, Footer, FloorPlanCard, QmiCard, QmiListHeader, BrandFooter, ProductPlanCard, PlanSectionTitle } from './components';
+import { CommunitiesTable } from './communities-table';
 
 const PER_PAGE = 9;
 const PLANS_PER_PAGE = 12;        // marketing "Floor Plan List" grid is 3 × 4
@@ -46,6 +47,11 @@ export function ListBrochure({ theme, data }: { theme: Theme; data: ListData }) 
     );
   }
 
+  // locations — the Communities table (single sheet, 1:1 with the legacy Communities.pdf).
+  if (data.kind === 'locations') {
+    return <CommunitiesTable theme={theme} communities={data.communities} />;
+  }
+
   // Floor Plans — the marketing "Floor Plan List": product-type sections, each starting on a
   // fresh page, 3 × 4 grid, branded header band + brand footer (no prices).
   if (data.kind === 'plans' && data.sections) {
@@ -78,7 +84,7 @@ export function ListBrochure({ theme, data }: { theme: Theme; data: ListData }) 
     );
   }
 
-  // locations — existing styling.
+  // plans (no sections) / fallback — existing card styling.
   const pages = paginate(data.cards);
   return (
     <div>

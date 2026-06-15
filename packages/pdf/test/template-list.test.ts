@@ -5,11 +5,11 @@ import { sectionizePlans, type ListData, type QmiCardData } from '../src/data/li
 import type { PlanCardData } from '../src/templates/components';
 
 const locations: ListData = {
-  citySlug: 'mcallen', cityName: 'McAllen', kind: 'locations', isMaster: false, qmis: [],
-  cards: Array.from({ length: 20 }, (_, i) => ({
-    id: `c${i}`, name: `Community ${i}`, price: 300000 + i, sqft: 2000,
-    beds: 3, baths: 2, garage: 2, stories: 1, imageUrl: '',
-  })),
+  citySlug: 'all', cityName: '', kind: 'locations', isMaster: true, cards: [], qmis: [],
+  communities: [
+    { id: 'c1', name: 'Anaqua at Tres Lagos', city: 'McAllen, TX', price: '$263,990 - $372,990', sqft: '1,633 - 3,037', beds: '3 - 6', baths: '2 - 4', garage: '2', imageUrl: '' },
+    { id: 'c2', name: 'Los Prados', city: 'Mercedes, TX', price: 'From $169,990', sqft: '1,094 - 1,462', beds: '3 - 4', baths: '2', garage: '0', imageUrl: '' },
+  ],
 };
 
 const qmi = (over: Partial<QmiCardData>): QmiCardData => ({
@@ -19,17 +19,21 @@ const qmi = (over: Partial<QmiCardData>): QmiCardData => ({
 });
 
 describe('list template', () => {
-  it('renders a city cover + a card per member, paginated (locations)', () => {
+  it('renders the Communities table 1:1 with the reference (locations)', () => {
     const html = renderTemplate('list', defaultTheme, locations);
-    expect(html).toContain('McAllen');
-    expect(html).toContain('Community 0');
-    expect(html).toContain('Community 19');
-    expect((html.match(/page-break/g) || []).length).toBeGreaterThanOrEqual(1);
+    expect(html).toContain('Communities');         // centered serif title
+    expect(html).toContain('Community Name');       // green header row
+    expect(html).toContain('Price Point');
+    expect(html).toContain('Garages');
+    expect(html).toContain('Anaqua at Tres Lagos'); // row + computed range
+    expect(html).toContain('$263,990 - $372,990');
+    expect(html).toContain('From $169,990');
+    expect(html).toContain('Esperanzahomes.com');   // footer contact
   });
 
   it('renders the Quick Move-In Homes grid with card fields + monthly cents', () => {
     const data: ListData = {
-      citySlug: 'all', cityName: '', kind: 'qmis', isMaster: true, cards: [],
+      citySlug: 'all', cityName: '', kind: 'qmis', isMaster: true, cards: [], communities: [],
       qmis: [qmi({})],
     };
     const html = renderTemplate('list', defaultTheme, data);
@@ -54,7 +58,7 @@ describe('list template', () => {
     ];
     cards.forEach((c) => { if (!c.productType) c.productType = 'Single Family'; });
     const data: ListData = {
-      citySlug: 'all', cityName: '', kind: 'plans', isMaster: true, qmis: [], cards,
+      citySlug: 'all', cityName: '', kind: 'plans', isMaster: true, qmis: [], communities: [], cards,
       sections: sectionizePlans(cards), listBandTitle: 'Floor Plan List',
     };
     const html = renderTemplate('list', defaultTheme, data);
@@ -71,7 +75,7 @@ describe('list template', () => {
 
   it('renders the three promo banner styles', () => {
     const data: ListData = {
-      citySlug: 'all', cityName: '', kind: 'qmis', isMaster: true, cards: [],
+      citySlug: 'all', cityName: '', kind: 'qmis', isMaster: true, cards: [], communities: [],
       qmis: [
         qmi({ id: 'g', promo: { style: 'green', text: 'Now Selling' } }),
         qmi({ id: 'f', promo: { style: 'flex', text: 'Unlock Your Flex Discount Now!' } }),

@@ -4,6 +4,19 @@ import { loadPromoResolver, type ResolvedPromo } from './promotions';
 
 export type ListKind = 'locations' | 'qmis' | 'plans';
 
+/** A community rendered as one row in the Communities table (locations list). */
+export interface CommunityRowData {
+  id: string;
+  name: string;
+  city: string;        // "McAllen, TX"
+  price: string;       // "$249,990 - $380,990" or "From $249,990"
+  sqft: string;        // "1,234 - 3,037"
+  beds: string;        // "3 - 6"
+  baths: string;       // "2 - 4"
+  garage: string;      // "2" or "0 - 2"
+  imageUrl: string;
+}
+
 /** A Quick Move-In home rendered as a card in the QMI grid. */
 export interface QmiCardData {
   id: string;
@@ -32,11 +45,31 @@ export interface ListData {
   cityName: string;
   kind: ListKind;
   isMaster: boolean;       // true for the all-cities master "Quick Move-In Homes" doc
-  cards: PlanCardData[];   // locations / plans
+  cards: PlanCardData[];   // plans
   qmis: QmiCardData[];     // qmis
+  communities: CommunityRowData[]; // locations (Communities table)
   templateBgUrl?: string;  // branded full-page template artwork (qmis grid renders over it)
   sections?: PlanSection[]; // plans grouped by product type (marketing "Floor Plan List" layout)
   listBandTitle?: string;   // green header band title for the plans layout
+}
+
+const fmtMoney = (n: number | null): string => (n == null ? '' : `$${Math.round(n).toLocaleString('en-US')}`);
+
+// Communities have no stored price-range or garage fields, so we aggregate them from the floor
+// plans a community offers — found two ways and UNION'd: (1) explicitly linked via the
+// floor_plans.community_ids picker, and (2) the plans behind that community's published QMI homes.
+// Low end of price falls back to the community's marketed price_from when no plan rows exist.
+function priceText(priceFrom: number | null, minP: number | null, maxP: number | null): string {
+  const lows = [priceFrom, minP].filter((v): v is number => v != null);
+  const highs = [priceFrom, maxP].filter((v): v is number => v != null);
+  if (!lows.length) return '';
+  const lo = Math.min(...lows);
+  const hi = Math.max(...highs);
+  return hi > lo ? `${fmtMoney(lo)} - ${fmtMoney(hi)}` : `From ${fmtMoney(lo)}`;
+}
+function garageText(minG: number | null, maxG: number | null): string {
+  if (minG == null || maxG == null) return '';
+  return minG === maxG ? String(minG) : `${minG} - ${maxG}`;
 }
 
 // The Quick Move-In Homes one-pager artwork (logo + contact + green band header, website +
@@ -163,18 +196,71 @@ export async function loadListData(
     // Use the full-resolution template artwork (no downscale) so the logo + fine print stay
     // crisp; it's mostly white space so it compresses well.
     const templateBgUrl = QMI_TEMPLATE_PNG;
-    return { citySlug, cityName, kind, isMaster, cards: [], qmis, templateBgUrl };
+    return { citySlug, cityName, kind, isMaster, cards: [], qmis, communities: [], templateBgUrl };
   }
 
-  // locations / plans — per-city, plus an all-cities master variant (citySlug='all').
-  // Master locations = every published community; master plans = every published floor plan
-  // (the per-city plans list is gated on having a QMI in that city; the master is not).
-  let rows: any[] = [];
+  // locations — the Communities table (master = all cities, or per-city). One row per published,
+  // sellable community (a real price + a square-footage range; master-planned shells are skipped).
+  // 1:1 with the legacy Communities.pdf. (Not used in community scope.)
   if (kind === 'locations') {
-    rows = isMaster
-      ? ((await db.prepare(`SELECT c.id, c.name, c.featured_image_url img, COALESCE(c.override_price_from, c.synced_price_from) price FROM communities c LEFT JOIN cities ci ON ci.id=c.city_id WHERE c.published=1 ORDER BY ci.city_name, c.name`).all<any>()).results) ?? []
-      : ((await db.prepare(`SELECT id, name, featured_image_url img, COALESCE(override_price_from, synced_price_from) price FROM communities WHERE city_id=? AND published=1 ORDER BY name`).bind(cityId).all<any>()).results) ?? [];
-  } else if (isCommunity) {
+    const baseSql =
+      `SELECT c.id, c.name, ci.city_name AS city, c.featured_image_url AS img,
+              COALESCE(c.override_price_from, c.synced_price_from) AS price_from,
+              COALESCE(c.override_square_footage_range, c.synced_square_footage_range) AS sqft,
+              COALESCE(c.override_bed_count, c.synced_bed_count) AS beds,
+              COALESCE(c.override_bath_count, c.synced_bath_count) AS baths
+         FROM communities c
+         LEFT JOIN cities ci ON ci.id = c.city_id
+        WHERE c.published = 1
+          AND COALESCE(c.override_price_from, c.synced_price_from) > 0
+          AND COALESCE(c.override_square_footage_range, c.synced_square_footage_range) IS NOT NULL
+          ${isMaster ? '' : 'AND c.city_id = ?'}
+        ORDER BY ${isMaster ? 'ci.city_name, c.name' : 'c.name'}`;
+    const baseStmt = db.prepare(baseSql);
+    const baseRows = ((isMaster ? await baseStmt.all<any>() : await baseStmt.bind(cityId).all<any>()).results) ?? [];
+
+    // Price (max) + garage range aggregated from offered floor plans (linked or QMI-backed).
+    const aggSql =
+      `SELECT comm_id, MIN(price) min_p, MAX(price) max_p, MIN(garage) min_g, MAX(garage) max_g FROM (
+         SELECT c.id AS comm_id,
+                COALESCE(fp.override_starting_price, fp.synced_starting_price) AS price,
+                fp.car_garage_count AS garage
+           FROM communities c
+           JOIN floor_plans fp ON (','||fp.community_ids||',') LIKE ('%,'||c.id||',%')
+          WHERE c.published = 1 AND fp.published = 1 ${isMaster ? '' : 'AND c.city_id = ?'}
+         UNION
+         SELECT COALESCE(q.override_community_id, q.synced_community_id) AS comm_id,
+                COALESCE(fp.override_starting_price, fp.synced_starting_price) AS price,
+                fp.car_garage_count AS garage
+           FROM qmi q
+           JOIN floor_plans fp ON fp.id = COALESCE(q.override_floor_plan_id, q.synced_floor_plan_id)
+          WHERE q.published = 1 AND fp.published = 1 ${isMaster ? '' : 'AND COALESCE(q.override_city_id, q.synced_city_id) = ?'}
+       ) WHERE comm_id IS NOT NULL GROUP BY comm_id`;
+    const aggStmt = db.prepare(aggSql);
+    const aggRows = ((isMaster ? await aggStmt.all<any>() : await aggStmt.bind(cityId, cityId).all<any>()).results) ?? [];
+    const agg = new Map<string, any>(aggRows.map((a) => [String(a.comm_id), a]));
+
+    const communities: CommunityRowData[] = baseRows.map((r) => {
+      const a = agg.get(String(r.id));
+      return {
+        id: String(r.id),
+        name: str(r.name),
+        city: r.city ? `${str(r.city)}, TX` : '',
+        price: priceText(num(r.price_from), a ? num(a.min_p) : null, a ? num(a.max_p) : null),
+        sqft: str(r.sqft),
+        beds: str(r.beds),
+        baths: str(r.baths),
+        garage: a ? garageText(num(a.min_g), num(a.max_g)) : '',
+        imageUrl: cardImage(str(r.img)),
+      };
+    });
+    return { citySlug, cityName, kind, isMaster, cards: [], qmis: [], communities };
+  }
+
+  // plans — per-city, community-scoped, or an all-cities master variant (scopeSlug='all').
+  // Master plans = every published floor plan (the per-city list is gated on having a QMI).
+  let rows: any[] = [];
+  if (isCommunity) {
     // Community "Plan List" = every published floor plan offered in this community.
     // floor_plans.community_ids is a CSV of community rec-ids (migration 0016) — the same
     // linkage the Framer community page filters on with `community_ids Contains {id}`.
@@ -199,9 +285,9 @@ export async function loadListData(
   // The plans list is laid out as the marketing "Floor Plan List": product-type sections
   // (Single Family / Villa / RV Living / Courtyard Home), no prices, bed/bath ranges.
   if (kind === 'plans') {
-    return { citySlug, cityName, kind, isMaster, cards, qmis: [], sections: sectionizePlans(cards), listBandTitle: 'Floor Plan List' };
+    return { citySlug, cityName, kind, isMaster, cards, qmis: [], communities: [], sections: sectionizePlans(cards), listBandTitle: 'Floor Plan List' };
   }
-  return { citySlug, cityName, kind, isMaster, cards, qmis: [] };
+  return { citySlug, cityName, kind, isMaster, cards, qmis: [], communities: [] };
 }
 
 // Shared SELECT list for every floor-plan query (master / per-city / per-community). The
@@ -300,7 +386,7 @@ export async function loadFilteredListData(
         String(r.id),
       ),
     }));
-    return { citySlug: 'filtered', cityName: '', kind: 'qmis', isMaster: false, cards: [], qmis, templateBgUrl: QMI_TEMPLATE_PNG };
+    return { citySlug: 'filtered', cityName: '', kind: 'qmis', isMaster: false, cards: [], qmis, communities: [], templateBgUrl: QMI_TEMPLATE_PNG };
   }
 
   // plans
@@ -333,5 +419,5 @@ export async function loadFilteredListData(
     beds: num(r.beds), baths: num(r.baths), garage: num(r.garage), stories: num(r.stories),
     imageUrl: renditionUrl(String(r.img ?? ''), 'w600'),
   }));
-  return { citySlug: 'filtered', cityName: '', kind: 'plans', isMaster: false, cards, qmis: [] };
+  return { citySlug: 'filtered', cityName: '', kind: 'plans', isMaster: false, cards, qmis: [], communities: [] };
 }
