@@ -240,8 +240,10 @@ export async function loadFilteredListData(
   if (f.minBaths != null) { where.push('COALESCE(fp.override_bathroom_max, fp.synced_bathroom_max) >= ?'); binds.push(f.minBaths); }
   if (f.minPrice != null) { where.push('COALESCE(fp.override_starting_price, fp.synced_starting_price) >= ?'); binds.push(f.minPrice); }
   if (f.maxPrice != null) { where.push('COALESCE(fp.override_starting_price, fp.synced_starting_price) <= ?'); binds.push(f.maxPrice); }
-  if (f.minSqft != null) { where.push('COALESCE(fp.override_total_square_footage, fp.synced_total_square_footage) >= ?'); binds.push(f.minSqft); }
-  if (f.maxSqft != null) { where.push('COALESCE(fp.override_total_square_footage, fp.synced_total_square_footage) <= ?'); binds.push(f.maxSqft); }
+  // Floor-plan filter UI filters on LIVING sqft (plan.livingSqft) — match it so the
+  // downloaded PDF mirrors the on-screen results (the card still displays total sqft).
+  if (f.minSqft != null) { where.push('COALESCE(fp.override_living_square_footage, fp.synced_living_square_footage) >= ?'); binds.push(f.minSqft); }
+  if (f.maxSqft != null) { where.push('COALESCE(fp.override_living_square_footage, fp.synced_living_square_footage) <= ?'); binds.push(f.maxSqft); }
   if (f.stories != null) { where.push('fp.stories_count = ?'); binds.push(f.stories); }
   if (f.garage != null) { where.push('fp.car_garage_count = ?'); binds.push(f.garage); }
   const sql =
