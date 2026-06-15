@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { d1FromSqlite } from './_d1adapter';
-import { loadListData } from '../src/data/list';
+import { loadListData, loadFilteredListData } from '../src/data/list';
 
 const DB = join(__dirname, '../../db');
 function db() {
@@ -88,5 +88,44 @@ describe('loadListData', () => {
     expect(addrs).toContain('6529 Anaqua Loop');
     expect(addrs).not.toContain('999 Other St'); // different community
     expect(await loadListData(db2, 'nope', 'qmis', undefined, 'community')).toBeNull();
+  });
+});
+
+describe('loadFilteredListData', () => {
+  function freshDb() {
+    const d = new Database(':memory:');
+    readdirSync(join(DB, 'migrations')).filter(f => f.endsWith('.sql')).sort().forEach(f => d.exec(readFileSync(join(DB, 'migrations', f), 'utf8')));
+    d.exec(readFileSync(join(DB, 'views.sql'), 'utf8'));
+    return d;
+  }
+  it('qmis: applies city slug + minBeds + maxPrice filters', async () => {
+    const raw = freshDb();
+    raw.exec(`INSERT INTO cities (id,slug,city_name) VALUES ('ci1','mcallen','McAllen'),('ci2','laredo','Laredo')`);
+    raw.exec(`INSERT INTO communities (id,name,slug,city_id,published) VALUES ('c1','Anaqua','anaqua','ci1',1)`);
+    raw.exec(`INSERT INTO qmi (id,published,synced_city_id,synced_community_id,synced_address,synced_price,synced_bedroom_count) VALUES
+      ('q1',1,'ci1','c1','A',300000,4),
+      ('q2',1,'ci1','c1','B',500000,3),
+      ('q3',1,'ci2','c1','C',300000,4)`);
+    const db = d1FromSqlite(raw);
+    const data = await loadFilteredListData(db, 'qmis', { city: 'mcallen', minBeds: 4, maxPrice: 400000 });
+    const addrs = data.qmis.map(q => q.address);
+    expect(addrs).toContain('A');         // mcallen, 4bd, 300k
+    expect(addrs).not.toContain('B');     // 3bd / 500k filtered out
+    expect(addrs).not.toContain('C');     // laredo filtered out
+    // unknown city slug → no results
+    expect((await loadFilteredListData(db, 'qmis', { city: 'nowhere' })).qmis.length).toBe(0);
+  });
+  it('plans: applies collection + minBeds filters', async () => {
+    const raw = freshDb();
+    raw.exec(`INSERT INTO floor_plans (id,name,slug,published,collection,synced_bedroom_max,synced_starting_price) VALUES
+      ('fp1','Hickory','hickory',1,'Haven Collection',4,300000),
+      ('fp2','Oak','oak',1,'Haven Collection',3,250000),
+      ('fp3','Birch','birch',1,'Villas Collection',4,400000)`);
+    const db = d1FromSqlite(raw);
+    const data = await loadFilteredListData(db, 'plans', { collection: 'Haven Collection', minBeds: 4 });
+    const names = data.cards.map(c => c.name);
+    expect(names).toContain('Hickory');
+    expect(names).not.toContain('Oak');   // 3bd
+    expect(names).not.toContain('Birch'); // wrong collection
   });
 });
