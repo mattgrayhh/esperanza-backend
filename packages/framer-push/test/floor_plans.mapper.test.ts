@@ -152,3 +152,60 @@ describe('Floor Plans mapper — interior_photos (migration 0011)', () => {
     expect(item.fieldData['interior_photos']).toBeUndefined();
   });
 });
+
+describe('Floor Plans mapper — elevations_json (labeled elevation grid)', () => {
+  const E1 = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFP6/Agave_Tuscan_Brick.jpg';
+  const E2 = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFP6/Agave_Farmhouse.jpg';
+
+  it('emits elevations_json as a JSON string of {url,type} preserving the stored type', () => {
+    const db = freshDb();
+    insertRow(db, 'floor_plans', {
+      id: 'recFP6',
+      name: 'Agave',
+      slug: 'agave',
+      published: 1,
+      elevation_gallery: JSON.stringify([
+        { url: E1, type: 'Tuscan Brick' },
+        { url: E2, type: 'Farmhouse' },
+      ]),
+    });
+    const item = mapOne(db, 'recFP6');
+    expect(sval(item.fieldData['elevations_json'] as never)).toBe(
+      JSON.stringify([
+        { url: E1, type: 'Tuscan Brick' },
+        { url: E2, type: 'Farmhouse' },
+      ])
+    );
+  });
+
+  it('emits empty type for legacy {url,filename} entries (pre-backfill)', () => {
+    const db = freshDb();
+    insertRow(db, 'floor_plans', {
+      id: 'recFP7',
+      name: 'Cortono',
+      slug: 'cortono',
+      published: 1,
+      elevation_gallery: JSON.stringify([{ url: E1, filename: 'Agave_Tuscan_Brick.jpg' }]),
+    });
+    const item = mapOne(db, 'recFP7');
+    expect(sval(item.fieldData['elevations_json'] as never)).toBe(
+      JSON.stringify([{ url: E1, type: '' }])
+    );
+  });
+
+  it('emits an explicit empty elevations_json when the column is null/empty (clear propagates)', () => {
+    // String fields mirror D1 exactly: sIf emits str('') rather than dropping, so a plan
+    // with no elevations clears the Framer field instead of keeping a stale value (addItems
+    // merges). The ElevationGrid code component renders nothing for an empty string.
+    const db = freshDb();
+    insertRow(db, 'floor_plans', {
+      id: 'recFP8',
+      name: 'Dulce',
+      slug: 'dulce',
+      published: 1,
+      elevation_gallery: null,
+    });
+    const item = mapOne(db, 'recFP8');
+    expect(item.fieldData['elevations_json']).toEqual({ type: 'string', value: '' });
+  });
+});

@@ -30,8 +30,11 @@ first/second floor) for a plan — not an exterior elevation or a photo.
   - **Photo Gallery** — the exterior / listing photos (front elevation, street
     view, model-home shots). These came across from the original catalog; you
     can add, remove, or reorder them here.
-  - **Elevation Gallery** — the elevation renderings (brick / stucco / stone
-    variants) for the plan.
+  - **Elevation Gallery** — the elevation renderings for the plan. Each image has
+    an **elevation type** (Tuscan Brick, Contemporary Stucco, Farmhouse…) shown in
+    a dropdown under its thumbnail. The type is **auto-detected from the filename**,
+    so it's usually already correct — just fix it with the dropdown if one is wrong
+    or blank. These types drive the labeled elevation grid on the live plan page.
   - **Interior Photos** — kitchen, living room, baths, and other inside shots.
     This one starts empty; add the interior photos you want shown.
 - For any gallery, drag several photos onto it at once (they keep the order you
