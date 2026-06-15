@@ -251,7 +251,11 @@ export async function loadListData(
         beds: str(r.beds),
         baths: str(r.baths),
         garage: a ? garageText(num(a.min_g), num(a.max_g)) : '',
-        imageUrl: cardImage(str(r.img)),
+        // Community featured images are 1–2MB originals; the /img resizer is passthrough on
+        // workers.dev, so embedding originals bloats the table to ~68MB/page (and OOMs the
+        // master sheet). Use the small w600 rendition; /img falls back to the original if a
+        // rendition is missing. (Renditions backfilled via scripts/derive-renditions.ts.)
+        imageUrl: cardImage(renditionUrl(str(r.img), 'w600')),
       };
     });
     return { citySlug, cityName, kind, isMaster, cards: [], qmis: [], communities };
