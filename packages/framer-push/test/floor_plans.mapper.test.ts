@@ -240,3 +240,37 @@ describe('Floor Plans mapper — brochure_pdf (R2 designed brochure)', () => {
     expect(item.fieldData['brochure_pdf']).toEqual({ type: 'string', value: '' });
   });
 });
+
+describe('Floor Plans mapper — brochure_pdf_url (Link field, prefer designed brochure)', () => {
+  const DESIGNED =
+    'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFPa/brochure_pdf-Barbados_3072025.pdf';
+  const DYNAMIC = 'https://esperanza-pdf.round-base-ed8c.workers.dev/pdf/floorplan/barbados';
+
+  it('prefers the designed R2 brochure over the dynamic PDF for the Link field', () => {
+    const db = freshDb();
+    insertRow(db, 'floor_plans', {
+      id: 'recFPa',
+      name: 'Barbados',
+      slug: 'barbados',
+      published: 1,
+      brochure_pdf: DESIGNED,
+      brochure_pdf_url: DYNAMIC,
+    });
+    const item = mapOne(db, 'recFPa');
+    expect(item.fieldData['brochure_pdf_url']).toEqual({ type: 'string', value: DESIGNED });
+  });
+
+  it('falls back to the dynamic PDF when there is no designed brochure', () => {
+    const db = freshDb();
+    insertRow(db, 'floor_plans', {
+      id: 'recFPb',
+      name: 'Bluebonnet',
+      slug: 'bluebonnet',
+      published: 1,
+      brochure_pdf: null,
+      brochure_pdf_url: DYNAMIC,
+    });
+    const item = mapOne(db, 'recFPb');
+    expect(item.fieldData['brochure_pdf_url']).toEqual({ type: 'string', value: DYNAMIC });
+  });
+});

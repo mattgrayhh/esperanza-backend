@@ -475,6 +475,15 @@ const floorPlans: CollectionDef = {
     const elevGallery = galleryUrls(row['elevation_gallery']);
     const addl = galleryUrls(row['additional_images_gallery']);
     const interior = galleryUrls(row['interior_photos_json']);
+    // brochure_pdf_url is the Link-typed Framer field operators bind to the "Download
+    // Brochure" button. Prefer the designed InDesign brochure (R2, migrated off the retired
+    // media.esperanzahomes.com host) so the link is the real brochure; fall back to the
+    // dynamic generated PDF (/pdf/floorplan/<slug>) for plans with no designed brochure.
+    const designedBrochure = asString(row['brochure_pdf']);
+    const brochureLink =
+      designedBrochure && designedBrochure.trim()
+        ? designedBrochure
+        : asString(row['brochure_pdf_url']);
     const fieldData = compactFields({
       name: sIf(row['name']),
       slug: str(slug),
@@ -500,17 +509,13 @@ const floorPlans: CollectionDef = {
       master_bed_location: sIf(row['master_bed_location']),
       incentive: sIf(row['incentive']),
       coming_soon: bool(asBool(row['coming_soon'])), // live FP (Managed) has the field (added 2026-06)
-      // brochure_pdf_url = the dynamic floor-plan PDF (/pdf/floorplan/<slug>, auto-filled
-      // by ensurePdfRender). Emitted as a string here; field_definitions pins its
-      // framer_type to 'link' (MAPPER_FRAMER_TYPE), so applyTypeOverrides coerces it to a
-      // link before push. The live Framer field MUST be Link type to match (else addItems
-      // aborts) — keep field_definitions and the Framer field type in sync.
-      brochure_pdf_url: sIf(row['brochure_pdf_url']),
-      // brochure_pdf = the designed InDesign floor-plan brochure (R2-hosted, migrated off
-      // the retired media.esperanzahomes.com host). Re-enabled 2026-06-15 so operators can
-      // link the static brochure on the live CMS. Emitted as a string; field_definitions
-      // pins floor_plans.brochure_pdf framer_type to 'string' and the live Framer field is
-      // String type, so applyTypeOverrides is a no-op (no addItems abort risk).
+      // brochure_pdf_url = the Link-typed brochure field (field_definitions pins its
+      // framer_type to 'link' (MAPPER_FRAMER_TYPE), so applyTypeOverrides coerces the value
+      // to a link before push; the live Framer field MUST stay Link type or addItems aborts).
+      // Carries `brochureLink` = designed R2 brochure when present, else the dynamic PDF.
+      brochure_pdf_url: sIf(brochureLink),
+      // brochure_pdf = the same designed R2 brochure as a plain String (kept for reference /
+      // admin; operators bind the Link-typed brochure_pdf_url above for the live button).
       brochure_pdf: sIf(row['brochure_pdf']),
       hers_score: nIf(row['hers_score']),
       energy_cost_esperanza_monthly: nIf(row['energy_cost_low']),
