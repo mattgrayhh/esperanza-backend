@@ -145,3 +145,122 @@ export async function loadListData(
   }));
   return { citySlug, cityName, kind, isMaster, cards, qmis: [] };
 }
+
+// ---------------------------------------------------------------------------
+// Filtered, on-demand lists — the "download the currently-filtered results"
+// button on the Quick Move-Ins (/new-homes/available) and Floor Plans filter
+// pages. Unbounded filter combinations → rendered on demand and cached in R2
+// keyed by a hash of (kind + filters + dataHash); see index.ts /pdf/filtered.
+// ---------------------------------------------------------------------------
+export type FilteredKind = 'qmis' | 'plans';
+
+export interface ListFilters {
+  city?: string;        // city slug (qmis)
+  community?: string;   // community name (qmis)
+  collection?: string;  // floor-plan collection (plans)
+  minBeds?: number;
+  minBaths?: number;
+  minPrice?: number;
+  maxPrice?: number;
+  minSqft?: number;
+  maxSqft?: number;
+  stories?: number;     // plans
+  garage?: number;      // plans (car count)
+  availableNow?: boolean; // qmis (status=available)
+}
+
+export async function loadFilteredListData(
+  db: D1Database,
+  kind: FilteredKind,
+  f: ListFilters,
+  imgProxyBase?: string,
+): Promise<ListData> {
+  const cardImage = (src: string): string => {
+    if (!src) return '';
+    return imgProxyBase ? `${imgProxyBase.replace(/\/$/, '')}/img?w=300&u=${encodeURIComponent(src)}` : src;
+  };
+
+  if (kind === 'qmis') {
+    const where: string[] = [];
+    const binds: unknown[] = [];
+    if (f.city) {
+      const city = await db.prepare(`SELECT id FROM cities WHERE slug=?`).bind(f.city).first<any>();
+      if (city) { where.push('v.city_id = ?'); binds.push(String(city.id)); }
+      else { where.push('1 = 0'); } // unknown city slug → no results
+    }
+    if (f.community) { where.push('v.community = ?'); binds.push(f.community); }
+    if (f.minBeds != null) { where.push('v.bedroom_count >= ?'); binds.push(f.minBeds); }
+    if (f.minBaths != null) { where.push('v.bathroom_count >= ?'); binds.push(f.minBaths); }
+    if (f.minPrice != null) { where.push('v.price >= ?'); binds.push(f.minPrice); }
+    if (f.maxPrice != null) { where.push('v.price <= ?'); binds.push(f.maxPrice); }
+    if (f.minSqft != null) { where.push('v.total_square_footage >= ?'); binds.push(f.minSqft); }
+    if (f.maxSqft != null) { where.push('v.total_square_footage <= ?'); binds.push(f.maxSqft); }
+    if (f.availableNow) { where.push('v.available_now = 1'); }
+    const sql =
+      `SELECT v.id, v.community_id, v.city_id, v.community, v.city, v.address, v.lot_number,
+              v.price, v.estimated_monthly_price AS emp,
+              v.total_square_footage AS sqft, v.bedroom_count AS beds, v.bathroom_count AS baths,
+              v.availability_text, v.move_in_date, v.available_now,
+              v.featured_image, v.image_url AS qmi_img, fp.image_url AS fp_img
+         FROM v_public_qmi v
+         LEFT JOIN floor_plans fp ON fp.id = v.floor_plan_id
+        ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+        ORDER BY v.city, v.community, v.price`;
+    const rows = ((await db.prepare(sql).bind(...binds).all<any>()).results) ?? [];
+    const resolve = await loadPromoResolver(db);
+    const qmis: QmiCardData[] = rows.map((r) => ({
+      id: String(r.id),
+      community: str(r.community),
+      city: str(r.city),
+      beds: num(r.beds),
+      baths: num(r.baths),
+      sqft: num(r.sqft),
+      availability:
+        str(r.availability_text) ||
+        (r.available_now ? 'Available Now' : (str(r.move_in_date) ? `Available ${str(r.move_in_date)}` : '')),
+      address: str(r.address),
+      lot: str(r.lot_number),
+      estMonthly: num(r.emp),
+      price: num(r.price),
+      imageUrl: cardImage(str(r.fp_img) || attachmentUrl(r.featured_image) || str(r.qmi_img)),
+      promo: resolve(
+        r.community_id ? String(r.community_id) : null,
+        r.city_id ? String(r.city_id) : null,
+        String(r.id),
+      ),
+    }));
+    return { citySlug: 'filtered', cityName: '', kind: 'qmis', isMaster: false, cards: [], qmis, templateBgUrl: QMI_TEMPLATE_PNG };
+  }
+
+  // plans
+  const where: string[] = ['fp.published = 1'];
+  const binds: unknown[] = [];
+  if (f.collection) { where.push('fp.collection = ?'); binds.push(f.collection); }
+  if (f.minBeds != null) { where.push('COALESCE(fp.override_bedroom_max, fp.synced_bedroom_max) >= ?'); binds.push(f.minBeds); }
+  if (f.minBaths != null) { where.push('COALESCE(fp.override_bathroom_max, fp.synced_bathroom_max) >= ?'); binds.push(f.minBaths); }
+  if (f.minPrice != null) { where.push('COALESCE(fp.override_starting_price, fp.synced_starting_price) >= ?'); binds.push(f.minPrice); }
+  if (f.maxPrice != null) { where.push('COALESCE(fp.override_starting_price, fp.synced_starting_price) <= ?'); binds.push(f.maxPrice); }
+  // Floor-plan filter UI filters on LIVING sqft (plan.livingSqft) — match it so the
+  // downloaded PDF mirrors the on-screen results (the card still displays total sqft).
+  if (f.minSqft != null) { where.push('COALESCE(fp.override_living_square_footage, fp.synced_living_square_footage) >= ?'); binds.push(f.minSqft); }
+  if (f.maxSqft != null) { where.push('COALESCE(fp.override_living_square_footage, fp.synced_living_square_footage) <= ?'); binds.push(f.maxSqft); }
+  if (f.stories != null) { where.push('fp.stories_count = ?'); binds.push(f.stories); }
+  if (f.garage != null) { where.push('fp.car_garage_count = ?'); binds.push(f.garage); }
+  const sql =
+    `SELECT fp.id, fp.name, fp.image_url img,
+            COALESCE(fp.override_starting_price, fp.synced_starting_price) price,
+            COALESCE(fp.override_total_square_footage, fp.synced_total_square_footage) sqft,
+            COALESCE(fp.override_bedroom_max, fp.synced_bedroom_max) beds,
+            COALESCE(fp.override_bathroom_max, fp.synced_bathroom_max) baths,
+            fp.car_garage_count garage, fp.stories_count stories
+       FROM floor_plans fp
+      WHERE ${where.join(' AND ')}
+      ORDER BY fp.name`;
+  const rows = ((await db.prepare(sql).bind(...binds).all<any>()).results) ?? [];
+  const cards: PlanCardData[] = rows.map((r) => ({
+    id: String(r.id), name: String(r.name ?? ''), price: num(r.price), sqft: num(r.sqft),
+    beds: num(r.beds), baths: num(r.baths), garage: num(r.garage), stories: num(r.stories),
+    imageUrl: renditionUrl(String(r.img ?? ''), 'w600'),
+  }));
+  return { citySlug: 'filtered', cityName: '', kind: 'plans', isMaster: false, cards, qmis: [] };
+}
