@@ -151,3 +151,89 @@ describe('Cities mapper — community_ids (group_concat of linked communities)',
     expect(item.fieldData['community_ids']).toEqual({ type: 'string', value: '' });
   });
 });
+
+describe('Cities mapper — neighborhoods_map_json (community pins for the map component)', () => {
+  it('emits a JSON array of published, geo-located communities in this city', () => {
+    const db = freshDb();
+    insertRow(db, 'cities', { id: 'recCITYbv00001', city_name: 'Brownsville', published: 1 });
+    insertRow(db, 'cities', { id: 'recCITYother99', city_name: 'Otherville', published: 1 });
+    // Two valid published communities (slug + numeric lat/lng) — should appear.
+    insertRow(db, 'communities', {
+      id: 'recCOMpalo0001',
+      name: 'Palo Alto Groves',
+      slug: 'palo-alto-groves',
+      city_id: 'recCITYbv00001',
+      published: 1,
+      latitude: 26.006922,
+      longitude: -97.513037,
+      synced_price_from: 241990,
+      featured_image_url: 'https://img.example/palo.jpg',
+    });
+    insertRow(db, 'communities', {
+      id: 'recCOMlagunas1',
+      name: 'Villas Las Lagunas',
+      slug: 'villas-las-lagunas',
+      city_id: 'recCITYbv00001',
+      published: 1,
+      latitude: 25.981959,
+      longitude: -97.484207,
+    });
+    // Excluded: unpublished, missing coordinates, missing slug, and other-city.
+    insertRow(db, 'communities', {
+      id: 'recCOMdraft001',
+      name: 'Draft Community',
+      slug: 'draft-community',
+      city_id: 'recCITYbv00001',
+      published: 0,
+      latitude: 26.0,
+      longitude: -97.5,
+    });
+    insertRow(db, 'communities', {
+      id: 'recCOMnocoord1',
+      name: 'No Coords',
+      slug: 'no-coords',
+      city_id: 'recCITYbv00001',
+      published: 1,
+    });
+    insertRow(db, 'communities', {
+      id: 'recCOMother001',
+      name: 'Elsewhere',
+      slug: 'elsewhere',
+      city_id: 'recCITYother99',
+      published: 1,
+      latitude: 27.5,
+      longitude: -99.5,
+    });
+
+    const field = mapOne(db, 'recCITYbv00001').fieldData['neighborhoods_map_json'];
+    expect(field?.type).toBe('string');
+    const parsed = JSON.parse(String(sval(field)));
+    // Ordered by name: Palo Alto Groves, then Villas Las Lagunas.
+    expect(parsed.map((n: { name: string }) => n.name)).toEqual([
+      'Palo Alto Groves',
+      'Villas Las Lagunas',
+    ]);
+    expect(parsed[0]).toMatchObject({
+      name: 'Palo Alto Groves',
+      coordinates: [-97.513037, 26.006922], // [lng, lat]
+      url: '/new-homes/palo-alto-groves',
+      image: 'https://img.example/palo.jpg',
+      priceFrom: 241990,
+      city: 'Brownsville',
+    });
+    // A community without an image/price still appears (null fields).
+    expect(parsed[1]).toMatchObject({
+      name: 'Villas Las Lagunas',
+      coordinates: [-97.484207, 25.981959],
+      url: '/new-homes/villas-las-lagunas',
+      image: null,
+    });
+  });
+
+  it('emits a valid empty array string when the city has no plottable communities', () => {
+    const db = freshDb();
+    insertRow(db, 'cities', { id: 'recCITYghost001', city_name: 'Ghost Town', published: 1 });
+    const field = mapOne(db, 'recCITYghost001').fieldData['neighborhoods_map_json'];
+    expect(sval(field)).toBe('[]');
+  });
+});
