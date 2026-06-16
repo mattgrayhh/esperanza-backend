@@ -76,6 +76,14 @@ function garageText(minG: number | null, maxG: number | null): string {
 // disclaimer + equal-housing footer). Cards are laid over the empty middle region.
 const QMI_TEMPLATE_PNG = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/pdf-templates/quick-move-in-homes.png';
 
+// QMI-grid card image width (px) fed to the /img resizer. Chrome re-encodes embedded
+// images, so source pixel size is the lever on total PDF bytes. The full all-city QMI
+// list (e.g. McAllen = 46 homes over ~6 pages) overran Chrome's PDF buffer at w=300
+// ("Could not create buffer"); 180 keeps even the largest list well under the working
+// payload of the next-biggest city (Laredo, 26 homes) while staying crisp at the
+// ~2.5in card size. Applied to both the per-city/master grid and the filtered grid.
+const QMI_CARD_IMG_W = 180;
+
 const num = (v: unknown): number | null => (v == null || v === '' ? null : Number(v));
 const str = (v: unknown): string => (v == null ? '' : String(v));
 
@@ -186,7 +194,7 @@ export async function loadListData(
       lot: str(r.lot_number),
       estMonthly: num(r.emp),
       price: num(r.price),
-      imageUrl: cardImage(str(r.fp_img) || attachmentUrl(r.featured_image) || str(r.qmi_img)),
+      imageUrl: cardImage(str(r.fp_img) || attachmentUrl(r.featured_image) || str(r.qmi_img), QMI_CARD_IMG_W),
       promo: resolve(
         r.community_id ? String(r.community_id) : null,
         r.city_id ? String(r.city_id) : null,
@@ -384,7 +392,7 @@ export async function loadFilteredListData(
       lot: str(r.lot_number),
       estMonthly: num(r.emp),
       price: num(r.price),
-      imageUrl: cardImage(str(r.fp_img) || attachmentUrl(r.featured_image) || str(r.qmi_img)),
+      imageUrl: cardImage(str(r.fp_img) || attachmentUrl(r.featured_image) || str(r.qmi_img), QMI_CARD_IMG_W),
       promo: resolve(
         r.community_id ? String(r.community_id) : null,
         r.city_id ? String(r.city_id) : null,
