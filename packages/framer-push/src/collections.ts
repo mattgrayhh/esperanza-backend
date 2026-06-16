@@ -669,6 +669,13 @@ const qmi: CollectionDef = {
   },
 };
 
+// The esperanza-pdf worker base. Per-community list PDFs are served at
+// /pdf/list/community-<communitySlug>-{plans,qmis} (registered by seed-renders with the
+// identical slug). We build the link in the mapper rather than store a column: the slug
+// is deterministic and this matches how the brochure URLs are shaped, with no migration.
+// Keep in sync with PDF_PUBLIC_BASE_URL (seed-renders) if the worker domain ever changes.
+const PDF_LIST_BASE = 'https://esperanza-pdf.round-base-ed8c.workers.dev';
+
 // =============================================================================
 // 3. COMMUNITIES  (draft = !published — the `draft` column was DROPPED in
 //    migration 0005; published is now the single gate, like every other entity)
@@ -691,7 +698,13 @@ const communities: CollectionDef = {
     COALESCE(override_price_from, synced_price_from) AS price_from,
     (SELECT group_concat(fp.id) FROM floor_plans fp
       WHERE ',' || REPLACE(IFNULL(fp.community_ids, ''), ' ', '') || ','
-            LIKE '%,' || communities.id || ',%') AS floor_plan_ids
+            LIKE '%,' || communities.id || ',%') AS floor_plan_ids,
+    (SELECT COUNT(*) FROM floor_plans fp2
+      WHERE fp2.published = 1 AND ',' || REPLACE(IFNULL(fp2.community_ids, ''), ' ', '') || ','
+            LIKE '%,' || communities.id || ',%') AS plan_count,
+    (SELECT COUNT(*) FROM qmi q2
+      WHERE q2.published = 1
+        AND COALESCE(q2.override_community_id, q2.synced_community_id) = communities.id) AS home_count
   FROM communities WHERE id = ?`,
   selectAllSql: `SELECT *,
     COALESCE(override_square_footage_range, synced_square_footage_range) AS square_footage_range,
@@ -700,7 +713,13 @@ const communities: CollectionDef = {
     COALESCE(override_price_from, synced_price_from) AS price_from,
     (SELECT group_concat(fp.id) FROM floor_plans fp
       WHERE ',' || REPLACE(IFNULL(fp.community_ids, ''), ' ', '') || ','
-            LIKE '%,' || communities.id || ',%') AS floor_plan_ids
+            LIKE '%,' || communities.id || ',%') AS floor_plan_ids,
+    (SELECT COUNT(*) FROM floor_plans fp2
+      WHERE fp2.published = 1 AND ',' || REPLACE(IFNULL(fp2.community_ids, ''), ' ', '') || ','
+            LIKE '%,' || communities.id || ',%') AS plan_count,
+    (SELECT COUNT(*) FROM qmi q2
+      WHERE q2.published = 1
+        AND COALESCE(q2.override_community_id, q2.synced_community_id) = communities.id) AS home_count
   FROM communities`,
   map(row) {
     const id = String(row['id']);
@@ -708,6 +727,14 @@ const communities: CollectionDef = {
       asString(row['slug']) ?? (asString(row['name']) ? kebab(String(row['name'])) : id);
     // single gate: not published (the `draft` column was dropped in migration 0005)
     const draft = !asBool(row['published']);
+
+    // Per-community list PDFs (the /pdf-list "Plan List" + "Sale List" columns). Built from
+    // the community slug (the exact slug seed-renders registered) so no column/migration is
+    // needed; only emitted when the community has a slug (slug-less communities have no
+    // registered render). Emitted as LINK (linkIf) directly — no field_definitions pin.
+    const communitySlug = asString(row['slug']);
+    const planListUrl = communitySlug ? `${PDF_LIST_BASE}/pdf/list/community-${communitySlug}-plans` : undefined;
+    const saleListUrl = communitySlug ? `${PDF_LIST_BASE}/pdf/list/community-${communitySlug}-qmis` : undefined;
 
     // lat/long: parse from map_coordinates "lat,long" if the numeric cols are null
     let latitude = numField(row['latitude']);
@@ -797,6 +824,13 @@ const communities: CollectionDef = {
       // (same proven pattern as floor_plans.brochure_pdf_url). The live Framer field
       // must be Link type to match.
       brochure_pdf_url: sIf(row['brochure_pdf_url']),
+      // Per-community aggregate list PDFs (Link) + counts (Number) for the /pdf-list
+      // LOCATIONS row: Plan List = all plans offered, Sale List = all homes for sale.
+      // Emitted as link/number directly; created in Framer via POST /schema.
+      plan_list_pdf_url: linkIf(planListUrl),
+      sale_list_pdf_url: linkIf(saleListUrl),
+      plan_count: nIf(row['plan_count']),
+      home_count: nIf(row['home_count']),
       incentive: sIf(row['incentive']),
       // 8 formattedText "*_rich" copy blocks
       design_copy_rich: ftIf(row['design_copy_rich']),

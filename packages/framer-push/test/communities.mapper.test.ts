@@ -254,4 +254,42 @@ describe('Communities mapper — rich text, HOA links, coords, gates', () => {
     const sapphire = String(sval(mapOne(db, 'recCOMsapphire02').fieldData['floor_plan_ids']));
     expect(sapphire.split(',')).toEqual(['recFPblanco0001']);
   });
+
+  it('emits per-community Plan List / Sale List PDF links + published plan/home counts', () => {
+    const db = freshDb();
+    insertRow(db, 'communities', {
+      id: 'recCOMaqualina01', name: 'Aqualina at Tres Lagos', slug: 'aqualina-at-tres-lagos',
+      published: 1, updated_at: '2026-06-15T12:00:00.000Z',
+    });
+    // two PUBLISHED plans offered (counted) + one draft plan (excluded from plan_count)
+    insertRow(db, 'floor_plans', { id: 'fp1', name: 'Blanco', slug: 'blanco', published: 1, community_ids: 'recCOMaqualina01' });
+    insertRow(db, 'floor_plans', { id: 'fp2', name: 'Agave', slug: 'agave', published: 1, community_ids: 'recCOMaqualina01, recCOMother' });
+    insertRow(db, 'floor_plans', { id: 'fp3', name: 'Draft', slug: 'draft', published: 0, community_ids: 'recCOMaqualina01' });
+    // two PUBLISHED homes in the community (synced + override) + one unpublished (excluded)
+    insertRow(db, 'qmi', { id: 'q1', published: 1, synced_community_id: 'recCOMaqualina01', updated_at: '2026-06-15T12:00:00.000Z' });
+    insertRow(db, 'qmi', { id: 'q2', published: 1, override_community_id: 'recCOMaqualina01', updated_at: '2026-06-15T12:00:00.000Z' });
+    insertRow(db, 'qmi', { id: 'q3', published: 0, synced_community_id: 'recCOMaqualina01', updated_at: '2026-06-15T12:00:00.000Z' });
+
+    const f = mapOne(db, 'recCOMaqualina01').fieldData;
+    expect(f['plan_list_pdf_url']?.type).toBe('link');
+    expect(sval(f['plan_list_pdf_url'])).toBe(
+      'https://esperanza-pdf.round-base-ed8c.workers.dev/pdf/list/community-aqualina-at-tres-lagos-plans'
+    );
+    expect(f['sale_list_pdf_url']?.type).toBe('link');
+    expect(sval(f['sale_list_pdf_url'])).toBe(
+      'https://esperanza-pdf.round-base-ed8c.workers.dev/pdf/list/community-aqualina-at-tres-lagos-qmis'
+    );
+    expect(sval(f['plan_count'])).toBe(2); // published plans only
+    expect(sval(f['home_count'])).toBe(2); // published homes only
+  });
+
+  it('drops the list links when a community has no slug (nothing registered to link to)', () => {
+    const db = freshDb();
+    insertRow(db, 'communities', {
+      id: 'recCOMnoSlug001', name: 'No Slug', published: 1, updated_at: '2026-06-15T12:00:00.000Z',
+    });
+    const f = mapOne(db, 'recCOMnoSlug001').fieldData;
+    expect(f['plan_list_pdf_url']).toBeUndefined();
+    expect(f['sale_list_pdf_url']).toBeUndefined();
+  });
 });
