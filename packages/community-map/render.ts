@@ -12,7 +12,10 @@ export interface SingleMapOptions {
   openPopup?: boolean;
 }
 
+let leafletPromise: Promise<void> | null = null;
+
 export function loadLeaflet(): Promise<void> {
+  if (leafletPromise) return leafletPromise;
   const ensureCss = (id: string, href: string) => {
     if (document.querySelector(`#${id}`)) return;
     const link = document.createElement('link');
@@ -51,7 +54,7 @@ export function loadLeaflet(): Promise<void> {
       document.body.appendChild(s);
     });
 
-  return new Promise((resolve, reject) => {
+  leafletPromise = new Promise<void>((resolve, reject) => {
     if (window.L && (window.L as any).markerClusterGroup) {
       resolve();
     } else if (window.L) {
@@ -68,7 +71,11 @@ export function loadLeaflet(): Promise<void> {
         .then(resolve)
         .catch(reject);
     }
+  }).catch((e) => {
+    leafletPromise = null;
+    throw e;
   });
+  return leafletPromise;
 }
 
 export function renderSingleCommunityMap(el: HTMLElement, opts: SingleMapOptions): () => void {
