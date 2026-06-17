@@ -32,7 +32,7 @@ export function CommunityMediaBar({ id, media }: { id: string; media: Media }) {
           {SINGLE_FIELDS.map(({ key, label }) => {
             const f = media[key];
             // The media FieldViews are always image kind; guard for TS narrowing
-            const imgValue = f.kind === 'image' || f.kind === 'generic' ? f.value : '';
+            const imgValue = f.kind === 'image' ? f.value : '';
             return (
               <div key={key} className="[&_img]:max-h-24 [&_img]:object-cover">
                 <ImageUploader

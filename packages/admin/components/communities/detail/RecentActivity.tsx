@@ -25,7 +25,7 @@ export function RecentActivity({ groups }: { groups: ActivityGroup[] }) {
         ) : (
           <ul className="space-y-2">
             {groups.map((g, i) => (
-              <li key={i} className="flex items-start justify-between gap-2 text-sm">
+              <li key={`${g.at}-${g.entity}-${g.action}-${i}`} className="flex items-start justify-between gap-2 text-sm">
                 <div className="space-y-0.5">
                   <p className="font-medium leading-snug">{activityPhrase(g)}</p>
                   <p className="text-xs text-muted-foreground">
