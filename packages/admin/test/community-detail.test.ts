@@ -59,4 +59,16 @@ describe('buildCommunityDetailView', () => {
     const { buildCommunityDetailView } = await import('../lib/community-detail');
     expect(await buildCommunityDetailView('nope')).toBeNull();
   });
+
+  it('does not surface any of the 6 pared fields', async () => {
+    const { buildCommunityDetailView } = await import('../lib/community-detail');
+    const v = await buildCommunityDetailView('recC');
+    const all = [...v!.basicInfo, ...v!.remaining.flatMap((g) => g.fields),
+                 ...Object.values(v!.media)];
+    const fields = new Set(all.map((f: any) => f.field));
+    for (const dead of ['directions','community_logo_alt','photo_gallery_image_alt',
+                        'secondary_image_alt','security_details','community_map_embed']) {
+      expect(fields.has(dead)).toBe(false);
+    }
+  });
 });
