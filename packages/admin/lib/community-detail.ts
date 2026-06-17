@@ -14,7 +14,7 @@ import { communities } from '@esperanza/db';
 import { effectiveValue } from '@esperanza/db/override';
 import { resolveFieldConfig } from './field-config-source';
 import { loadOptionSets } from './select-options';
-import { buildFieldView } from './build-edit-view';
+import { buildFieldView, parseCustomFields } from './build-edit-view';
 import { communityStatCounts } from './community-counts';
 import { loadCommunityActivity } from './community-activity';
 import { statusGate, deriveStatus, statusOptions } from './status';
@@ -53,7 +53,7 @@ export interface CommunityDetailView {
   stats: { city: string; startingPrice: string; qmiCount: number; floorPlanCount: number };
   basicInfo: FieldView[];       // price_from, square_footage_range, bed_count, bath_count (override) + name/slug/town/master_planned (admin)
   map: { community: MapCommunity | null }; // null when geo missing
-  media: { featured: FieldView; secondary: FieldView; logo: FieldView; descriptionImage: FieldView; gallery: FieldView };
+  media: { featured: FieldView; featuredAlt: FieldView; secondary: FieldView; logo: FieldView; descriptionImage: FieldView; gallery: FieldView };
   activity: ActivityGroup[];
   remaining: { group: string; fields: FieldView[] }[]; // grouped leftover admin fields
 }
@@ -68,6 +68,7 @@ const BASIC_INFO_FIELDS = new Set<string>([...BASIC_INFO_OVERRIDE_FIELDS, ...BAS
 // Fields placed in media
 const MEDIA_FIELDS = new Set<string>([
   'featured_image_url',
+  'featured_image_alt',
   'secondary_image_url',
   'community_logo_url',
   'description_image_url',
@@ -100,7 +101,7 @@ export async function buildCommunityDetailView(id: string): Promise<CommunityDet
   const sources = new Set(cfg.fields.filter((f) => f.selectSource).map((f) => f.selectSource!));
   const optionSets = await loadOptionSets(sources);
 
-  const customValues: Record<string, string> = {}; // communities has no custom_fields blob in tests
+  const customValues = parseCustomFields(row['customFields'] ?? row['custom_fields']);
 
   // ── 3. Status ────────────────────────────────────────────────────────────────
   const gate = statusGate('communities')!; // 'location'
@@ -182,6 +183,7 @@ export async function buildCommunityDetailView(id: string): Promise<CommunityDet
 
   const media = {
     featured: mediaFieldView('featured_image_url'),
+    featuredAlt: mediaFieldView('featured_image_alt'),
     secondary: mediaFieldView('secondary_image_url'),
     logo: mediaFieldView('community_logo_url'),
     descriptionImage: mediaFieldView('description_image_url'),

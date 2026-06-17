@@ -56,7 +56,7 @@ function parseObj(v: unknown): Record<string, string> {
  * NULL/blank/malformed (→ {}), and stringifies scalar values so the generic FieldView
  * (which is string-valued) can render them uniformly.
  */
-function parseCustomFields(v: unknown): Record<string, string> {
+export function parseCustomFields(v: unknown): Record<string, string> {
   return parseObj(v);
 }
 

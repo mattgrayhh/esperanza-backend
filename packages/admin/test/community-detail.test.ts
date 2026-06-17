@@ -71,4 +71,15 @@ describe('buildCommunityDetailView', () => {
       expect(fields.has(dead)).toBe(false);
     }
   });
+
+  it('places featured_image_alt in media.featuredAlt and not in remaining', async () => {
+    const { buildCommunityDetailView } = await import('../lib/community-detail');
+    const v = await buildCommunityDetailView('recC');
+    // featuredAlt must exist on media and reference the right field
+    expect(v!.media.featuredAlt).toBeDefined();
+    expect(v!.media.featuredAlt.field).toBe('featured_image_alt');
+    // featured_image_alt must NOT appear anywhere in remaining
+    const remainingFields = v!.remaining.flatMap((g) => g.fields).map((f) => f.field);
+    expect(remainingFields).not.toContain('featured_image_alt');
+  });
 });

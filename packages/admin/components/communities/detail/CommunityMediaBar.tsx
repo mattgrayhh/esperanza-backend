@@ -8,12 +8,13 @@
 
 import { ImageUploader } from '../../fields/ImageUploader';
 import { ImageGalleryEditor } from '../../fields/ImageGalleryEditor';
+import { GenericField } from '../../fields/GenericField';
 import type { CommunityDetailView } from '../../../lib/community-detail';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 type Media = CommunityDetailView['media'];
 
-const SINGLE_FIELDS: Array<{ key: keyof Omit<Media, 'gallery'>; label: string }> = [
+const SINGLE_FIELDS: Array<{ key: keyof Omit<Media, 'gallery' | 'featuredAlt'>; label: string }> = [
   { key: 'featured', label: 'Featured Image' },
   { key: 'secondary', label: 'Secondary Image' },
   { key: 'logo', label: 'Logo' },
@@ -21,6 +22,7 @@ const SINGLE_FIELDS: Array<{ key: keyof Omit<Media, 'gallery'>; label: string }>
 ];
 
 export function CommunityMediaBar({ id, media }: { id: string; media: Media }) {
+  const featuredAlt = media.featuredAlt;
   return (
     <Card>
       <CardHeader className="border-b">
@@ -47,6 +49,20 @@ export function CommunityMediaBar({ id, media }: { id: string; media: Media }) {
             );
           })}
         </div>
+
+        {/* Featured image alt text — compact, rendered directly below the image grid */}
+        {featuredAlt.kind === 'generic' && (
+          <div className="max-w-sm">
+            <GenericField
+              field={featuredAlt.field}
+              label={featuredAlt.label}
+              widget={featuredAlt.widget}
+              value={featuredAlt.value}
+              help={featuredAlt.help}
+              readOnly={featuredAlt.widget === 'synced'}
+            />
+          </div>
+        )}
 
         {/* Full-width gallery editor */}
         <ImageGalleryEditor
