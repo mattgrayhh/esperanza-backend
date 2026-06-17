@@ -1,0 +1,48 @@
+'use client';
+
+// =============================================================================
+// RecentActivity — renders the community activity feed using the activity-format
+// helpers. Empty-state shows "No recent activity yet."
+// =============================================================================
+
+import { activityPhrase, timeAgo, entityLabel, actorName } from '../../../lib/activity-format';
+import type { ActivityGroup } from '../../../lib/activity-format';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ClockIcon } from 'lucide-react';
+
+export function RecentActivity({ groups }: { groups: ActivityGroup[] }) {
+  return (
+    <Card>
+      <CardHeader className="border-b">
+        <CardTitle className="flex items-center gap-2">
+          <ClockIcon className="size-4" />
+          Recent Activity
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 py-3">
+        {groups.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-2">No recent activity yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {groups.map((g, i) => (
+              <li key={i} className="flex items-start justify-between gap-2 text-sm">
+                <div className="space-y-0.5">
+                  <p className="font-medium leading-snug">{activityPhrase(g)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {actorName(g.actor)}
+                    {g.entity !== 'communities' ? (
+                      <span className="ml-1 text-muted-foreground/60">· {entityLabel(g.entity)}</span>
+                    ) : null}
+                  </p>
+                </div>
+                <span className="shrink-0 text-xs text-muted-foreground whitespace-nowrap">
+                  {timeAgo(g.at)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
