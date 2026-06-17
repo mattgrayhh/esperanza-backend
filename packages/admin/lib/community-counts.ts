@@ -47,10 +47,13 @@ export async function communityStatCounts(
   //
   // SQLite LIKE is case-insensitive for ASCII by default; we LOWER() both sides
   // to be explicit and handle any non-ASCII edge cases.
-  const needle = `%,${communityName.toLowerCase()},%`;
+  // Escape LIKE metacharacters (%, _, \) to prevent false matches on names like
+  // "Test%" or "Test_Field".
+  const escaped = communityName.toLowerCase().replace(/[%_\\]/g, '\\$&');
+  const needle = `%,${escaped},%`;
   const [fpRow] = await db.all<{ n: number }>(
     sql`SELECT COUNT(*) AS n FROM floor_plans
-        WHERE (',' || LOWER(REPLACE(communities, ', ', ',')) || ',') LIKE ${needle}`
+        WHERE (',' || LOWER(REPLACE(communities, ', ', ',')) || ',') LIKE ${needle} ESCAPE '\\'`
   );
 
   return {

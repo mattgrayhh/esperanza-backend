@@ -59,4 +59,14 @@ describe('communityStatCounts', () => {
     const r = await communityStatCounts(db as any, 'recC', 'Agave');
     expect(r.floorPlanCount).toBe(2);
   });
+
+  it('does NOT false-match when a floor plan community name is a superstring', async () => {
+    // Seed a floor plan with community name 'Agave Ridge' (different from 'Agave')
+    sqlite.exec(
+      `INSERT INTO floor_plans (id, communities) VALUES ('fp4', 'Agave Ridge');`
+    );
+    const r = await communityStatCounts(db as any, 'recC', 'Agave');
+    // Should still be 2 (fp1 + fp2), NOT 3, because 'Agave Ridge' ≠ 'Agave'
+    expect(r.floorPlanCount).toBe(2);
+  });
 });
