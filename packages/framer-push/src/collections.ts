@@ -371,10 +371,12 @@ const combineBath = (full: unknown, half: unknown): number | undefined => {
 };
 
 // Estimated monthly payment — PITI, parity with the legacy O'Neill listing calculator
-// (verified to the cent on real homes). Inputs: list price + the COMPANY-WIDE rate from
-// site_settings.mortgage_rate (marketing-editable in admin → /api/public/settings). The
-// projection injects that rate as `monthly_rate`, so one admin edit + a `qmi` backfill
-// re-prices every listing, and the figure self-updates whenever a home's price changes.
+// (verified to the cent on real homes). Inputs: list price + the COMPANY-WIDE PROMOTIONAL
+// rate from site_settings.incentive_rate (marketing-editable in admin → /api/public/
+// settings) — this is the prominent "estimated monthly" figure, so it uses the incentive
+// rate, not the standard mortgage_rate. The projection injects it as `monthly_rate`, so
+// one admin edit + a `qmi` backfill re-prices every listing, and the figure self-updates
+// whenever a home's price changes.
 // Constants mirror the legacy calculator: 3.5% down, 30-yr term, 2.08% property tax,
 // 0.4% insurance, $180/yr HOA, 0.75% PMI. Returns undefined (→ stored value kept) when
 // price or rate is missing/non-positive.
@@ -400,7 +402,7 @@ function computeMonthlyPayment(price: unknown, rate: unknown): number | undefine
 
 const QMI_PROJECTION = `
   q.id AS id,
-  (SELECT value FROM site_settings WHERE key = 'mortgage_rate') AS monthly_rate,
+  (SELECT value FROM site_settings WHERE key = 'incentive_rate') AS monthly_rate,
   COALESCE(q.override_address,             q.synced_address)             AS address,
   COALESCE(q.override_postal_code,         q.synced_postal_code)         AS postal_code,
   COALESCE(q.override_bedroom_count,       q.synced_bedroom_count)       AS bedroom_count,

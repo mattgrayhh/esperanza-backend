@@ -1999,7 +1999,14 @@ export async function triggerIngestSync(): Promise<
 // Any signed-in editor may save — these are content values, like prices.
 // =============================================================================
 
-const SITE_SETTING_KEYS = ['mortgage_rate'] as const;
+const SITE_SETTING_KEYS = ['mortgage_rate', 'incentive_rate'] as const;
+// Keys validated as a percentage (0 < n < 25). Both the standard mortgage rate and
+// the promotional incentive rate drive the QMI card / calculator payment figures.
+const RATE_SETTING_KEYS = new Set<string>(['mortgage_rate', 'incentive_rate']);
+const RATE_SETTING_LABELS: Record<string, string> = {
+  mortgage_rate: 'Mortgage Rate',
+  incentive_rate: 'Incentive Rate',
+};
 
 export async function saveSiteSettings(
   values: Record<string, string>
@@ -2016,10 +2023,11 @@ export async function saveSiteSettings(
   for (const key of SITE_SETTING_KEYS) {
     if (!(key in values)) continue;
     const raw = String(values[key] ?? '').trim();
-    if (key === 'mortgage_rate') {
+    if (RATE_SETTING_KEYS.has(key)) {
       const n = Number(raw);
       if (!Number.isFinite(n) || n <= 0 || n >= 25) {
-        return { ok: false, error: 'Mortgage Rate must be a percentage between 0 and 25 (e.g. 6.15).' };
+        const label = RATE_SETTING_LABELS[key] ?? key;
+        return { ok: false, error: `${label} must be a percentage between 0 and 25 (e.g. 6.15).` };
       }
       writes.push({ key, value: String(n) });
     } else {

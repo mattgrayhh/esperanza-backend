@@ -8,7 +8,7 @@
 // GET /api/public/settings (one edit → every calculator site-wide).
 // =============================================================================
 
-import { eq } from 'drizzle-orm';
+import { inArray } from 'drizzle-orm';
 import { siteSettings } from '@esperanza/db';
 import { getReadDb } from '@/lib/db';
 import { SiteSettingsForm } from '@/components/site-settings/SiteSettingsForm';
@@ -18,10 +18,17 @@ export const dynamic = 'force-dynamic';
 export default async function SiteSettingsPage() {
   const db = getReadDb();
   const rows = await db
-    .select({ value: siteSettings.value, updatedBy: siteSettings.updatedBy, updatedAt: siteSettings.updatedAt })
+    .select({
+      key: siteSettings.key,
+      value: siteSettings.value,
+      updatedBy: siteSettings.updatedBy,
+      updatedAt: siteSettings.updatedAt,
+    })
     .from(siteSettings)
-    .where(eq(siteSettings.key, 'mortgage_rate'));
-  const rate = rows[0];
+    .where(inArray(siteSettings.key, ['mortgage_rate', 'incentive_rate']));
+  const byKey = new Map(rows.map((r) => [r.key, r]));
+  const rate = byKey.get('mortgage_rate');
+  const incentive = byKey.get('incentive_rate');
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
@@ -35,8 +42,9 @@ export default async function SiteSettingsPage() {
       </header>
       <SiteSettingsForm
         mortgageRate={rate?.value ?? ''}
-        updatedBy={rate?.updatedBy ?? null}
-        updatedAt={rate?.updatedAt ?? null}
+        incentiveRate={incentive?.value ?? ''}
+        updatedBy={rate?.updatedBy ?? incentive?.updatedBy ?? null}
+        updatedAt={rate?.updatedAt ?? incentive?.updatedAt ?? null}
       />
     </div>
   );
