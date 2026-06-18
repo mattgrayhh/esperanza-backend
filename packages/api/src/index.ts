@@ -291,6 +291,16 @@ export function serializeQmiRow(row: Row, resolved: ResolvedPromo | null): RawAi
     fields[label] = out;
   }
 
+  // Self-tour signals. A home is self-tourable iff it carries an NterNow link
+  // (qmi.nter_now); an explicit self_tour_available=1 flag also counts. Both columns
+  // exist on v_public_qmi but were never emitted, so the QMI page's Self-Tour filter
+  // and each card's "Request Your Time" CTA had nothing to bind to.
+  const nterNow = asStr(row['nter_now']);
+  if (nterNow !== '') fields['nter_now'] = nterNow;
+  if (asBool(row['self_tour_available']) || nterNow !== '') {
+    fields['self_tour_available'] = true;
+  }
+
   for (const [col, label] of QMI_FP) {
     const arr = fpArray(row[col]);
     if (arr !== undefined) fields[label] = arr;

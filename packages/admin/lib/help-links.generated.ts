@@ -10,8 +10,8 @@ export const HELP_LINKS_BY_ENTITY: Record<string, { slug: string; title: string 
     "title": "Add the floor plan layout image"
   },
   "communities": {
-    "slug": "add-a-new-community",
-    "title": "Add a new community"
+    "slug": "community-detail-page",
+    "title": "The community detail page"
   },
   "blogs": {
     "slug": "create-and-publish-a-blog",
