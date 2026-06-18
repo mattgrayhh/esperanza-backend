@@ -22,7 +22,7 @@ import type Database from 'better-sqlite3';
 import { freshDb, d1 } from './helpers.js';
 import { applyMessage, type ConsumerEnv } from '../src/consumer.js';
 import type { QmiUpsertMessage } from '../src/diff.js';
-import { deriveAvailabilityText, isAutoAvailabilityText } from '../src/availability.js';
+import { deriveAvailabilityText, isAutoAvailabilityText, isReadyConstructionStage } from '../src/availability.js';
 
 const TODAY = '2026-06-11';
 
@@ -235,3 +235,29 @@ function futureIso(monthsAhead: number): string {
   d.setUTCMonth(d.getUTCMonth() + monthsAhead);
   return d.toISOString().slice(0, 10);
 }
+
+describe('deriveAvailabilityText — construction-stage signal', () => {
+  it('"Buyer Sign Off" → Available Now even with a FUTURE estimated date', () => {
+    // future window date, but the home is complete → overrides the window
+    expect(deriveAvailabilityText('2099-08-15', '2026-06-16', 'Buyer Sign Off')).toBe(
+      'Available Now'
+    );
+  });
+  it('ready-stage match is case/space-insensitive', () => {
+    expect(deriveAvailabilityText('2099-08-15', '2026-06-16', '  buyer sign off ')).toBe(
+      'Available Now'
+    );
+    expect(isReadyConstructionStage('BUYER SIGN OFF')).toBe(true);
+    expect(isReadyConstructionStage('Hang Drywall')).toBe(false);
+    expect(isReadyConstructionStage(null)).toBe(false);
+  });
+  it('a non-ready stage leaves the date window intact', () => {
+    expect(deriveAvailabilityText('2099-08-15', '2026-06-16', 'Hang Drywall')).toBe(
+      'Available AUG/SEP 2099'
+    );
+  });
+  it('no stage argument preserves the original date-only behavior', () => {
+    expect(deriveAvailabilityText('2099-08-15', '2026-06-16')).toBe('Available AUG/SEP 2099');
+    expect(deriveAvailabilityText('2020-01-01', '2026-06-16')).toBe('Available Now');
+  });
+});

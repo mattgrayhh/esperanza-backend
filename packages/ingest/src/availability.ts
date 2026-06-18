@@ -38,10 +38,28 @@ export function todayIsoDate(): string {
  *
  * `todayIso` is injectable for tests; defaults to the current UTC date.
  */
+/**
+ * Construction stages that mean the home is move-in ready NOW. Sourced from the
+ * MarkSystems milestone chain (DM_HOUSE.CONSTRUCTION_STAGE): 'Buyer Sign Off' is the
+ * final in-inventory stage (settled homes are filtered out upstream). Confirmed
+ * against the legacy O'Neill listing on 2026-06-16: 49/50 "Available Now" homes were
+ * at 'Buyer Sign Off'; every windowed home sat at an earlier stage. Case-insensitive.
+ */
+const READY_STAGES = new Set(['buyer sign off']);
+
+export function isReadyConstructionStage(stage: string | null | undefined): boolean {
+  return READY_STAGES.has(String(stage ?? '').trim().toLowerCase());
+}
+
 export function deriveAvailabilityText(
   isoDate: string | null | undefined,
-  todayIso: string = todayIsoDate()
+  todayIso: string = todayIsoDate(),
+  constructionStage: string | null | undefined = null
 ): string | null {
+  // A completed home is "Available Now" regardless of its (now-irrelevant) estimated
+  // move-in date — this is the primary signal; the date window is only for homes still
+  // under construction. Also fixes stale future-window text on homes that have finished.
+  if (isReadyConstructionStage(constructionStage)) return 'Available Now';
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec((isoDate ?? '').trim());
   if (!m) return null;
   const year = Number(m[1]);
