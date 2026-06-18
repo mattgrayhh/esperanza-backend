@@ -1146,6 +1146,31 @@ const CITY_COUNTS_SQL = `
                 LIKE '%,' || cm2.id || ',%'
        )) AS floor_plans_count_live`;
 
+// neighborhoods_map_json: a JSON array of this city's PUBLISHED communities in the
+// minimal shape the CityNeighborhoodsMap Framer code component needs to plot pins and
+// render the hover tooltip/card — {name, coordinates:[lng,lat], url, image, priceFrom,
+// city}. Built at query time (json_group_array) so it stays current with community
+// edits, using the SAME city↔community join as community_ids / CITY_COUNTS_SQL
+// (cm.city_id = c.id). Only communities with a slug + numeric lat/lng are included (a
+// pin needs coordinates; the URL needs the slug). Ordered by name for deterministic
+// backfills. No matches → '[]'. Emitted as a plain string (the component JSON.parses
+// it); no field_definitions row (passthrough string, like the other *_json fields).
+const CITY_NEIGHBORHOODS_JSON_SQL = `
+  (SELECT json_group_array(json_object(
+       'name', cm.name,
+       'coordinates', json_array(cm.longitude, cm.latitude),
+       'url', '/new-homes/' || cm.slug,
+       'image', cm.featured_image_url,
+       'priceFrom', COALESCE(cm.override_price_from, cm.synced_price_from),
+       'city', c.city_name
+     ))
+     FROM (SELECT * FROM communities cm
+            WHERE cm.city_id = c.id AND cm.published = 1
+              AND cm.slug IS NOT NULL AND TRIM(cm.slug) <> ''
+              AND cm.latitude IS NOT NULL AND cm.longitude IS NOT NULL
+            ORDER BY cm.name) cm
+  ) AS neighborhoods_map_json`;
+
 const cities: CollectionDef = {
   key: 'cities',
   defaultCollectionName: 'Cities',
@@ -1157,10 +1182,10 @@ const cities: CollectionDef = {
   // stable key (no name-drift). All linked communities are listed; the Communities
   // collection's own publish gate (draft:!published) still controls render visibility.
   // NB: communities aliased `cm` here (the city is `c`, matching CITY_COUNTS_SQL).
-  selectByIdSql: `SELECT c.*, ${CITY_COUNTS_SQL},
+  selectByIdSql: `SELECT c.*, ${CITY_COUNTS_SQL}, ${CITY_NEIGHBORHOODS_JSON_SQL},
     (SELECT group_concat(cm.id) FROM communities cm WHERE cm.city_id = c.id) AS community_ids
     FROM cities c WHERE c.id = ?`,
-  selectAllSql: `SELECT c.*, ${CITY_COUNTS_SQL},
+  selectAllSql: `SELECT c.*, ${CITY_COUNTS_SQL}, ${CITY_NEIGHBORHOODS_JSON_SQL},
     (SELECT group_concat(cm.id) FROM communities cm WHERE cm.city_id = c.id) AS community_ids
     FROM cities c`,
   map(row) {
@@ -1211,6 +1236,10 @@ const cities: CollectionDef = {
       // string/passthrough posture as floor_plans/qmi community_ids (no field_definitions
       // row). Lets a City page filter communities by `community_ids Contains {cityId}`.
       community_ids: sIf(row['community_ids']),
+      // JSON array of this city's published communities (name/coords/url/image/price)
+      // for the CityNeighborhoodsMap component's pins + hover tooltips. Always a valid
+      // JSON string ('[]' when the city has none); sIf keeps it unless empty/null.
+      neighborhoods_map_json: sIf(row['neighborhoods_map_json']),
       ...copyFields,
       ...venueFields,
     });
