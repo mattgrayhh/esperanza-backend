@@ -327,8 +327,6 @@ const communities: EntityFieldConfig = {
     { field: 'electric_details_rich', label: 'Electric Details (md)', widget: 'richtext', bucket: 'admin' },
     { field: 'internet_details', label: 'Internet Details', widget: 'textarea', bucket: 'admin' },
     { field: 'water_details', label: 'Water Details', widget: 'textarea', bucket: 'admin' },
-    { field: 'security_details', label: 'Security Details', widget: 'textarea', bucket: 'admin' },
-    { field: 'directions', label: 'Directions', widget: 'textarea', bucket: 'admin' },
     // images (R2)
     { field: 'featured_image_url', label: 'Featured Image', widget: 'image', bucket: 'admin' },
     { field: 'secondary_image_url', label: 'Secondary Image', widget: 'image', bucket: 'admin' },
@@ -337,11 +335,11 @@ const communities: EntityFieldConfig = {
     { field: 'description_image_url', label: 'Description Image', widget: 'image', bucket: 'admin' },
     { field: 'community_logo_url', label: 'Community Logo', widget: 'image', bucket: 'admin' },
     { field: 'featured_image_alt', label: 'Featured Image Alt', widget: 'text', bucket: 'admin' },
-    { field: 'secondary_image_alt', label: 'Secondary Image Alt', widget: 'text', bucket: 'admin' },
-    { field: 'photo_gallery_image_alt', label: 'Photo Gallery Alt', widget: 'text', bucket: 'admin' },
-    { field: 'community_logo_alt', label: 'Community Logo Alt', widget: 'text', bucket: 'admin' },
+    // [T7] secondary_image_alt, photo_gallery_image_alt, community_logo_alt removed (dead alt fields — fill rate ~0%).
     { field: 'featured_video', label: 'Featured Video', widget: 'text', bucket: 'admin' },
-    { field: 'community_map_embed', label: 'Map Embed', widget: 'textarea', bucket: 'admin' },
+    // [T7] community_map_embed removed (superseded by live map from lat/lng coords).
+    // [T7] directions removed (dead — no fill, superseded by map).
+    // [T7] security_details removed (dead — no fill).
     { field: 'nter_now', label: 'Enter Now', widget: 'text', bucket: 'admin', help: 'NterNow self-tour link (the "Enter Now" CTA). Distinct from Featured Video, which holds the Vimeo embed.' },
     { field: 'mine_link', label: 'Mine Link', widget: 'text', bucket: 'admin' },
     { field: 'features_download_url', label: 'Features Download (PDF)', widget: 'image', bucket: 'admin' },

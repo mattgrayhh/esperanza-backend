@@ -56,7 +56,7 @@ function parseObj(v: unknown): Record<string, string> {
  * NULL/blank/malformed (→ {}), and stringifies scalar values so the generic FieldView
  * (which is string-valued) can render them uniformly.
  */
-function parseCustomFields(v: unknown): Record<string, string> {
+export function parseCustomFields(v: unknown): Record<string, string> {
   return parseObj(v);
 }
 
@@ -278,7 +278,7 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
 /** Resolve a single config field into a FieldView, reading the row + option sets.
  *  For a Field-Builder CUSTOM field (f.custom — no real column), the value is read from
  *  `customValues` (the row's parsed custom_fields blob) instead of the row column. */
-function buildFieldView(
+export function buildFieldView(
   key: EntityKey,
   f: FieldConfig,
   row: Row,

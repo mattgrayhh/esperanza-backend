@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
+    "@esperanza/community-map": "*",
     "@esperanza/db": "*",
     "@opennextjs/cloudflare": "^1.19.0",
     "@tanstack/react-table": "^8.21.3",
