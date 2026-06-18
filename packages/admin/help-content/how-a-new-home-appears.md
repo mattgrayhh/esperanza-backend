@@ -13,6 +13,9 @@ entity: qmi
 MarkSystems, it appears in `Quick Move-Ins` automatically — usually within
 4 hours — as a `Draft` with its facts pre-filled: address, price, beds/baths,
 square footage, community, floor plan, construction stage, and move-in date.
+Its **header image is pre-filled too**, borrowed from the linked floor plan's
+rendering so the home is never imageless — replace it with real photos whenever
+they're ready (your replacement is kept; the sync never overwrites it).
 
 ## Finding a home in the list
 
@@ -31,7 +34,9 @@ and floor plan, in any capitalization.
    *Synced fields and overrides* if something needs a manual exception).
 3. Confirm the right `Floor Plan` is linked — it supplies the plan
    description, plan images, and brochure details automatically.
-4. Add photos: a featured image and gallery shots. See *Add photos to a home*.
+4. Photos: the header image is already set from the floor plan. Swap in a
+   real featured image and add gallery shots when available. See *Add photos
+   to a home*.
 5. Add marketing touches as needed: `Description`, `Incentive`,
    `Promo Text`, `Virtual Tour URL`.
 6. Set `Status` to `Live` (or `Coming Soon` to tease it first).
