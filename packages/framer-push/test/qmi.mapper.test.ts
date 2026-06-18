@@ -504,3 +504,58 @@ describe('QMI mapper — community_ids (community rec-ID for CMS matching)', () 
     expect(mapOne(db, 'recQMIci0003').fieldData['community_ids']).toEqual({ type: 'string', value: '' });
   });
 });
+
+describe('QMI mapper â bath combine + computed monthly payment (O’Neill parity)', () => {
+  it('combines full + half baths into the displayed bathroom_count (3 + 1half → 3.5)', () => {
+    const db = freshDb();
+    insertRow(db, 'qmi', {
+      id: 'recQMIbath00001',
+      published: 1,
+      synced_address: '1 Bath Ln',
+      synced_bathroom_count: 3,
+      synced_half_bathroom_count: 1,
+    });
+    const row = db.prepare(qmiDef.selectByIdSql).get('recQMIbath00001') as Record<string, unknown>;
+    expect(sval(qmiDef.map(row).fieldData['bathroom_count'])).toBe(3.5);
+  });
+
+  it('computes estimated_monthly_price (PITI) from price + company-wide mortgage_rate (seeded 6.15)', () => {
+    const db = freshDb(); // migration 0013 seeds mortgage_rate = 6.15
+    insertRow(db, 'qmi', {
+      id: 'recQMImonth0001',
+      published: 1,
+      synced_address: '1 PITI Way',
+      synced_price: 214990,
+      estimated_monthly_price: 9999, // stored value is ignored when a rate makes it computable
+    });
+    const row = db.prepare(qmiDef.selectByIdSql).get('recQMImonth0001') as Record<string, unknown>;
+    expect(sval(qmiDef.map(row).fieldData['estimated_monthly_price'])).toBe(1852.91);
+  });
+
+  it('a marketing rate edit re-prices every listing (global knob → 4.99%)', () => {
+    const db = freshDb();
+    db.prepare("UPDATE site_settings SET value = '4.99' WHERE key = 'mortgage_rate'").run();
+    insertRow(db, 'qmi', {
+      id: 'recQMImonth0002',
+      published: 1,
+      synced_address: '2 PITI Way',
+      synced_price: 214990,
+    });
+    const row = db.prepare(qmiDef.selectByIdSql).get('recQMImonth0002') as Record<string, unknown>;
+    expect(sval(qmiDef.map(row).fieldData['estimated_monthly_price'])).toBe(1701.43);
+  });
+
+  it('falls back to the stored monthly when no rate is configured', () => {
+    const db = freshDb();
+    db.prepare("DELETE FROM site_settings WHERE key = 'mortgage_rate'").run();
+    insertRow(db, 'qmi', {
+      id: 'recQMImonth0003',
+      published: 1,
+      synced_address: '3 PITI Way',
+      synced_price: 214990,
+      estimated_monthly_price: 1555.55,
+    });
+    const row = db.prepare(qmiDef.selectByIdSql).get('recQMImonth0003') as Record<string, unknown>;
+    expect(sval(qmiDef.map(row).fieldData['estimated_monthly_price'])).toBe(1555.55);
+  });
+});

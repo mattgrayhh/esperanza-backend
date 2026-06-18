@@ -173,7 +173,11 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
     // raw ISO date. No date → leave it absent (NULL).
     const slug = msg.slugSource ? deriveSlug(msg.slugSource) : null;
     const id = newQmiId();
-    const availabilityText = deriveAvailabilityText(msg.values.moveInDate);
+    const availabilityText = deriveAvailabilityText(
+      msg.values.moveInDate,
+      undefined,
+      msg.values.constructionStage
+    );
     const cols = ['id', 'published', 'slug', 'created_at', 'updated_at', ...Object.keys(patch)];
     const vals: unknown[] = [id, 0, slug, nowIso(), nowIso(), ...Object.values(patch)];
     if (availabilityText !== null) {
@@ -205,9 +209,13 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
   // actually changes, and ONLY over an empty/machine-generated stored value.
   const setExtra: string[] = [];
   const valsExtra: unknown[] = [];
-  if ('synced_move_in_date' in patch) {
+  // Refresh the derived availability_text when the effective move-in DATE or the
+  // CONSTRUCTION STAGE changes (a home reaching 'Buyer Sign Off' becomes "Available
+  // Now"), but only over machine-generated text — admin-authored copy is preserved.
+  if ('synced_move_in_date' in patch || 'synced_construction_stage' in patch) {
     const current = await env.DB.prepare(
-      `SELECT synced_move_in_date, override_move_in_date, availability_text
+      `SELECT synced_move_in_date, override_move_in_date, availability_text,
+              synced_construction_stage, override_construction_stage
          FROM qmi WHERE id = ?`
     )
       .bind(msg.qmiId)
@@ -215,13 +223,24 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
         synced_move_in_date: string | null;
         override_move_in_date: string | null;
         availability_text: string | null;
+        synced_construction_stage: string | null;
+        override_construction_stage: string | null;
       }>();
-    if (current) {
-      const oldEffective = current.override_move_in_date ?? current.synced_move_in_date;
-      const newEffective =
-        current.override_move_in_date ?? (patch['synced_move_in_date'] as string | null);
-      if (newEffective !== oldEffective && isAutoAvailabilityText(current.availability_text)) {
-        const text = deriveAvailabilityText(newEffective);
+    if (current && isAutoAvailabilityText(current.availability_text)) {
+      const oldDate = current.override_move_in_date ?? current.synced_move_in_date;
+      const newDate =
+        current.override_move_in_date ??
+        ('synced_move_in_date' in patch
+          ? (patch['synced_move_in_date'] as string | null)
+          : current.synced_move_in_date);
+      const oldStage = current.override_construction_stage ?? current.synced_construction_stage;
+      const newStage =
+        current.override_construction_stage ??
+        ('synced_construction_stage' in patch
+          ? (patch['synced_construction_stage'] as string | null)
+          : current.synced_construction_stage);
+      if (newDate !== oldDate || newStage !== oldStage) {
+        const text = deriveAvailabilityText(newDate, undefined, newStage);
         if (text !== null) {
           setExtra.push('availability_text = ?');
           valsExtra.push(text);
