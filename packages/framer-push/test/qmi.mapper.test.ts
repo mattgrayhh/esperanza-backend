@@ -519,8 +519,10 @@ describe('QMI mapper â bath combine + computed monthly payment (O’Neill p
     expect(sval(qmiDef.map(row).fieldData['bathroom_count'])).toBe(3.5);
   });
 
-  it('computes estimated_monthly_price (PITI) from price + company-wide mortgage_rate (seeded 6.15)', () => {
-    const db = freshDb(); // migration 0013 seeds mortgage_rate = 6.15
+  it('computes estimated_monthly_price (PITI) from price + company-wide incentive_rate', () => {
+    const db = freshDb();
+    // The prominent monthly uses the PROMOTIONAL rate (incentive_rate), not mortgage_rate.
+    db.prepare("INSERT INTO site_settings (key, value) VALUES ('incentive_rate', '6.15')").run();
     insertRow(db, 'qmi', {
       id: 'recQMImonth0001',
       published: 1,
@@ -532,9 +534,9 @@ describe('QMI mapper â bath combine + computed monthly payment (O’Neill p
     expect(sval(qmiDef.map(row).fieldData['estimated_monthly_price'])).toBe(1852.91);
   });
 
-  it('a marketing rate edit re-prices every listing (global knob → 4.99%)', () => {
+  it('a marketing rate edit re-prices every listing (incentive_rate → 4.99%)', () => {
     const db = freshDb();
-    db.prepare("UPDATE site_settings SET value = '4.99' WHERE key = 'mortgage_rate'").run();
+    db.prepare("INSERT INTO site_settings (key, value) VALUES ('incentive_rate', '4.99')").run();
     insertRow(db, 'qmi', {
       id: 'recQMImonth0002',
       published: 1,
@@ -545,9 +547,8 @@ describe('QMI mapper â bath combine + computed monthly payment (O’Neill p
     expect(sval(qmiDef.map(row).fieldData['estimated_monthly_price'])).toBe(1701.43);
   });
 
-  it('falls back to the stored monthly when no rate is configured', () => {
-    const db = freshDb();
-    db.prepare("DELETE FROM site_settings WHERE key = 'mortgage_rate'").run();
+  it('falls back to the stored monthly when no incentive_rate is configured', () => {
+    const db = freshDb(); // migration seeds mortgage_rate but NOT incentive_rate
     insertRow(db, 'qmi', {
       id: 'recQMImonth0003',
       published: 1,
