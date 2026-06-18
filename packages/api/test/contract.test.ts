@@ -562,6 +562,22 @@ describe('/qmi — raw passthrough contract', () => {
     const rec = serializeQmiRow(r, resolved);
     expect(rec.fields['promo_text']).toBe('Rogers Coves Banner WINNER');
   });
+
+  it('self-tour: nter_now surfaces + flags self_tour_available; absent => both omitted', () => {
+    const r = selectQmi(db).find((x) => x['id'] === 'rec0425zwvFWu0r5v')!;
+    // Seeded row carries no NterNow link and no explicit flag -> neither field emitted.
+    const base = serializeQmiRow(r, null);
+    expect('nter_now' in base.fields).toBe(false);
+    expect('self_tour_available' in base.fields).toBe(false);
+    // An NterNow link both surfaces nter_now and flags the home self-tourable.
+    const withNter = serializeQmiRow({ ...r, nter_now: 'https://mobile.api.nternow.com/x' }, null);
+    expect(withNter.fields['nter_now']).toBe('https://mobile.api.nternow.com/x');
+    expect(withNter.fields['self_tour_available']).toBe(true);
+    // An explicit self_tour_available=1 flag alone also emits the boolean.
+    const flagged = serializeQmiRow({ ...r, self_tour_available: 1 }, null);
+    expect(flagged.fields['self_tour_available']).toBe(true);
+    expect('nter_now' in flagged.fields).toBe(false);
+  });
 });
 
 // =============================================================================
