@@ -1,0 +1,38 @@
+name = "esperanza-ops"
+main = "src/index.ts"
+compatibility_date = "2025-05-20"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "esperanza"
+database_id = "023ea995-0abc-4165-a1e1-6e2373fc43e9"
+
+[[services]]
+binding = "FRAMER_PUSH"
+service = "esperanza-framer-push"
+
+[[services]]
+binding = "INGEST"
+service = "esperanza-ingest"
+
+[[services]]
+binding = "PDF"
+service = "esperanza-pdf"
+
+[[queues.producers]]
+binding = "RENDER_Q"
+queue = "esperanza-pdf-render"
+
+# Durable Object for the MCP agent (class added in Task B7)
+[[durable_objects.bindings]]
+name = "MCP_AGENT"
+class_name = "OpsMcpAgent"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["OpsMcpAgent"]
+
+# Secrets (set via `wrangler secret put`, never inline):
+#   WEBHOOK_TOKEN   — bearer for framer-push /backfill and /schema
+#   INGEST_TRIGGER_TOKEN — bearer for ingest trigger (confirm exact name in packages/ingest)
