@@ -228,6 +228,9 @@ export const communities = sqliteTable(
     latLong: text('lat_long'),
     masterPlanned: integer('master_planned', { mode: 'boolean' }).notNull().default(false),
     comingSoon: integer('coming_soon', { mode: 'boolean' }).notNull().default(false),
+    // close-out: no QMIs left → price_from uses the lowest published OFFERED plan
+    // (see v_public_communities / migration 0018). Admin-owned, not pushed to Framer.
+    closeOut: integer('close_out', { mode: 'boolean' }).notNull().default(false),
 
     syncedPriceFrom: real('synced_price_from'), // MIN(base price) per development
     overridePriceFrom: real('override_price_from'),

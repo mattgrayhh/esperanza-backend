@@ -310,6 +310,7 @@ const communities: EntityFieldConfig = {
     { field: 'latitude', label: 'Latitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
     { field: 'longitude', label: 'Longitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
     { field: 'master_planned', label: 'Master Planned', widget: 'boolean', bucket: 'admin', halfWidth: true },
+    { field: 'close_out', label: 'Close-Out Community', widget: 'boolean', bucket: 'admin', halfWidth: true, help: 'No quick move-in homes available. "Homes from" uses the lowest published floor plan offered in this community.' },
     { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin', halfWidth: true, visibleInForm: false }, // [P1] hidden from form — header Status control owns it
     // richtext (markdown)
     { field: 'description', label: 'Description (md)', widget: 'richtext', bucket: 'admin' },
