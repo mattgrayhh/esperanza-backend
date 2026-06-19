@@ -211,16 +211,30 @@ export async function loadListData(
   // sellable community (a real price + a square-footage range; master-planned shells are skipped).
   // 1:1 with the legacy Communities.pdf. (Not used in community scope.)
   if (kind === 'locations') {
+    // price_from: override wins; else a close-out community uses its lowest published
+    // OFFERED plan; else Snowflake dev-wide synced min (matches v_public_communities).
+    const priceFromExpr =
+      `COALESCE(
+         c.override_price_from,
+         CASE WHEN c.close_out = 1 THEN (
+           SELECT MIN(COALESCE(fp0.override_starting_price, fp0.synced_starting_price))
+           FROM floor_plans fp0
+           WHERE fp0.published = 1
+             AND COALESCE(fp0.override_starting_price, fp0.synced_starting_price) > 0
+             AND ',' || REPLACE(IFNULL(fp0.community_ids, ''), ' ', '') || ',' LIKE '%,' || c.id || ',%'
+         ) END,
+         c.synced_price_from
+       )`;
     const baseSql =
       `SELECT c.id, c.name, ci.city_name AS city, c.featured_image_url AS img,
-              COALESCE(c.override_price_from, c.synced_price_from) AS price_from,
+              ${priceFromExpr} AS price_from,
               COALESCE(c.override_square_footage_range, c.synced_square_footage_range) AS sqft,
               COALESCE(c.override_bed_count, c.synced_bed_count) AS beds,
               COALESCE(c.override_bath_count, c.synced_bath_count) AS baths
          FROM communities c
          LEFT JOIN cities ci ON ci.id = c.city_id
         WHERE c.published = 1
-          AND COALESCE(c.override_price_from, c.synced_price_from) > 0
+          AND ${priceFromExpr} > 0
           AND COALESCE(c.override_square_footage_range, c.synced_square_footage_range) IS NOT NULL
           ${isMaster ? '' : 'AND c.city_id = ?'}
         ORDER BY ${isMaster ? 'ci.city_name, c.name' : 'c.name'}`;

@@ -58,3 +58,7 @@ communities have similar names or a name later changes).
 - New floor plans you just created show up in the list immediately.
 - This does **not** publish anything — a plan still has to be Live on its own page
   to appear on the site. See *How a new home appears* and *Statuses explained*.
+- For a **close-out community** (no quick move-in homes left), this list also
+  sets the community's `Price From`: it becomes the lowest published plan you've
+  checked here. Keep the list trimmed to only the plans still buildable there.
+  See *Synced fields and overrides* → *Close-out communities*.

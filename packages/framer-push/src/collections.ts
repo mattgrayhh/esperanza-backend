@@ -744,7 +744,17 @@ const communities: CollectionDef = {
     COALESCE(override_square_footage_range, synced_square_footage_range) AS square_footage_range,
     COALESCE(override_bed_count,  synced_bed_count)  AS bed_count,
     COALESCE(override_bath_count, synced_bath_count) AS bath_count,
-    COALESCE(override_price_from, synced_price_from) AS price_from,
+    COALESCE(
+      override_price_from,
+      CASE WHEN close_out = 1 THEN (
+        SELECT MIN(COALESCE(fp3.override_starting_price, fp3.synced_starting_price))
+        FROM floor_plans fp3
+        WHERE fp3.published = 1
+          AND COALESCE(fp3.override_starting_price, fp3.synced_starting_price) > 0
+          AND ',' || REPLACE(IFNULL(fp3.community_ids, ''), ' ', '') || ',' LIKE '%,' || communities.id || ',%'
+      ) END,
+      synced_price_from
+    ) AS price_from,
     (SELECT group_concat(fp.id) FROM floor_plans fp
       WHERE ',' || REPLACE(IFNULL(fp.community_ids, ''), ' ', '') || ','
             LIKE '%,' || communities.id || ',%') AS floor_plan_ids,
@@ -759,7 +769,17 @@ const communities: CollectionDef = {
     COALESCE(override_square_footage_range, synced_square_footage_range) AS square_footage_range,
     COALESCE(override_bed_count,  synced_bed_count)  AS bed_count,
     COALESCE(override_bath_count, synced_bath_count) AS bath_count,
-    COALESCE(override_price_from, synced_price_from) AS price_from,
+    COALESCE(
+      override_price_from,
+      CASE WHEN close_out = 1 THEN (
+        SELECT MIN(COALESCE(fp3.override_starting_price, fp3.synced_starting_price))
+        FROM floor_plans fp3
+        WHERE fp3.published = 1
+          AND COALESCE(fp3.override_starting_price, fp3.synced_starting_price) > 0
+          AND ',' || REPLACE(IFNULL(fp3.community_ids, ''), ' ', '') || ',' LIKE '%,' || communities.id || ',%'
+      ) END,
+      synced_price_from
+    ) AS price_from,
     (SELECT group_concat(fp.id) FROM floor_plans fp
       WHERE ',' || REPLACE(IFNULL(fp.community_ids, ''), ' ', '') || ','
             LIKE '%,' || communities.id || ',%') AS floor_plan_ids,
