@@ -37,8 +37,14 @@ export class OpsMcpAgent extends McpAgent<Env, unknown, OpsProps> {
       'sync_status',
       { source: z.enum(['framer', 'ingest', 'snowflake']).optional(), limit: z.number().optional() },
       async ({ source, limit }) => {
-        await audit('sync_status', 'ok', { source, limit });
-        return ok(await syncStatus(db, source, limit ?? 20));
+        try {
+          const data = await syncStatus(db, source, limit ?? 20);
+          await audit('sync_status', 'ok', { source, limit });
+          return ok(data);
+        } catch (e) {
+          await audit('sync_status', 'error', { source, limit }, e instanceof Error ? e.message : String(e));
+          throw e;
+        }
       },
     );
 
@@ -46,8 +52,14 @@ export class OpsMcpAgent extends McpAgent<Env, unknown, OpsProps> {
       'recent_changes',
       { entity: z.string().optional(), limit: z.number().optional() },
       async ({ entity, limit }) => {
-        await audit('recent_changes', 'ok', { entity, limit });
-        return ok(await recentChanges(db, entity, limit ?? 50));
+        try {
+          const data = await recentChanges(db, entity, limit ?? 50);
+          await audit('recent_changes', 'ok', { entity, limit });
+          return ok(data);
+        } catch (e) {
+          await audit('recent_changes', 'error', { entity, limit }, e instanceof Error ? e.message : String(e));
+          throw e;
+        }
       },
     );
 
@@ -55,8 +67,14 @@ export class OpsMcpAgent extends McpAgent<Env, unknown, OpsProps> {
       'get_record',
       { collection: z.string(), id: z.string() },
       async ({ collection, id }) => {
-        await audit('get_record', 'ok', { collection, id });
-        return ok(await getRecord(db, collection, id));
+        try {
+          const data = await getRecord(db, collection, id);
+          await audit('get_record', 'ok', { collection, id });
+          return ok(data);
+        } catch (e) {
+          await audit('get_record', 'error', { collection, id }, e instanceof Error ? e.message : String(e));
+          throw e;
+        }
       },
     );
 
@@ -64,8 +82,14 @@ export class OpsMcpAgent extends McpAgent<Env, unknown, OpsProps> {
       'list_records',
       { collection: z.string(), limit: z.number().optional(), offset: z.number().optional() },
       async ({ collection, limit, offset }) => {
-        await audit('list_records', 'ok', { collection, limit, offset });
-        return ok(await listRecords(db, collection, limit ?? 50, offset ?? 0));
+        try {
+          const data = await listRecords(db, collection, limit ?? 50, offset ?? 0);
+          await audit('list_records', 'ok', { collection, limit, offset });
+          return ok(data);
+        } catch (e) {
+          await audit('list_records', 'error', { collection, limit, offset }, e instanceof Error ? e.message : String(e));
+          throw e;
+        }
       },
     );
 
