@@ -12,7 +12,8 @@
     "@esperanza/db": "*",
     "agents": "latest",
     "@modelcontextprotocol/sdk": "latest",
-    "drizzle-orm": "*"
+    "drizzle-orm": "*",
+    "zod": "^3.25"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "*",
