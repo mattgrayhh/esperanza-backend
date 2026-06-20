@@ -1,6 +1,6 @@
 # Agent Access (web developer)
 
-> **Note:** The `.mcp.json` at the repo root currently contains a `PLACEHOLDER-SUBDOMAIN` in the
+> **Note:** The `.mcp.json` at the repo root currently contains a `round-base-ed8c` in the
 > `esperanza-ops` URL. Replace it with the real `esperanza-ops` workers.dev subdomain after its
 > first deploy (run `wrangler deploy` in `packages/ops` and copy the printed URL).
 
