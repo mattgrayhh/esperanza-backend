@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { hashToken, lookupTokenSql } from '../src/tokens';
 
-const MIG = readFileSync(join(__dirname, '../../db/migrations/0018_ops_tokens.sql'), 'utf8');
+const MIG = readFileSync(join(__dirname, '../../db/migrations/0019_ops_tokens.sql'), 'utf8');
 
 function db() {
   const d = new Database(':memory:');

@@ -1,9 +1,9 @@
--- 0018_ops_tokens.sql
+-- 0019_ops_tokens.sql
 CREATE TABLE ops_tokens (
   id TEXT PRIMARY KEY,            -- e.g. 'webdev-josh'
   label TEXT NOT NULL,
   token_hash TEXT NOT NULL UNIQUE,  -- sha-256 hex of the raw bearer token
-  tier TEXT NOT NULL DEFAULT 'read', -- 'read' | 'tier1' | 'tier2'
+  tier TEXT NOT NULL DEFAULT 'read' CHECK (tier IN ('read', 'tier1', 'tier2')),
   revoked INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   last_used_at TEXT
