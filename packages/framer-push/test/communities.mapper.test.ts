@@ -147,6 +147,48 @@ describe('Communities mapper — rich text, HOA links, coords, gates', () => {
     expect(mapOne(db, 'recCOM0003ABCDEF').draft).toBe(false);
   });
 
+  it('lat_long is built from the clean numeric columns, not the legacy text/URL', () => {
+    // Regression: Los Arroyos had lat_long=null and map_coordinates holding a full
+    // Google Maps URL, so the old `lat_long ?? map_coordinates` fallback pushed the
+    // URL into the map-binding field. Now lat_long is derived from latitude/longitude.
+    const db = freshDb();
+    insertRow(db, 'communities', {
+      id: 'recCOM0005ABCDEF',
+      name: 'Los Arroyos',
+      published: 1,
+      coming_soon: 1,
+      latitude: 26.20356,
+      longitude: -97.73547,
+      lat_long: null,
+      map_coordinates: 'https://maps.google.com/maps?q=26.20356,-97.73547',
+      updated_at: '2026-05-30T12:00:00.000Z',
+    });
+    const f = mapOne(db, 'recCOM0005ABCDEF').fieldData;
+    // bare "lat,long" the map layer can parse — NOT the Google URL
+    expect(sval(f['lat_long'])).toBe('26.20356,-97.73547');
+    // and the Google link lands on get_directions (directions column is empty)
+    expect(f['get_directions']?.type).toBe('link');
+    expect(sval(f['get_directions'])).toBe('https://maps.google.com/maps?q=26.20356,-97.73547');
+  });
+
+  it('lat_long ignores dirty legacy text (whitespace + dropped sign)', () => {
+    // Cascada at Tres Lagos: lat_long text had a leading-space and a positive
+    // longitude (sign dropped); the numeric columns are correct, so we use them.
+    const db = freshDb();
+    insertRow(db, 'communities', {
+      id: 'recCOM0006ABCDEF',
+      name: 'Cascada at Tres Lagos',
+      published: 1,
+      latitude: 26.3409143,
+      longitude: -98.269991,
+      lat_long: '  26.3409143, 98.2699910',
+      map_coordinates: 'https://maps.google.com/maps?q=26.3409143,-98.2699910',
+      updated_at: '2026-05-30T12:00:00.000Z',
+    });
+    const f = mapOne(db, 'recCOM0006ABCDEF').fieldData;
+    expect(sval(f['lat_long'])).toBe('26.3409143,-98.269991');
+  });
+
   it('drops empty formattedText (never overwrites with blank)', () => {
     const db = freshDb();
     insertRow(db, 'communities', {
