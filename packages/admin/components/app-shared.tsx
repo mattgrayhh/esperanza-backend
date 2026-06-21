@@ -136,6 +136,80 @@ export const mainNavLinks: SidebarNavGroup[] = [
 
 export const navLinks = mainNavLinks;
 
+// =============================================================================
+// Multi-site (multi-tenant) model. The top-left switcher lets one signed-in admin
+// move between the Rhodes-Enterprises sites this panel manages. "Rhodes" is the
+// overarching parent BRAND; the sites beneath it are distinct companies:
+//   • Esperanza Homes  — the for-sale builder (D1-backed CMS; the original admin).
+//   • Rhodes Living    — the RENTAL company (its own brand/logo). Its data lives in
+//                        the standalone rhodes-availability Worker (Snowflake→KV),
+//                        reached via lib/rhodes-client.ts — NOT this admin's D1.
+//
+// The ACTIVE site is derived purely from the URL: anything under /rhodes is the
+// Rhodes Living site; everything else is Esperanza. Switching = navigating to a
+// site's `home`. The sidebar renders the active site's `nav`.
+// =============================================================================
+
+export type SiteId = "esperanza" | "rhodes-living";
+
+export type SiteDef = {
+	id: SiteId;
+	name: string;
+	/** Wordmark shown in the expanded switcher trigger + dropdown. */
+	logoSrc: string;
+	/** Height utility for the trigger logo (logos have different aspect ratios). */
+	logoClassName: string;
+	/** Where selecting this site navigates (and the site's "home" route). */
+	home: string;
+	nav: SidebarNavGroup[];
+};
+
+// Rhodes Living nav — a single screen (Availability) backed by the Worker. Kept
+// deliberately small; it is NOT the Esperanza entity set.
+export const rhodesNavLinks: SidebarNavGroup[] = [
+	{
+		label: "Rhodes Living",
+		items: [
+			{
+				title: "Availability",
+				path: "/rhodes",
+				icon: <BuildingIcon />,
+			},
+		],
+	},
+];
+
+export const SITES: SiteDef[] = [
+	{
+		id: "esperanza",
+		name: "Esperanza Homes",
+		logoSrc: "/esperanza-logo.svg",
+		logoClassName: "h-9",
+		home: "/",
+		nav: mainNavLinks,
+	},
+	{
+		id: "rhodes-living",
+		name: "Rhodes Living",
+		logoSrc: "/rhodes-living-logo.png",
+		logoClassName: "h-7",
+		home: "/rhodes",
+		nav: rhodesNavLinks,
+	},
+];
+
+/** Which site owns the current pathname (URL-driven; no cookie/state). */
+export function getActiveSiteId(pathname: string): SiteId {
+	return pathname === "/rhodes" || pathname.startsWith("/rhodes/")
+		? "rhodes-living"
+		: "esperanza";
+}
+
+export function getActiveSite(pathname: string): SiteDef {
+	const id = getActiveSiteId(pathname);
+	return SITES.find((s) => s.id === id) ?? SITES[0]!;
+}
+
 /**
  * Pure active-route matcher (no hooks — callable from server or client).
  * A nav item is active when the current pathname equals its path or is a
