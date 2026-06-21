@@ -800,6 +800,17 @@ const communities: CollectionDef = {
       }
     }
 
+    // lat_long: bare "lat,long" string the Framer map layer binds to. Build it from
+    // the clean numeric lat/long columns (source of truth) rather than the legacy
+    // lat_long/map_coordinates text — that text carried leading whitespace, a dropped
+    // longitude sign (Cascada at Tres Lagos), and, where lat_long was null (Los
+    // Arroyos), fell back to the full Google Maps URL. Fall back to the raw lat_long
+    // text only when the numeric columns are absent.
+    const latLong =
+      latitude !== undefined && longitude !== undefined
+        ? `${latitude},${longitude}`
+        : asString(row['lat_long']);
+
     // photo_gallery_json is the authoritative multi-image gallery (JSON array of URLs).
     // Fall back to the single photo_gallery_image_url if the array column is empty/null.
     const galleryJson = galleryUrls(row['photo_gallery_json']);
@@ -825,8 +836,11 @@ const communities: CollectionDef = {
       // the real relationship is floor_plans.communities + community_count.
       town: sIf(row['town']),
       address: sIf(row['address']),
-      get_directions: linkIf(row['directions']),
-      lat_long: sIf(row['lat_long'] ?? row['map_coordinates']),
+      // Get Directions = the Google Maps link. The dedicated `directions` column is
+      // empty for every community, so fall back to map_coordinates (which holds the
+      // maps.google.com URL) — that's the link the button is meant to surface.
+      get_directions: linkIf(row['directions'] ?? row['map_coordinates']),
+      lat_long: sIf(latLong),
       latitude: latitude === undefined ? undefined : num(latitude),
       longitude: longitude === undefined ? undefined : num(longitude),
       price_from: nIf(row['price_from']),
