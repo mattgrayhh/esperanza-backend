@@ -376,5 +376,28 @@ export const HELP_ARTICLES: HelpArticle[] = [
     ],
     "entity": null,
     "html": "<p>The website's payment calculators — on community pages, home pages, and the<br>financing page — all read <strong>one company-wide Mortgage Rate</strong>. Update it in one<br>place and every calculator follows.</p><h2>Steps</h2><ol><li>Click your account (bottom of the sidebar) → <strong>Site settings</strong>.</li><li>Type the new rate into <strong>Mortgage Rate</strong> (a percentage, e.g. <code>6.15</code>).</li><li><code>Save</code>. Calculators across the site use the new rate within moments —</li></ol><p>   visitors mid-session see it on their next page load.</p><h2>Good to know</h2><ul><li>This replaces the Homefiniti \"Mortgage Rate\" field at the Esperanza Homes</li></ul><p>  level — same idea: type a number, the whole site updates.</p><ul><li>Visitors can still type their own rate <em>into</em> a calculator on the page;</li></ul><p>  this setting is the <strong>starting default</strong> every calculator shows.</p><ul><li>The per-home <code>ARM Rate</code> badge and the <code>Est. Monthly Payment</code> numbers on</li></ul><p>  listings are separate, manually-set marketing fields — changing the<br>  Mortgage Rate doesn't rewrite those.</p><ul><li>Every change is logged (who + when) in Activity.</li></ul>"
+  },
+  {
+    "slug": "rhodes-living-availability",
+    "title": "Rhodes Living — availability & overrides",
+    "category": "Rhodes Living",
+    "categorySort": 70,
+    "sort": 10,
+    "summary": "How the Rhodes Living rental screen works — switching sites, manual overrides, and Snowflake sync.",
+    "keywords": [
+      "rhodes living",
+      "rental",
+      "rentals",
+      "availability",
+      "override",
+      "sync",
+      "snowflake",
+      "belterra",
+      "villas on ware",
+      "units",
+      "lot"
+    ],
+    "entity": null,
+    "html": "<p><strong>Rhodes Living</strong> is Rhodes Enterprises' rental brand — a separate company from<br>Esperanza Homes (the for-sale builder). It has its own screen inside this admin.</p><h2>Switch to the Rhodes Living site</h2><p>Use the <strong>site switcher</strong> at the top-left of the sidebar (the logo with the<br>up/down arrows). Under the <strong>Rhodes</strong> parent brand you'll see both companies —<br><strong>Esperanza Homes</strong> and <strong>Rhodes Living</strong>. Pick Rhodes Living and the sidebar<br>swaps to its <strong>Availability</strong> screen. Switch back the same way.</p><p>Everyone with admin access can see both sites.</p><h2>Where the data comes from</h2><p>Rhodes Living's unit data is <strong>not</strong> in the same database as the Esperanza<br>listings. It syncs automatically from Snowflake (the Voyager/Yardi feed) into the<br>Rhodes Living availability service <strong>every 15 minutes</strong>, and that's what powers<br>the unit list on rhodesliving.com.</p><p>The screen has two communities — <strong>Villas on Ware</strong> and **Belterra at Tres<br>Lagos** — selectable with the tabs near the top. The stat cards show total units,<br>how many are available, how many overrides are active, and the last sync time.</p><h2>Override a unit</h2><p>An <strong>override</strong> lets you correct or change what a single unit shows on the<br>website, without waiting for Snowflake. Use it for manual corrections, a model<br>home, or a value that's wrong upstream.</p><ol><li>Pick the community tab.</li><li>Click <strong>Add override</strong> (or the pencil on an existing one).</li><li>Enter the <strong>Lot number</strong> and only the fields you want to change — status,</li></ol><p>   floorplan, address, beds, baths, sq ft, minimum rent, featured image, and a<br>   note explaining why.</p><ol><li><strong>Save override.</strong></li></ol><p>Any field you leave blank keeps following Snowflake. Your override survives every<br>future sync until you remove it.</p><blockquote><p><strong>Status</strong> options map to the public labels: <em>Available Now</em>, <em>Coming Soon</em>,<br><em>Model Home</em>, and <em>Unavailable</em>. Leave Status on \"Keep Snowflake status\" to only<br>override other fields.</p></blockquote><h2>Remove an override (go back to Snowflake)</h2><p>In the <strong>Active overrides</strong> list, click the <strong>trash</strong> icon on the row. The unit<br>immediately goes back to following its live Snowflake values.</p><h2>Sync now</h2><p>The data refreshes on its own every 15 minutes. If you need the latest Snowflake<br>data right away, click <strong>Sync now</strong> in the top-right. It re-pulls both communities<br>and updates the unit list and the last-sync time.</p>"
   }
 ];

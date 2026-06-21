@@ -76,6 +76,19 @@ service = "esperanza-framer-push"
 binding = "INGEST"
 service = "esperanza-ingest"
 
+# Service binding to the rhodes-availability Worker (Rhodes Living — the RENTAL tenant,
+# a separate company under the Rhodes parent brand). The /rhodes screen's server actions
+# (lib/rhodes-actions.ts) call its /api/* routes via this binding (Authorization: Bearer
+# RHODES_ADMIN_KEY) to read units, manage manual overrides, and force a Snowflake→KV
+# resync. The Worker still authenticates the Bearer key on every route, so
+# RHODES_ADMIN_KEY must be set as an admin secret (it matches the rhodes-availability
+# Worker's ADMIN_KEY). If the binding is absent (e.g. a partial deploy), the actions fall
+# back to RHODES_API_URL over the public internet. Both Workers live on the same
+# Cloudflare account (hello@hazard.house), so the binding resolves.
+[[services]]
+binding = "RHODES"
+service = "rhodes-availability"
+
 # Non-secret vars.
 #   IMAGES_PUBLIC_BASE_URL — public base for the R2 bucket. uploadImage() builds the
 #                            STABLE url as `${IMAGES_PUBLIC_BASE_URL}/<entity>/<id>/<file>`.
@@ -95,6 +108,10 @@ FRAMER_PUSH_URL = "https://esperanza-framer-push.round-base-ed8c.workers.dev"
 # binding is unavailable. The action prefers the binding; this URL + INGEST_TRIGGER_TOKEN
 # is the backstop.
 INGEST_URL = "https://esperanza-ingest.round-base-ed8c.workers.dev"
+# Public fallback for the rhodes-availability Worker (Rhodes Living) when the RHODES
+# service binding is unavailable. The rhodes-actions prefer the binding; this URL +
+# RHODES_ADMIN_KEY is the backstop.
+RHODES_API_URL = "https://rhodes-availability.round-base-ed8c.workers.dev"
 # Public api worker — saveSiteSettings purges /api/public/settings?purge=1 here after a
 # save so the Framer calculators pick the new Mortgage Rate up immediately (the 5-minute
 # edge TTL is the backstop if the purge fails).
@@ -133,6 +150,14 @@ MAILLAYER_API_URL = "https://mailer.hazardhouse.ai/api/transactional/send"
 #                   worker's INGEST_TRIGGER_TOKEN secret. Set with:
 #                     wrangler secret put INGEST_TRIGGER_TOKEN --config packages/admin/wrangler.toml
 #                   (locally, put INGEST_TRIGGER_TOKEN=... in packages/admin/.dev.vars).
+#
+#   RHODES_ADMIN_KEY — Bearer token the /rhodes (Rhodes Living) server actions send to
+#                   the rhodes-availability Worker (over the RHODES service binding, or
+#                   the public RHODES_API_URL fallback). Must EQUAL that Worker's ADMIN_KEY
+#                   secret. Until it is set, the /rhodes screen renders but shows an auth
+#                   error. Set with:
+#                     wrangler secret put RHODES_ADMIN_KEY --config packages/admin/wrangler.toml
+#                   (locally, put RHODES_ADMIN_KEY=... in packages/admin/.dev.vars).
 #
 #   MAILLAYER_API_KEY — the ENABLED Esperanza MailLayer template's `txn_…` key. Used by
 #                   lib/maillayer.ts to email a generated password to a user on create /
