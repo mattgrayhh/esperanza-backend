@@ -292,3 +292,42 @@ describe('promo resolution backed by the real schema (end-to-end against D1 SQL)
     db.close();
   });
 });
+
+describe('promotions: pdf_url + effective rate resolution (migration 0020)', () => {
+  it('effective_rate inherits site_settings.incentive_rate when no override', () => {
+    const db = freshDb();
+    db.prepare(`INSERT INTO site_settings (key, value) VALUES ('incentive_rate', '4.99')`).run();
+    db.prepare(
+      `INSERT INTO promotions (id, title, pdf_url, rate_override, published)
+       VALUES ('recPROMORATE01', 'Inherit', 'https://ehi.hazardhouse.ai/promo/p.pdf', NULL, 1)`
+    ).run();
+    const row = db
+      .prepare(`SELECT pdf_url, rate_override, effective_rate FROM v_public_promotions WHERE id = ?`)
+      .get('recPROMORATE01') as Record<string, unknown>;
+    expect(row.pdf_url).toBe('https://ehi.hazardhouse.ai/promo/p.pdf');
+    expect(row.rate_override).toBeNull();
+    expect(String(row.effective_rate)).toBe('4.99');
+  });
+
+  it('effective_rate uses the override when set (and empty-string override is treated as unset)', () => {
+    const db = freshDb();
+    db.prepare(`INSERT INTO site_settings (key, value) VALUES ('incentive_rate', '4.99')`).run();
+    db.prepare(
+      `INSERT INTO promotions (id, title, rate_override, published) VALUES ('recOV', 'Override', '3.50', 1)`
+    ).run();
+    db.prepare(
+      `INSERT INTO promotions (id, title, rate_override, published) VALUES ('recEmpty', 'Empty', '', 1)`
+    ).run();
+    const ov = db.prepare(`SELECT effective_rate FROM v_public_promotions WHERE id='recOV'`).get() as Record<string, unknown>;
+    const empty = db.prepare(`SELECT effective_rate FROM v_public_promotions WHERE id='recEmpty'`).get() as Record<string, unknown>;
+    expect(String(ov.effective_rate)).toBe('3.50');
+    expect(String(empty.effective_rate)).toBe('4.99'); // '' → falls back to global
+  });
+
+  it('effective_rate is null when neither override nor incentive_rate exists (graceful)', () => {
+    const db = freshDb();
+    db.prepare(`INSERT INTO promotions (id, title, published) VALUES ('recNone', 'None', 1)`).run();
+    const row = db.prepare(`SELECT effective_rate FROM v_public_promotions WHERE id='recNone'`).get() as Record<string, unknown>;
+    expect(row.effective_rate).toBeNull();
+  });
+});
