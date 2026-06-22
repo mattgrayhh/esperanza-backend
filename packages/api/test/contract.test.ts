@@ -266,6 +266,8 @@ function seedCommunityDraft(db: Database.Database) {
 }
 
 function seedPromotions(db: Database.Database) {
+  db.prepare(`INSERT INTO site_settings (key, value) VALUES ('incentive_rate', '4.99')`).run();
+
   // Two promos targeting the seeded community via promotion_targets; lower
   // sort_order should win the community flatten.
   const insP = db.prepare(
@@ -273,7 +275,11 @@ function seedPromotions(db: Database.Database) {
        image_url, sort_order, start_date, end_date, published, applies_to)
      VALUES (@id,@title,@banner,@badge,@cl,@cu,@img,@so,@sd,@ed,@active,@at)`
   );
-  insP.run({
+  db.prepare(
+    `INSERT INTO promotions (id, title, banner_text, badge_text, cta_label, cta_url,
+       image_url, pdf_url, sort_order, start_date, end_date, published, applies_to)
+     VALUES (@id,@title,@banner,@badge,@cl,@cu,@img,@pdf,@so,@sd,@ed,@active,@at)`
+  ).run({
     id: 'recPROMOcomm1',
     title: 'Rogers Coves Special',
     banner: 'Rogers Coves Banner WINNER',
@@ -281,6 +287,7 @@ function seedPromotions(db: Database.Database) {
     cl: 'View Details',
     cu: 'https://www.esperanzahomes.com/x',
     img: 'https://media.esperanzahomes.com/promo/p1.jpg',
+    pdf: 'https://ehi.hazardhouse.ai/promo/p1.pdf',
     so: 1, // lower -> winner
     sd: null,
     ed: '',
