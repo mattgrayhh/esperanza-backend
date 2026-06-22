@@ -327,3 +327,61 @@ describe('custom-field VALUE round-trip through custom_fields JSON', () => {
     expect(auditRows('collections', 'c1').length).toBe(before); // no new audit
   });
 });
+
+// =============================================================================
+// REGRESSION: a field_definitions row whose key IS a real column but is ABSENT
+// from the static field-config (e.g. `community_map_embed`, dropped from the
+// static config in [T7] but still a real column + a visible registry row).
+//
+// The save side decides "custom" by "no real column" (resolveCustomFieldDefs) →
+// writes the REAL column. The read side wrongly decided "custom" by "no static
+// config match" → it read the value back from the (empty) custom_fields blob, so
+// the field rendered EMPTY after save. Symptom: operator types a value, saves,
+// and it "disappears". Read and write MUST agree on where the value lives.
+// =============================================================================
+describe('real-column field absent from static config round-trips through the column', () => {
+  const URL = 'https://esperanzahomes.lotvue.com/marketing/Villas%20Las%20Lagunas';
+  beforeEach(() => {
+    // a single visible registry row for a REAL communities column not in the static config
+    H.sqlite
+      .prepare(
+        `INSERT INTO field_definitions
+           (id, entity, key, label, sort, type, options_json, system, visible_in_form, visible_in_list, half_width)
+         VALUES ('communities__community_map_embed','communities','community_map_embed','Map Embed',
+                 50,'long',NULL,0,1,0,0)`
+      )
+      .run();
+    H.sqlite
+      .prepare(`INSERT INTO communities (id, name) VALUES ('cm1', 'Villas Las Lagunas')`)
+      .run();
+  });
+
+  it('resolveFieldConfig does NOT flag a real-column field as custom', async () => {
+    const cfg = await resolveFieldConfig('communities');
+    const f = cfg.fields.find((x) => x.field === 'community_map_embed');
+    expect(f).toBeDefined();
+    expect(f!.custom).toBeFalsy(); // value lives in the real column, not custom_fields
+  });
+
+  it('resolveCustomFieldDefs excludes it (write side already treats it as a column)', async () => {
+    const defs = await resolveCustomFieldDefs('communities');
+    expect(defs.map((d) => d.key)).not.toContain('community_map_embed');
+  });
+
+  it('saveEntity writes the REAL column and buildEditView reads it back (not the empty blob)', async () => {
+    const res = await saveEntity('communities', 'cm1', form({ community_map_embed: URL }));
+    expect(res).toEqual({ ok: true });
+
+    const row = H.sqlite
+      .prepare('SELECT community_map_embed, custom_fields FROM communities WHERE id = ?')
+      .get('cm1') as { community_map_embed: string | null; custom_fields: string | null };
+    expect(row.community_map_embed).toBe(URL); // real column written
+    expect(row.custom_fields).toBeNull(); // NOT routed into the custom blob
+
+    const view = await buildEditView('communities', 'cm1');
+    expect(view).not.toBeNull();
+    const f = view!.fields.find((x) => x.field === 'community_map_embed')!;
+    expect(f.kind).toBe('generic');
+    if (f.kind === 'generic') expect(f.value).toBe(URL); // THE BUG: was '' before the fix
+  });
+});

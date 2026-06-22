@@ -51,14 +51,19 @@ export function CommunityHero({
         alt={view.displayName}
         className="absolute inset-0 h-full w-full object-cover"
       />
-      {/* Gradient scrim — dark at the bottom for legibility */}
+      {/* Gradient scrim — dark at the bottom for the title/description. */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+      {/* Top-right scrim — darkens the corner so the white status control stays legible
+          over any photo. Anchored at the top-right (gradient-to-bl), fading to transparent. */}
+      <div className="absolute inset-0 bg-gradient-to-bl from-black/60 via-black/10 to-transparent" />
 
       {/* Content overlay */}
       <div className="relative flex flex-col justify-end gap-3 p-6" style={{ minHeight: 220 }}>
-        {/* Actions slot — top-right */}
+        {/* Actions slot — top-right. White text + lightened control borders so the status
+            dropdown reads clearly against the scrimmed image. (The portaled dropdown menu
+            is unaffected — it renders outside this subtree.) */}
         {children ? (
-          <div className="absolute right-4 top-4 flex flex-wrap items-center gap-2">
+          <div className="absolute right-4 top-4 flex flex-wrap items-center gap-2 text-white drop-shadow-sm [&_[data-slot=select-trigger]]:border-white/40 [&_[data-slot=select-trigger]]:bg-black/20 [&_[data-slot=select-trigger]]:hover:bg-black/30 [&_svg]:text-white/80">
             {children}
           </div>
         ) : null}
