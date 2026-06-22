@@ -57,7 +57,7 @@ function isImageException(field: string): boolean {
   return (
     /_alt$/.test(field) || // alt text (featured_image_alt, community_logo_alt, …)
     /(^|_)description$/.test(field) || // copy: hero_description, description
-    /_pdf(_url)?$/.test(field) || // documents (rendered as a file card, not an image)
+    /(^|_)pdf(_url)?$/.test(field) || // documents (rendered as a file card, not an image)
     /brochure/.test(field) ||
     /(^|_)caption/.test(field) || // image captions are copy
     /(^|_)(video|embed|tour|map)(_|$)/.test(field) || // videos / embeds / tours / maps are URLs/iframes

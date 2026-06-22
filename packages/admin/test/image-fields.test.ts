@@ -85,9 +85,10 @@ describe('isImageField — agrees with the static config widget:image tags', () 
       const cfg = FIELD_CONFIG[def.key];
       for (const f of cfg.fields) {
         if (f.widget === 'image') {
-          // features/resources downloads are config'd `image` for the file-card uploader
-          // but are PDFs by name; the detector intentionally leaves those to the config.
-          if (/_pdf(_url)?$|brochure|download/.test(f.field)) continue;
+          // features/resources downloads and the promotions pdf_url are config'd `image`
+          // for the file-card uploader but are PDFs by name; the detector intentionally
+          // leaves those to the config (isImageField returns false for them by design).
+          if (/(^|_)pdf(_url)?$|brochure|download/.test(f.field)) continue;
           expect(isImageField(f.field), `${def.key}.${f.field}`).toBe(true);
         }
       }
