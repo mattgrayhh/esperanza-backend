@@ -272,6 +272,24 @@ WHERE d.COMPANY_NAME ILIKE '%esperanza%' AND d.DEVELOPMENT_NAME IS NOT NULL
 GROUP BY d.DEVELOPMENT_NAME`;
 }
 
+/** QUERY 5 — per-elevation prices (0019). One row per development × model ×
+ *  elevation (type+material), price = MIN positive salesprice (collapses the
+ *  several FLOORPLAN_ELEVATIONCODEs that share a type+material). Feeds the
+ *  close-out elevation price override via community_elevation_prices. */
+export function floorPlanElevationsSql(env: SnowflakeEnv): string {
+  return `SELECT d.DEVELOPMENT_NAME, f.FLOORPLAN_MODEL_NAME,
+       f.FLOORPLAN_ELEVATION_TYPE, f.FLOORPLAN_MATERIAL_TYPE,
+       MIN(CASE WHEN f.FLOORPLAN_SALESPRICE > 0 THEN f.FLOORPLAN_SALESPRICE END)
+FROM ${FQ(env)}.DM_FLOOR_PLAN f
+JOIN ${FQ(env)}.DM_COMPANY_DEVELOPMENT d ON f.DEVELOPMENT_ID = d.DEVELOPMENT_ID
+WHERE d.COMPANY_NAME ILIKE '%esperanza%'
+  AND d.DEVELOPMENT_NAME IS NOT NULL
+  AND f.FLOORPLAN_MODEL_NAME IS NOT NULL AND f.FLOORPLAN_MODEL_NAME != 'UNKNOWN'
+  AND f.FLOORPLAN_ELEVATION_TYPE IS NOT NULL AND f.FLOORPLAN_MATERIAL_TYPE IS NOT NULL
+GROUP BY d.DEVELOPMENT_NAME, f.FLOORPLAN_MODEL_NAME,
+         f.FLOORPLAN_ELEVATION_TYPE, f.FLOORPLAN_MATERIAL_TYPE`;
+}
+
 // -- positional rowset → normalized records (the only place r[N] indexing lives) --
 
 export interface SnowflakeQmiRow {
@@ -468,6 +486,32 @@ export function parseCommunityPriceFromRows(rowset: unknown[][]): Map<string, nu
     const price = num(r[1]);
     if (dev === '' || price == null || !(price > 0)) continue;
     out.set(normalizeCommunityName(dev).toLowerCase(), price);
+  }
+  return out;
+}
+
+/** A per-elevation price row from QUERY 5 (0019). developmentName/modelName are
+ *  RAW (not yet normalized/resolved) — buildElevationPriceRows resolves them to
+ *  community/floor-plan ids against the D1 lookups. */
+export interface SnowflakeElevationPriceRow {
+  developmentName: string;
+  modelName: string;
+  elevationType: string;
+  materialType: string;
+  price: number;
+}
+
+export function parseFloorPlanElevationRows(rowset: unknown[][]): SnowflakeElevationPriceRow[] {
+  const out: SnowflakeElevationPriceRow[] = [];
+  for (const r of rowset) {
+    const developmentName = String(r[0] ?? '').trim();
+    const modelName = String(r[1] ?? '').trim();
+    const elevationType = String(r[2] ?? '').trim();
+    const materialType = String(r[3] ?? '').trim();
+    const price = num(r[4]);
+    if (developmentName === '' || modelName === '' || elevationType === '' || materialType === '') continue;
+    if (price == null || !(price > 0)) continue;
+    out.push({ developmentName, modelName, elevationType, materialType, price });
   }
   return out;
 }

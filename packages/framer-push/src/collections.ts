@@ -746,12 +746,21 @@ const communities: CollectionDef = {
     COALESCE(override_bath_count, synced_bath_count) AS bath_count,
     COALESCE(
       override_price_from,
-      CASE WHEN close_out = 1 THEN (
-        SELECT MIN(COALESCE(fp3.override_starting_price, fp3.synced_starting_price))
-        FROM floor_plans fp3
-        WHERE fp3.published = 1
-          AND COALESCE(fp3.override_starting_price, fp3.synced_starting_price) > 0
-          AND ',' || REPLACE(IFNULL(fp3.community_ids, ''), ' ', '') || ',' LIKE '%,' || communities.id || ',%'
+      CASE WHEN close_out = 1 THEN COALESCE(
+        (SELECT MIN(cep.sales_price)
+         FROM community_elevation_prices cep
+         JOIN floor_plans fpe ON fpe.id = cep.floor_plan_id
+         WHERE cep.community_id = communities.id
+           AND close_out_elevation IS NOT NULL
+           AND cep.elevation_label = close_out_elevation
+           AND cep.sales_price > 0
+           AND fpe.published = 1
+           AND ',' || REPLACE(IFNULL(fpe.community_ids, ''), ' ', '') || ',' LIKE '%,' || communities.id || ',%'),
+        (SELECT MIN(COALESCE(fp3.override_starting_price, fp3.synced_starting_price))
+         FROM floor_plans fp3
+         WHERE fp3.published = 1
+           AND COALESCE(fp3.override_starting_price, fp3.synced_starting_price) > 0
+           AND ',' || REPLACE(IFNULL(fp3.community_ids, ''), ' ', '') || ',' LIKE '%,' || communities.id || ',%')
       ) END,
       synced_price_from
     ) AS price_from,
@@ -771,12 +780,21 @@ const communities: CollectionDef = {
     COALESCE(override_bath_count, synced_bath_count) AS bath_count,
     COALESCE(
       override_price_from,
-      CASE WHEN close_out = 1 THEN (
-        SELECT MIN(COALESCE(fp3.override_starting_price, fp3.synced_starting_price))
-        FROM floor_plans fp3
-        WHERE fp3.published = 1
-          AND COALESCE(fp3.override_starting_price, fp3.synced_starting_price) > 0
-          AND ',' || REPLACE(IFNULL(fp3.community_ids, ''), ' ', '') || ',' LIKE '%,' || communities.id || ',%'
+      CASE WHEN close_out = 1 THEN COALESCE(
+        (SELECT MIN(cep.sales_price)
+         FROM community_elevation_prices cep
+         JOIN floor_plans fpe ON fpe.id = cep.floor_plan_id
+         WHERE cep.community_id = communities.id
+           AND close_out_elevation IS NOT NULL
+           AND cep.elevation_label = close_out_elevation
+           AND cep.sales_price > 0
+           AND fpe.published = 1
+           AND ',' || REPLACE(IFNULL(fpe.community_ids, ''), ' ', '') || ',' LIKE '%,' || communities.id || ',%'),
+        (SELECT MIN(COALESCE(fp3.override_starting_price, fp3.synced_starting_price))
+         FROM floor_plans fp3
+         WHERE fp3.published = 1
+           AND COALESCE(fp3.override_starting_price, fp3.synced_starting_price) > 0
+           AND ',' || REPLACE(IFNULL(fp3.community_ids, ''), ' ', '') || ',' LIKE '%,' || communities.id || ',%')
       ) END,
       synced_price_from
     ) AS price_from,

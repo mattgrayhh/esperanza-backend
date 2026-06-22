@@ -311,6 +311,7 @@ const communities: EntityFieldConfig = {
     { field: 'longitude', label: 'Longitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
     { field: 'master_planned', label: 'Master Planned', widget: 'boolean', bucket: 'admin', halfWidth: true },
     { field: 'close_out', label: 'Close-Out Community', widget: 'boolean', bucket: 'admin', halfWidth: true, help: 'No quick move-in homes available. "Homes from" uses the lowest published floor plan offered in this community.' },
+    { field: 'close_out_elevation', label: 'Close-Out Price Elevation', widget: 'select', bucket: 'admin', halfWidth: true, options: ['', 'Tuscan / Stucco', 'Traditional / Stucco', 'Contemporary / Stucco', 'Transitional / Stucco', 'Tuscan / Brick', 'Traditional / Brick', 'Contemporary / Brick', 'Transitional / Brick', 'Tuscan / Hardie', 'Farmhouse / Hardie', 'Fresno / FarmhouseHardie'], help: 'Only used when Close-Out Community is on. "Homes from" becomes the lowest price of this elevation (Type / Material) among the plans offered here — pulled live from Snowflake. Falls back to the lowest offered plan if this community has no plan in that elevation.' },
     { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin', halfWidth: true, visibleInForm: false }, // [P1] hidden from form — header Status control owns it
     // richtext (markdown)
     { field: 'description', label: 'Description (md)', widget: 'richtext', bucket: 'admin' },

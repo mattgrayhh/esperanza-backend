@@ -231,6 +231,12 @@ export const communities = sqliteTable(
     // close-out: no QMIs left → price_from uses the lowest published OFFERED plan
     // (see v_public_communities / migration 0018). Admin-owned, not pushed to Framer.
     closeOut: integer('close_out', { mode: 'boolean' }).notNull().default(false),
+    // 0019: close-out elevation price override. When close_out=1 and close_out_elevation
+    // (a "Type / Material" label, e.g. "Tuscan / Stucco") is set, "homes from" = MIN sales
+    // price of that elevation among this community's offered published plans, pulled live
+    // from community_elevation_prices (synced from Snowflake DM_FLOOR_PLAN). Falls back to
+    // the auto-MIN if the label matches nothing. Admin-owned label; price is NOT manual.
+    closeOutElevation: text('close_out_elevation'),
 
     syncedPriceFrom: real('synced_price_from'), // MIN(base price) per development
     overridePriceFrom: real('override_price_from'),
@@ -516,6 +522,23 @@ export const images = sqliteTable('images', {
   customFields: text('custom_fields'),
   createdAt: text('created_at').notNull().default(nowIso),
   updatedAt: text('updated_at').notNull().default(nowIso),
+});
+
+// 0019: per-elevation prices for close-out communities. One row per
+// (community × offered model × elevation type+material), fully derived from
+// Snowflake DM_FLOOR_PLAN and REPLACED wholesale on each ingest run (not a
+// queue/diff target). Read by the close-out price_from resolution: when a
+// community's close_out_elevation label matches, "homes from" = MIN(sales_price)
+// among the community's offered published plans for that label. Not pushed to Framer.
+export const communityElevationPrices = sqliteTable('community_elevation_prices', {
+  // synthetic key: `${communityId}:${floorPlanId}:${elevationLabel}`
+  id: text('id').primaryKey(),
+  communityId: text('community_id').notNull(),
+  floorPlanId: text('floor_plan_id').notNull(),
+  elevationType: text('elevation_type'),
+  materialType: text('material_type'),
+  elevationLabel: text('elevation_label'), // "Type / Material", e.g. "Tuscan / Stucco"
+  salesPrice: real('sales_price'),
 });
 
 export const blogs = sqliteTable('blogs', {
