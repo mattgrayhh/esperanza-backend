@@ -158,10 +158,15 @@ function rowToFieldConfig(row: FieldDefinition, staticField: FieldConfig | undef
   const displayColumn = staticField?.displayColumn;
   const syncedColumn = staticField?.syncedColumn;
 
-  // A row with NO matching static FieldConfig is a Phase-B user-added field: its value
-  // is NOT a real column — it lives in the entity row's `custom_fields` JSON blob. Flag
-  // it so build-edit-view reads/writes it there and saveEntity routes the write correctly.
-  const custom = staticField === undefined;
+  // A row is custom-field-backed (value lives in the entity row's `custom_fields` JSON
+  // blob) ONLY when it has no matching static FieldConfig AND no real column. The column
+  // check MUST be here to stay in lock-step with the WRITE side (resolveCustomFieldDefs,
+  // which keys off `colMap[r.key]`): a field dropped from the static config but still
+  // backed by a real column (e.g. `community_map_embed`, removed in [T7]) is NOT custom —
+  // its value writes to the column, so it must also READ from the column. Without the
+  // column check, such a field reads back from the (empty) custom_fields blob and renders
+  // blank after every save — the value "disappears".
+  const custom = staticField === undefined && !columnMapForEntity(row.entity as EntityKey)[row.key];
 
   // Static select fields (e.g. testimonials.status) keep their legacy string[] `options`
   // for Phase-A parity. A builder-added `select` (custom, no static match) carries its
