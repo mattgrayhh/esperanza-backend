@@ -52,21 +52,29 @@ Add two nullable columns to `promotions`:
 | Column | Type | Meaning |
 |---|---|---|
 | `pdf_url` | `TEXT` | Stable R2 URL of an optional promo PDF. `NULL` = none. |
-| `rate_override` | `REAL` | `NULL` → effective rate = `site_settings.incentive_rate`. Set → this value wins. |
+| `rate_override` | `TEXT` | `NULL`/empty → effective rate = `site_settings.incentive_rate`. Set → this value wins. TEXT to match `site_settings` storage and avoid float-format surprises. |
 
-**Migration number:** next free number on `master`, which is **`0018`** as of this
-writing. ⚠ Verify before finalizing — open PRs #66 (close-out) and #67 (team agent)
-claim `0018`/`0019` but are unmerged; if either merges first, bump this migration's
-number to sit clear (e.g. `0020`). Whatever number is chosen, the columns are additive
-and the migration is a plain `ALTER TABLE … ADD COLUMN`.
+**Migration number:** **`0020`**. Master ends at `0017`; open PRs #66 (close-out) and
+#67 (team agent) claim `0018`/`0019` but are unmerged, so `0020` sits clear of both.
+(Gaps are already present — no `0015` — so a gap is fine.) The columns are additive +
+nullable; the migration is a plain `ALTER TABLE … ADD COLUMN`.
 
 ### 2. Effective-rate resolution (single SQL expression)
 
+Reuses the exact pattern the QMI projection already uses for the incentive rate
+(`collections.ts`: `(SELECT value FROM site_settings WHERE key = 'incentive_rate') AS
+monthly_rate`):
+
 ```sql
-COALESCE(p.rate_override,
-  (SELECT CAST(value AS REAL) FROM site_settings WHERE key = 'incentive_rate'))
+COALESCE(NULLIF(p.rate_override, ''),
+  (SELECT value FROM site_settings WHERE key = 'incentive_rate'))
   AS effective_rate
 ```
+
+`NULLIF(...,'')` treats an empty-string override as "not set" (the number widget can
+post `''` on clear). When `incentive_rate` is also absent, `effective_rate` is `NULL`
+and the `rate` field emits empty — graceful, matching the settings page's own
+absent-value behavior.
 
 Used in two places so both consumers agree:
 - **`v_public_promotions`** view (`views.sql`) — also exposes raw `pdf_url` and
@@ -84,7 +92,7 @@ Used in two places so both consumers agree:
 | `image_url` | Image | image | unchanged |
 | **`pdf_url`** *(new)* | **PDF (optional)** | image | reuses doc-capable uploader (accepts PDF→R2) |
 | `promotion_targets` | **Associated Locations** | promoScopeTag | was "Targeting Scope"; widget unchanged |
-| **`rate_override`** *(new)* | **Rate Override %** | number | step `0.01`, halfWidth; help: "Blank = company-wide Incentive Rate (currently {incentive_rate}%). Enter a value to override this promo only." |
+| **`rate_override`** *(new)* | **Rate Override %** | number | step `0.01`, halfWidth; help: "Blank = company-wide Incentive Rate. Enter a value to override this promo only." |
 | `title` | Title | text | stays internal-only name |
 
 The `rate_override` help text references the live Incentive Rate value when available
