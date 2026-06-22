@@ -175,6 +175,9 @@ const MAPPER_FRAMER_TYPE: Record<string, string> = {
   'qmi.dynamic_pdf': 'link',
   'floor_plans.brochure_pdf_url': 'link',
   'communities.brochure_pdf_url': 'link',
+  // promotions.pdf_url: admin uses the `image` uploader widget (renders a doc card),
+  // but the mapper emits linkIf() and the live Framer field is a LINK. Pin to coerce.
+  'promotions.pdf_url': 'link',
   // communities.{featured_video,schedule_visit,lending}: the mapper emits these as
   // strings (sIf) but the live Framer fields are LINK. They previously dropped when
   // empty (sIf → undefined) so the mismatch was invisible; once sIf began emitting
