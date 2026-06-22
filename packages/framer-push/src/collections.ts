@@ -1021,6 +1021,8 @@ const promotions: CollectionDef = {
   // selectByIdSql joins promotion_targets → csv id lists; image fallback added by consumer.
   selectByIdSql: `
     SELECT p.*,
+      COALESCE(NULLIF(p.rate_override, ''),
+        (SELECT value FROM site_settings WHERE key = 'incentive_rate')) AS effective_rate,
       (SELECT group_concat(t.target_id) FROM promotion_targets t
          WHERE t.promotion_id = p.id AND t.target_type = 'community') AS community_ids,
       (SELECT group_concat(t.target_id) FROM promotion_targets t
@@ -1032,6 +1034,8 @@ const promotions: CollectionDef = {
     FROM promotions p WHERE p.id = ?`,
   selectAllSql: `
     SELECT p.*,
+      COALESCE(NULLIF(p.rate_override, ''),
+        (SELECT value FROM site_settings WHERE key = 'incentive_rate')) AS effective_rate,
       (SELECT group_concat(t.target_id) FROM promotion_targets t
          WHERE t.promotion_id = p.id AND t.target_type = 'community') AS community_ids,
       (SELECT group_concat(t.target_id) FROM promotion_targets t
@@ -1062,6 +1066,8 @@ const promotions: CollectionDef = {
       expiration_date: sIf(row['end_date']),
       // image: consumer pre-resolves the fallback chain onto row['image_url'].
       image: imgIf(row['image_url']),
+      pdf: linkIf(row['pdf_url']),
+      rate: sIf(row['effective_rate']),
       community_ids: sIf(row['community_ids']),
       floor_plan_ids: sIf(row['floor_plan_ids']),
       collection_ids: sIf(row['collection_ids']),
