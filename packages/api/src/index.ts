@@ -426,6 +426,8 @@ export interface PromotionPublic {
   active: boolean;
   sortOrder: number;
   image: string;
+  pdf: string;
+  rate: string;
   expirationDate: string;
   communityIds: string[];
   floorPlanIds: string[];
@@ -503,6 +505,8 @@ export function serializePromotionRow(
     active: asBool(promo.published),
     sortOrder: asIntOrNull(promo.sort_order) ?? 0,
     image,
+    pdf: asStr(promo.pdf_url),
+    rate: asStr((promo as Record<string, unknown>).effective_rate),
     expirationDate: asStr(promo.end_date),
     communityIds,
     floorPlanIds,

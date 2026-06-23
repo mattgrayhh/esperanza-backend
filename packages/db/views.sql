@@ -213,16 +213,21 @@ FROM floor_plans fp
 WHERE fp.published = 1;
 
 -- =============================================================================
--- v_public_promotions — straight passthrough of published promos. The `active` gate
--- was RENAMED to `published` in migration 0005 (uniform gate name). RESOLUTION (which
--- promo applies to a given QMI/community/city) is NOT baked here — see below.
+-- v_public_promotions — published promos with optional pdf_url, rate_override, and
+-- computed effective_rate (override → site_settings.incentive_rate fallback).
+-- The `active` gate was RENAMED to `published` in migration 0005 (uniform gate name).
+-- pdf_url + rate_override columns added in migration 0020.
+-- RESOLUTION (which promo applies to a given QMI/community/city) is NOT baked here
+-- — see below.
 -- =============================================================================
 DROP VIEW IF EXISTS v_public_promotions;
 CREATE VIEW v_public_promotions AS
 SELECT
   p.id, p.title, p.banner_text, p.badge_text, p.copy,
   p.cta_label, p.cta_url, p.image_url,
-  -- [P2] applies_to dropped from view (legacy label; promotion_targets drives targeting). Column retained.
+  p.pdf_url, p.rate_override,
+  COALESCE(NULLIF(p.rate_override, ''),
+    (SELECT value FROM site_settings WHERE key = 'incentive_rate')) AS effective_rate,
   p.sort_order, p.start_date, p.end_date, p.published
 FROM promotions p
 WHERE p.published = 1;

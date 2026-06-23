@@ -525,18 +525,20 @@ const promotions: EntityFieldConfig = {
   fields: [
     // gate column renamed from `active` to `published` in migration 0005.
     { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish', help: 'The single gate; published=false → framer draft:true.' },
-    { field: 'title', label: 'Title', widget: 'text', bucket: 'admin' },
-    { field: 'banner_text', label: 'Banner Text', widget: 'text', bucket: 'admin' },
-    { field: 'badge_text', label: 'Badge Text', widget: 'text', bucket: 'admin' },
+    { field: 'title', label: 'Title', widget: 'text', bucket: 'admin', help: 'Internal name (not shown on the site).' },
+    { field: 'banner_text', label: 'Headline', widget: 'text', bucket: 'admin' },
+    { field: 'copy', label: 'Description', widget: 'textarea', bucket: 'admin' },
+    { field: 'badge_text', label: 'Banner Overlay Promo', widget: 'text', bucket: 'admin', help: 'Card image banner text.' },
     { field: 'cta_label', label: 'CTA Label', widget: 'text', bucket: 'admin' },
     { field: 'cta_url', label: 'CTA URL', widget: 'text', bucket: 'admin' },
-    { field: 'copy', label: 'Copy', widget: 'textarea', bucket: 'admin' },
     { field: 'image_url', label: 'Image', widget: 'image', bucket: 'admin' },
+    { field: 'pdf_url', label: 'PDF (optional)', widget: 'image', bucket: 'admin', help: 'Optional PDF (e.g. a flyer). Upload or drag a file; PDFs show as a document card.' },
+    { field: 'rate_override', label: 'Rate Override %', widget: 'number', bucket: 'admin', step: '0.01', halfWidth: true, help: 'Blank = company-wide Incentive Rate. Enter a value to override this promo only.' },
     { field: 'sort_order', label: 'Sort Order', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
     { field: 'start_date', label: 'Start Date', widget: 'date', bucket: 'admin', halfWidth: true },
     { field: 'end_date', label: 'End Date', widget: 'date', bucket: 'admin', halfWidth: true },
-    { field: 'applies_to', label: 'Applies-To Label (legacy)', widget: 'text', bucket: 'admin', help: 'Informational only; does NOT drive targeting.', visibleInForm: false }, // [P2] retired — targeting via Targeting Scope; hidden; column kept
-    { field: 'promotion_targets', label: 'Targeting Scope', widget: 'promoScopeTag', bucket: 'target' },
+    { field: 'applies_to', label: 'Applies-To Label (legacy)', widget: 'text', bucket: 'admin', help: 'Informational only; does NOT drive targeting.', visibleInForm: false },
+    { field: 'promotion_targets', label: 'Associated Locations', widget: 'promoScopeTag', bucket: 'target' },
   ],
 };
 

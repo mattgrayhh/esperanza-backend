@@ -153,3 +153,51 @@ describe('Promotions mapper — targets, image fallback, gate', () => {
     expect(sval(item.fieldData['published'])).toBe(false);
   });
 });
+
+describe('Promotions mapper — pdf link + effective rate (migration 0020)', () => {
+  it('emits pdf as a link and rate inherited from incentive_rate', async () => {
+    const db = freshDb();
+    db.prepare(`INSERT INTO site_settings (key, value) VALUES ('incentive_rate', '4.99')`).run();
+    insertRow(db, 'promotions', {
+      id: 'recPROMOPDF01',
+      title: 'PDF Promo',
+      pdf_url: 'https://ehi.hazardhouse.ai/promo/flyer.pdf',
+      published: 1,
+      updated_at: '2026-06-20T12:00:00.000Z',
+    });
+    const row = await loadRowById(env(db), def, 'recPROMOPDF01');
+    const item = def.map(row!);
+    expect(item.fieldData['pdf']?.type).toBe('link');
+    expect(sval(item.fieldData['pdf'])).toBe('https://ehi.hazardhouse.ai/promo/flyer.pdf');
+    expect(sval(item.fieldData['rate'])).toBe('4.99');
+  });
+
+  it('rate uses the per-promo override when set', async () => {
+    const db = freshDb();
+    db.prepare(`INSERT INTO site_settings (key, value) VALUES ('incentive_rate', '4.99')`).run();
+    insertRow(db, 'promotions', {
+      id: 'recPROMOOV01',
+      title: 'Override Promo',
+      rate_override: '3.25',
+      published: 1,
+      updated_at: '2026-06-20T12:00:00.000Z',
+    });
+    const row = await loadRowById(env(db), def, 'recPROMOOV01');
+    const item = def.map(row!);
+    expect(sval(item.fieldData['rate'])).toBe('3.25');
+  });
+
+  it('rate is empty when neither override nor incentive_rate set; pdf dropped when absent', async () => {
+    const db = freshDb();
+    insertRow(db, 'promotions', {
+      id: 'recPROMONONE1',
+      title: 'No Rate',
+      published: 1,
+      updated_at: '2026-06-20T12:00:00.000Z',
+    });
+    const row = await loadRowById(env(db), def, 'recPROMONONE1');
+    const item = def.map(row!);
+    expect(sval(item.fieldData['rate'])).toBe(''); // sIf emits str('') for empty
+    expect(item.fieldData['pdf']).toBeUndefined(); // linkIf drops absent url
+  });
+});

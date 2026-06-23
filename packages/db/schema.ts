@@ -448,6 +448,8 @@ export const promotions = sqliteTable(
     ctaLabel: text('cta_label'),
     ctaUrl: text('cta_url'),
     imageUrl: text('image_url'), // STABLE R2 url
+    pdfUrl: text('pdf_url'), // STABLE R2 url of an optional promo PDF (Framer link)
+    rateOverride: text('rate_override'), // TEXT; NULL/'' → inherit site_settings.incentive_rate
     sortOrder: integer('sort_order').notNull().default(0),
     startDate: text('start_date'),
     endDate: text('end_date'),
