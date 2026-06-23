@@ -212,9 +212,11 @@ export async function loadListData(
   // 1:1 with the legacy Communities.pdf. (Not used in community scope.)
   if (kind === 'locations') {
     // price_from: override wins; else a close-out community uses its selected ELEVATION's
-    // price (MIN sales_price of close_out_elevation among offered published plans, from
-    // community_elevation_prices), else its lowest published OFFERED plan; else Snowflake
-    // dev-wide synced min (matches v_public_communities).
+    // price (MIN sales_price of close_out_elevation across its PUBLISHED development plans,
+    // from community_elevation_prices — cep is community-scoped via the development map, so
+    // it does NOT require the "Floor Plans Offered" picker, which close-out communities leave
+    // empty), else its lowest published OFFERED plan; else Snowflake dev-wide synced min
+    // (matches v_public_communities).
     const priceFromExpr =
       `COALESCE(
          c.override_price_from,
@@ -226,8 +228,7 @@ export async function loadListData(
               AND c.close_out_elevation IS NOT NULL
               AND cep.elevation_label = c.close_out_elevation
               AND cep.sales_price > 0
-              AND fpe.published = 1
-              AND ',' || REPLACE(IFNULL(fpe.community_ids, ''), ' ', '') || ',' LIKE '%,' || c.id || ',%'),
+              AND fpe.published = 1),
            (SELECT MIN(COALESCE(fp0.override_starting_price, fp0.synced_starting_price))
             FROM floor_plans fp0
             WHERE fp0.published = 1

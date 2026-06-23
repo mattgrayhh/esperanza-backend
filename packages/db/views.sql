@@ -114,9 +114,11 @@ SELECT
   c.map_coordinates, c.latitude, c.longitude, c.lat_long,
   c.master_planned, c.coming_soon,
   -- price_from: override wins; else for a close-out community the selected ELEVATION's
-  -- price (MIN sales_price of close_out_elevation among offered published plans, from
-  -- community_elevation_prices), else the lowest PUBLISHED floor plan OFFERED here
-  -- (community_ids CSV); else Snowflake dev-wide synced min.
+  -- price (MIN sales_price of close_out_elevation across this community's PUBLISHED
+  -- development plans, from community_elevation_prices — cep is already community-scoped
+  -- via the development→community map, so it does NOT depend on the "Floor Plans Offered"
+  -- picker, which close-out communities leave empty), else the lowest PUBLISHED floor plan
+  -- OFFERED here (community_ids CSV); else Snowflake dev-wide synced min.
   COALESCE(
     c.override_price_from,
     CASE WHEN c.close_out = 1 THEN COALESCE(
@@ -127,8 +129,7 @@ SELECT
           AND c.close_out_elevation IS NOT NULL
           AND cep.elevation_label = c.close_out_elevation
           AND cep.sales_price > 0
-          AND fp.published = 1
-          AND ',' || REPLACE(IFNULL(fp.community_ids, ''), ' ', '') || ',' LIKE '%,' || c.id || ',%'),
+          AND fp.published = 1),
       (SELECT MIN(COALESCE(fp.override_starting_price, fp.synced_starting_price))
          FROM floor_plans fp
         WHERE fp.published = 1

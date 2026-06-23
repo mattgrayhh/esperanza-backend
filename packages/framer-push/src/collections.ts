@@ -754,8 +754,7 @@ const communities: CollectionDef = {
            AND close_out_elevation IS NOT NULL
            AND cep.elevation_label = close_out_elevation
            AND cep.sales_price > 0
-           AND fpe.published = 1
-           AND ',' || REPLACE(IFNULL(fpe.community_ids, ''), ' ', '') || ',' LIKE '%,' || communities.id || ',%'),
+           AND fpe.published = 1),
         (SELECT MIN(COALESCE(fp3.override_starting_price, fp3.synced_starting_price))
          FROM floor_plans fp3
          WHERE fp3.published = 1
@@ -788,8 +787,7 @@ const communities: CollectionDef = {
            AND close_out_elevation IS NOT NULL
            AND cep.elevation_label = close_out_elevation
            AND cep.sales_price > 0
-           AND fpe.published = 1
-           AND ',' || REPLACE(IFNULL(fpe.community_ids, ''), ' ', '') || ',' LIKE '%,' || communities.id || ',%'),
+           AND fpe.published = 1),
         (SELECT MIN(COALESCE(fp3.override_starting_price, fp3.synced_starting_price))
          FROM floor_plans fp3
          WHERE fp3.published = 1
