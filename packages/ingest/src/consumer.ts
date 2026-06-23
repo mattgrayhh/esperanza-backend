@@ -178,11 +178,24 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
       undefined,
       msg.values.constructionStage
     );
+    // Header image: a new housenumber usually already carries a floor plan, so seed
+    // qmi.image_url from that plan's rendering. image_url is admin-owned (NOT in the
+    // synced allow-list — see synced.ts), so the seed lives here outside applySynced,
+    // the same "derived, seed-on-insert, never-clobber-on-update" path availability_text
+    // uses. The marketing user can override it; with it set, the home renders on the
+    // /new-homes/available listing (which hides imageless cards). NULL → leave absent.
+    const seedImageUrl = msg.values.floorPlanId
+      ? await floorPlanImageUrl(env, msg.values.floorPlanId)
+      : null;
     const cols = ['id', 'published', 'slug', 'created_at', 'updated_at', ...Object.keys(patch)];
     const vals: unknown[] = [id, 0, slug, nowIso(), nowIso(), ...Object.values(patch)];
     if (availabilityText !== null) {
       cols.push('availability_text');
       vals.push(availabilityText);
+    }
+    if (seedImageUrl !== null) {
+      cols.push('image_url');
+      vals.push(seedImageUrl);
     }
     const placeholders = cols.map(() => '?').join(', ');
     await env.DB.prepare(
@@ -321,6 +334,25 @@ async function applyFloorPlanUpsert(env: ConsumerEnv, msg: FloorPlanUpsertMessag
 /** New QMI id. Pre-migration ids are Airtable recXXXX; new specs get a rec-like uuid. */
 export function newQmiId(): string {
   return 'rec' + crypto.randomUUID().replace(/-/g, '').slice(0, 14);
+}
+
+/**
+ * The linked floor plan's header image, preferring the admin-set image_url and
+ * falling back to the synced rendering — the same source framer-push uses for the
+ * promotions/testimonials floor-plan image fallback. Returns null when the plan
+ * has no usable image (so the QMI seed stays absent rather than empty-string).
+ */
+export async function floorPlanImageUrl(
+  env: ConsumerEnv,
+  floorPlanId: string
+): Promise<string | null> {
+  const row = await env.DB.prepare(
+    `SELECT COALESCE(image_url, synced_image_url) AS u FROM floor_plans WHERE id = ?`
+  )
+    .bind(floorPlanId)
+    .first<{ u: string | null }>();
+  const u = row?.u;
+  return typeof u === 'string' && u.trim() !== '' ? u : null;
 }
 
 /** Write a sync_log row (operational telemetry, not entity data). */
