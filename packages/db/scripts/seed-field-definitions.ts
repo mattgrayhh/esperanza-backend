@@ -179,14 +179,19 @@ const MAPPER_FRAMER_TYPE: Record<string, string> = {
   // directly, so it's already a Link, and applyTypeOverrides keys on the emitted field
   // name `pdf` — not the `pdf_url` column — so a column-keyed pin would be a dead no-op.
   // Same direct-linkIf pattern as plan_list_pdf_url/sale_list_pdf_url.)
-  // communities.{featured_video,schedule_visit,lending}: the mapper emits these as
-  // strings (sIf) but the live Framer fields are LINK. They previously dropped when
-  // empty (sIf → undefined) so the mismatch was invisible; once sIf began emitting
-  // str('') for cleared fields, an empty string hit a Link field and aborted the
-  // whole communities batch (vista-verde). Pinning 'link' makes applyTypeOverrides
-  // coerce the URL → link and DROP empties. Hand-fixed on remote 2026-06-14; pinned
-  // here so a reseed can't regress it (the "durability" follow-up to PR #30).
-  'communities.featured_video': 'link',
+  // communities.{schedule_visit,lending}: the mapper emits these as strings (sIf) but
+  // the live Framer fields are LINK. They previously dropped when empty (sIf → undefined)
+  // so the mismatch was invisible; once sIf began emitting str('') for cleared fields, an
+  // empty string hit a Link field and aborted the whole communities batch (vista-verde).
+  // Pinning 'link' makes applyTypeOverrides coerce the URL → link and DROP empties.
+  // Hand-fixed on remote 2026-06-14; pinned here so a reseed can't regress it (PR #30).
+  // communities.featured_video: the live Framer field is STRING, not link — it was
+  // rebuilt as a Vimeo/video-embed that wants a plain URL string (deploy 6bf5021, the
+  // "Featured Video rebuild"). This map previously still said 'link', so a reseed on
+  // 2026-06-23 reverted the hand-fix → framer-push sent a link to a string field and
+  // aborted the whole communities batch again. Pinned 'string' so a reseed can't regress
+  // it. Do NOT flip back to 'link'.
+  'communities.featured_video': 'string',
   'communities.schedule_visit': 'link',
   'communities.lending': 'link',
   'floor_plans.description': 'string',
