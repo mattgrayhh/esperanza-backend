@@ -533,7 +533,7 @@ const promotions: EntityFieldConfig = {
     { field: 'cta_url', label: 'CTA URL', widget: 'text', bucket: 'admin' },
     { field: 'image_url', label: 'Image', widget: 'image', bucket: 'admin' },
     { field: 'pdf_url', label: 'PDF (optional)', widget: 'image', bucket: 'admin', help: 'Optional PDF (e.g. a flyer). Upload or drag a file; PDFs show as a document card.' },
-    { field: 'rate_override', label: 'Rate Override %', widget: 'number', bucket: 'admin', step: '0.01', halfWidth: true, help: 'Blank = company-wide Incentive Rate. Enter a value to override this promo only.' },
+    { field: 'rate_override', label: 'Rate Override %', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true, help: 'Blank = company-wide Incentive Rate. Enter a value to override this promo only.' },
     { field: 'sort_order', label: 'Sort Order', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
     { field: 'start_date', label: 'Start Date', widget: 'date', bucket: 'admin', halfWidth: true },
     { field: 'end_date', label: 'End Date', widget: 'date', bucket: 'admin', halfWidth: true },
