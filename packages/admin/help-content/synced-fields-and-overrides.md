@@ -56,17 +56,32 @@ that's actually offered in this community** — the plans you've checked in the
 recalculates on its own as plan prices change, so there's nothing to keep
 updating by hand.
 
+### Pinning the price to a specific elevation
+
+Sometimes the lowest offered plan is only buildable in a pricier elevation — a
+brick elevation costs more than the stucco, and the headline minimum reflects an
+elevation that's no longer available. For that, use the **Close-Out Price
+Elevation** dropdown next to the toggle. Pick the elevation as **Type / Material**
+(e.g. *Tuscan / Stucco*, *Traditional / Brick*) and `Price From` becomes the
+**lowest price of that exact elevation** among the community's offered plans —
+pulled live from the price book, so it stays current on its own.
+
+If the community has no offered plan in the elevation you picked, the price
+safely falls back to the plain close-out price (the lowest offered plan). Leave
+the dropdown empty to use that plain close-out price.
+
 Precedence, highest first:
 
 1. A manual `Price From` **override**, if you've set one (always wins).
-2. **Close-Out**: the lowest published offered plan's starting price.
-3. Otherwise the normal synced value.
+2. **Close-Out Price Elevation**, if set: the lowest price of that elevation among offered plans.
+3. **Close-Out**: the lowest published offered plan's starting price.
+4. Otherwise the normal synced value.
 
 So a close-out community needs its **Floor Plans Offered** list trimmed to only
 the plans still buildable there — that list is what the price is drawn from. If
-no offered plan qualifies, `Price From` quietly falls back to the synced value
-(it never goes blank). The toggle only affects the price; it doesn't change
-anything else on the page.
+nothing qualifies, `Price From` quietly falls back down the list (it never goes
+blank). These controls only affect the price; they don't change anything else on
+the page, and the chosen elevation isn't shown publicly.
 
 ## When should I override?
 
