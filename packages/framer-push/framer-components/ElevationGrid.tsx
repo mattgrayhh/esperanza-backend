@@ -119,9 +119,11 @@ export default function ElevationGrid(props: {
                                 borderRadius: 4,
                                 background: badgeColor,
                                 color: badgeTextColor,
+                                // Brand type: Overpass, light weight (loaded site-wide via the H1).
+                                fontFamily: '"Overpass", sans-serif',
                                 fontSize: 12,
-                                fontWeight: 600,
-                                letterSpacing: "0.04em",
+                                fontWeight: 300,
+                                letterSpacing: "0.06em",
                                 textTransform: "uppercase",
                                 lineHeight: 1.2,
                             }}
