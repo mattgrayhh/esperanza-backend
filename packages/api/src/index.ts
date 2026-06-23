@@ -842,6 +842,8 @@ async function buildPayload(
 const DEFAULT_ALLOWED = [
   'https://www.esperanzahomes.com',
   'https://esperanzahomes.com',
+  'https://framer.com', // Framer editor canvas — needed for no-code Fetch setup
+  'https://*.framer.com',
   'https://*.framer.app',
   'https://*.framer.website',
 ];
