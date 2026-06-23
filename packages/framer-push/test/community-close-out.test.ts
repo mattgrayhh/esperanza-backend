@@ -1,0 +1,185 @@
+// =============================================================================
+// Close-Out Community price_from resolution. When communities.close_out = 1 the
+// public "homes from" price is, in precedence order:
+//   override_price_from
+//     > close_out_elevation: MIN(sales_price) of that "Type / Material" elevation
+//       among the community's OFFERED, PUBLISHED plans (community_elevation_prices)
+//     > MIN starting price across those OFFERED, PUBLISHED plans (0018)
+//     > synced_price_from
+// Verified against BOTH the public view (v_public_communities) and the
+// framer-push read query (selectByIdSql) so the API and Framer agree.
+// =============================================================================
+
+import { describe, it, expect } from 'vitest';
+import { freshDb, insertRow } from './helpers.js';
+import { COLLECTION_DEFS } from '../src/collections.js';
+
+const def = COLLECTION_DEFS.communities;
+const COM = 'recCOMcloseout01';
+const OTHER = 'recCOMother00002';
+
+interface Plan {
+  id: string;
+  published?: number;
+  community_ids?: string;
+  synced_starting_price?: number | null;
+  override_starting_price?: number | null;
+}
+
+interface Elev {
+  planId: string;
+  label: string; // "Type / Material"
+  price: number;
+}
+
+function setup(opts: {
+  closeOut?: boolean;
+  override?: number | null;
+  closeOutElevation?: string | null;
+  plans?: Plan[];
+  elevations?: Elev[];
+}) {
+  const db = freshDb();
+  insertRow(db, 'communities', {
+    id: COM,
+    name: 'Cascada at Tres Lagos',
+    slug: 'cascada-at-tres-lagos',
+    published: 1,
+    synced_price_from: 282990, // Snowflake dev-wide MIN (catches a non-offered cheap plan)
+    override_price_from: opts.override ?? null,
+    close_out: opts.closeOut ? 1 : 0,
+    close_out_elevation: opts.closeOutElevation ?? null,
+  });
+  for (const p of opts.plans ?? []) {
+    insertRow(db, 'floor_plans', {
+      id: p.id,
+      name: p.id,
+      published: p.published ?? 1,
+      community_ids: p.community_ids ?? COM,
+      synced_starting_price: p.synced_starting_price ?? null,
+      override_starting_price: p.override_starting_price ?? null,
+    });
+  }
+  for (const e of opts.elevations ?? []) {
+    const [type, material] = e.label.split(' / ');
+    insertRow(db, 'community_elevation_prices', {
+      id: `${COM}:${e.planId}:${e.label}`,
+      community_id: COM,
+      floor_plan_id: e.planId,
+      elevation_type: type,
+      material_type: material,
+      elevation_label: e.label,
+      sales_price: e.price,
+    });
+  }
+  return db;
+}
+
+/** price_from from the public view (what the API serves). */
+function viewPrice(db: ReturnType<typeof freshDb>): number | null {
+  const row = db.prepare('SELECT price_from FROM v_public_communities WHERE id = ?').get(COM) as
+    | { price_from: number | null }
+    | undefined;
+  return row ? row.price_from : null;
+}
+
+/** price_from from the framer-push read query (what gets pushed to Framer). */
+function mapperPrice(db: ReturnType<typeof freshDb>): number | null {
+  const row = db.prepare(def.selectByIdSql).get(COM) as Record<string, unknown>;
+  return (row['price_from'] as number | null) ?? null;
+}
+
+const OFFERED_HI: Plan[] = [
+  { id: 'recFPa', community_ids: COM, synced_starting_price: 437990 },
+  { id: 'recFPb', community_ids: COM, synced_starting_price: 468000 },
+  { id: 'recFPcheapNotOffered', community_ids: OTHER, synced_starting_price: 250000 },
+  { id: 'recFPcheapUnpublished', community_ids: COM, published: 0, synced_starting_price: 199000 },
+];
+
+// Per-elevation prices for the offered plans. "Tuscan / Stucco" exists on the two
+// offered plans (455k/470k) AND on a non-offered + an unpublished plan (cheaper) —
+// which must NOT count. "Traditional / Brick" exists only on recFPa.
+const ELEVS: Elev[] = [
+  { planId: 'recFPa', label: 'Tuscan / Stucco', price: 455000 },
+  { planId: 'recFPa', label: 'Traditional / Brick', price: 448000 },
+  { planId: 'recFPb', label: 'Tuscan / Stucco', price: 470000 },
+  { planId: 'recFPcheapNotOffered', label: 'Tuscan / Stucco', price: 240000 },
+  { planId: 'recFPcheapUnpublished', label: 'Tuscan / Stucco', price: 190000 },
+];
+
+describe('Close-Out Community price_from', () => {
+  it('close_out=0 → uses synced_price_from (unchanged behavior)', () => {
+    const db = setup({ closeOut: false, plans: OFFERED_HI });
+    expect(viewPrice(db)).toBe(282990);
+    expect(mapperPrice(db)).toBe(282990);
+  });
+
+  it('close_out=1, no elevation → MIN of published OFFERED plans, excluding non-offered + unpublished', () => {
+    const db = setup({ closeOut: true, plans: OFFERED_HI });
+    expect(viewPrice(db)).toBe(437990); // not 250000 (not offered) and not 199000 (unpublished)
+    expect(mapperPrice(db)).toBe(437990);
+  });
+
+  it('close_out=1, no elevation → per-plan override_starting_price wins inside the MIN', () => {
+    const db = setup({
+      closeOut: true,
+      plans: [
+        { id: 'recFPa', community_ids: COM, synced_starting_price: 437990, override_starting_price: 420000 },
+        { id: 'recFPb', community_ids: COM, synced_starting_price: 468000 },
+      ],
+    });
+    expect(viewPrice(db)).toBe(420000);
+    expect(mapperPrice(db)).toBe(420000);
+  });
+
+  it('close_out=1 but override_price_from set → manual override wins', () => {
+    const db = setup({ closeOut: true, override: 450000, plans: OFFERED_HI });
+    expect(viewPrice(db)).toBe(450000);
+    expect(mapperPrice(db)).toBe(450000);
+  });
+
+  // --- close_out_elevation (auto-pulled per-elevation price) layer ---------------
+
+  it('close_out=1 + elevation → MIN price of that elevation among OFFERED PUBLISHED plans', () => {
+    const db = setup({ closeOut: true, closeOutElevation: 'Tuscan / Stucco', plans: OFFERED_HI, elevations: ELEVS });
+    // min(455000 recFPa, 470000 recFPb); 240000 (not offered) + 190000 (unpublished) excluded.
+    expect(viewPrice(db)).toBe(455000);
+    expect(mapperPrice(db)).toBe(455000);
+  });
+
+  it('close_out=1 + elevation present on only one offered plan → that plan’s price', () => {
+    const db = setup({ closeOut: true, closeOutElevation: 'Traditional / Brick', plans: OFFERED_HI, elevations: ELEVS });
+    expect(viewPrice(db)).toBe(448000);
+    expect(mapperPrice(db)).toBe(448000);
+  });
+
+  it('close_out=1 + elevation that matches no offered plan → falls back to auto-MIN', () => {
+    const db = setup({ closeOut: true, closeOutElevation: 'Contemporary / Hardie', plans: OFFERED_HI, elevations: ELEVS });
+    expect(viewPrice(db)).toBe(437990);
+    expect(mapperPrice(db)).toBe(437990);
+  });
+
+  it('close_out=0 + elevation set → ignored, uses synced_price_from', () => {
+    const db = setup({ closeOut: false, closeOutElevation: 'Tuscan / Stucco', plans: OFFERED_HI, elevations: ELEVS });
+    expect(viewPrice(db)).toBe(282990);
+    expect(mapperPrice(db)).toBe(282990);
+  });
+
+  it('close_out=1 + override_price_from AND elevation both set → override wins', () => {
+    const db = setup({ closeOut: true, override: 450000, closeOutElevation: 'Tuscan / Stucco', plans: OFFERED_HI, elevations: ELEVS });
+    expect(viewPrice(db)).toBe(450000);
+    expect(mapperPrice(db)).toBe(450000);
+  });
+
+  it('close_out=1 with no qualifying offered plan → falls through to synced_price_from', () => {
+    const db = setup({
+      closeOut: true,
+      plans: [
+        { id: 'recFPcheapNotOffered', community_ids: OTHER, synced_starting_price: 250000 },
+        { id: 'recFPcheapUnpublished', community_ids: COM, published: 0, synced_starting_price: 199000 },
+      ],
+    });
+    expect(viewPrice(db)).toBe(282990);
+    expect(mapperPrice(db)).toBe(282990);
+  });
+});

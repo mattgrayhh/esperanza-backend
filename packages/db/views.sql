@@ -113,7 +113,30 @@ SELECT
   c.name, c.slug, c.town, c.published, c.address,
   c.map_coordinates, c.latitude, c.longitude, c.lat_long,
   c.master_planned, c.coming_soon,
-  COALESCE(c.override_price_from, c.synced_price_from) AS price_from,
+  -- price_from: override wins; else for a close-out community the selected ELEVATION's
+  -- price (MIN sales_price of close_out_elevation among offered published plans, from
+  -- community_elevation_prices), else the lowest PUBLISHED floor plan OFFERED here
+  -- (community_ids CSV); else Snowflake dev-wide synced min.
+  COALESCE(
+    c.override_price_from,
+    CASE WHEN c.close_out = 1 THEN COALESCE(
+      (SELECT MIN(cep.sales_price)
+         FROM community_elevation_prices cep
+         JOIN floor_plans fp ON fp.id = cep.floor_plan_id
+        WHERE cep.community_id = c.id
+          AND c.close_out_elevation IS NOT NULL
+          AND cep.elevation_label = c.close_out_elevation
+          AND cep.sales_price > 0
+          AND fp.published = 1
+          AND ',' || REPLACE(IFNULL(fp.community_ids, ''), ' ', '') || ',' LIKE '%,' || c.id || ',%'),
+      (SELECT MIN(COALESCE(fp.override_starting_price, fp.synced_starting_price))
+         FROM floor_plans fp
+        WHERE fp.published = 1
+          AND COALESCE(fp.override_starting_price, fp.synced_starting_price) > 0
+          AND ',' || REPLACE(IFNULL(fp.community_ids, ''), ' ', '') || ',' LIKE '%,' || c.id || ',%')
+    ) END,
+    c.synced_price_from
+  ) AS price_from,
   COALESCE(c.override_bed_count,  c.synced_bed_count)  AS bed_count,
   COALESCE(c.override_bath_count, c.synced_bath_count) AS bath_count,
   c.description, c.amenities,

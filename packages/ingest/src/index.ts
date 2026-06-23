@@ -25,12 +25,15 @@ import {
   qmisSql,
   floorPlansSql,
   communityPriceFromSql,
+  floorPlanElevationsSql,
   parseQmiRows,
   parseCommunityRows,
   parseFloorPlanRows,
   parseCommunityPriceFromRows,
+  parseFloorPlanElevationRows,
   type SnowflakeEnv,
 } from './snowflake.js';
+import { buildElevationPriceRows, writeElevationPrices } from './elevation-prices.js';
 import {
   diff,
   type ExistingQmi,
@@ -197,17 +200,19 @@ export async function runIngest(env: Env): Promise<void> {
     const token = await snowflakeLogin(env);
     await snowflakeQuery(token, env, `USE WAREHOUSE ${env.SNOWFLAKE_WAREHOUSE}`);
 
-    const [qmiRowset, commRowset, fpRowset, priceFromRowset] = await Promise.all([
+    const [qmiRowset, commRowset, fpRowset, priceFromRowset, elevPriceRowset] = await Promise.all([
       snowflakeQuery(token, env, qmisSql(env)),
       snowflakeQuery(token, env, communitiesSql(env)),
       snowflakeQuery(token, env, floorPlansSql(env)),
       snowflakeQuery(token, env, communityPriceFromSql(env)),
+      snowflakeQuery(token, env, floorPlanElevationsSql(env)),
     ]);
 
     const snowflakeQmis = parseQmiRows(qmiRowset);
     const snowflakeCommunities = parseCommunityRows(commRowset);
     const snowflakeFloorPlans = parseFloorPlanRows(fpRowset);
     const communityPriceFrom = parseCommunityPriceFromRows(priceFromRowset);
+    const elevationPrices = parseFloorPlanElevationRows(elevPriceRowset);
 
     const [existingQmis, lookups, existingCommunities, existingFloorPlans] = await Promise.all([
       loadExistingQmis(env.DB),
@@ -228,6 +233,15 @@ export async function runIngest(env: Env): Promise<void> {
     );
 
     if (messages.length > 0) await enqueue(env, messages);
+
+    // Close-out elevation prices (0019): a small fully-derived lookup, rebuilt
+    // wholesale each run (resolve dev→community + model→floor-plan vs the same
+    // lookups the diff used). Independent of the queue/diff path.
+    const { rows: elevationRows, skipped: elevationSkipped } = buildElevationPriceRows(
+      elevationPrices,
+      lookups
+    );
+    await writeElevationPrices(env.DB, elevationRows);
 
     // Mass-unpublish guard (2026-06-11 truncated-rowset incident): when tripped
     // the diff emitted NO qmi.unpublish messages — surface it loudly so the
@@ -252,8 +266,8 @@ export async function runIngest(env: Env): Promise<void> {
       floorPlansUpdated: stats.floorPlansUpdated,
       unresolvedLinks: stats.unresolvedLinks,
       notes: unpublishGuard.tripped
-        ? `producer enqueued ${messages.length} message(s); ${unpublishGuard.reason}`
-        : `producer enqueued ${messages.length} message(s)`,
+        ? `producer enqueued ${messages.length} message(s); wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${unpublishGuard.reason}`
+        : `producer enqueued ${messages.length} message(s); wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved)`,
     });
   } catch (err) {
     await writeSyncLog(env, {
