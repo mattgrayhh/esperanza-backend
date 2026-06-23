@@ -30,6 +30,7 @@ interface Elev {
   planId: string;
   label: string; // "Type / Material"
   price: number;
+  community?: string; // cep.community_id (defaults to COM); a different value = another dev
 }
 
 function setup(opts: {
@@ -62,9 +63,10 @@ function setup(opts: {
   }
   for (const e of opts.elevations ?? []) {
     const [type, material] = e.label.split(' / ');
+    const community = e.community ?? COM;
     insertRow(db, 'community_elevation_prices', {
-      id: `${COM}:${e.planId}:${e.label}`,
-      community_id: COM,
+      id: `${community}:${e.planId}:${e.label}`,
+      community_id: community,
       floor_plan_id: e.planId,
       elevation_type: type,
       material_type: material,
@@ -96,14 +98,16 @@ const OFFERED_HI: Plan[] = [
   { id: 'recFPcheapUnpublished', community_ids: COM, published: 0, synced_starting_price: 199000 },
 ];
 
-// Per-elevation prices for the offered plans. "Tuscan / Stucco" exists on the two
-// offered plans (455k/470k) AND on a non-offered + an unpublished plan (cheaper) —
-// which must NOT count. "Traditional / Brick" exists only on recFPa.
+// Per-elevation prices. "Tuscan / Stucco" exists on the two in-community published
+// plans (455k/470k) AND on an unpublished plan (190k) and a plan belonging to ANOTHER
+// community's development (240k) — both of which must NOT count. The price is scoped by
+// cep.community_id + published, NOT the "Floor Plans Offered" picker (0021).
+// "Traditional / Brick" exists only on recFPa.
 const ELEVS: Elev[] = [
   { planId: 'recFPa', label: 'Tuscan / Stucco', price: 455000 },
   { planId: 'recFPa', label: 'Traditional / Brick', price: 448000 },
   { planId: 'recFPb', label: 'Tuscan / Stucco', price: 470000 },
-  { planId: 'recFPcheapNotOffered', label: 'Tuscan / Stucco', price: 240000 },
+  { planId: 'recFPcheapNotOffered', label: 'Tuscan / Stucco', price: 240000, community: OTHER },
   { planId: 'recFPcheapUnpublished', label: 'Tuscan / Stucco', price: 190000 },
 ];
 
@@ -140,11 +144,25 @@ describe('Close-Out Community price_from', () => {
 
   // --- close_out_elevation (auto-pulled per-elevation price) layer ---------------
 
-  it('close_out=1 + elevation → MIN price of that elevation among OFFERED PUBLISHED plans', () => {
+  it('close_out=1 + elevation → MIN price of that elevation across this community’s PUBLISHED plans', () => {
     const db = setup({ closeOut: true, closeOutElevation: 'Tuscan / Stucco', plans: OFFERED_HI, elevations: ELEVS });
-    // min(455000 recFPa, 470000 recFPb); 240000 (not offered) + 190000 (unpublished) excluded.
+    // min(455000 recFPa, 470000 recFPb); 240000 (another community) + 190000 (unpublished) excluded.
     expect(viewPrice(db)).toBe(455000);
     expect(mapperPrice(db)).toBe(455000);
+  });
+
+  it('close_out=1 + elevation resolves from dev plans even when Floor Plans Offered is EMPTY (0021)', () => {
+    // The real close-out case: no offered plans (community_ids empty), so the auto-MIN
+    // fallback is null — but the elevation price still resolves from the cep rows, which
+    // are community-scoped via the development map.
+    const db = setup({
+      closeOut: true,
+      closeOutElevation: 'Traditional / Brick',
+      plans: [{ id: 'recFPx', community_ids: '', synced_starting_price: 300000 }], // published, NOT offered
+      elevations: [{ planId: 'recFPx', label: 'Traditional / Brick', price: 312000 }],
+    });
+    expect(viewPrice(db)).toBe(312000);
+    expect(mapperPrice(db)).toBe(312000);
   });
 
   it('close_out=1 + elevation present on only one offered plan → that plan’s price', () => {

@@ -81,6 +81,14 @@ The allowlists (abridged):
   `synced_price_from`.
 - **Floor Plans:** `synced_bedroom_min/max`, `synced_bathroom_min/max`,
   `synced_living_square_footage`, `synced_total_square_footage`, `synced_starting_price`.
+- **Close-out elevation prices** (`community_elevation_prices` table): a per
+  (community × development plan × elevation) sales price, derived from a fifth
+  `DM_FLOOR_PLAN` query (`MIN(salesprice)` grouped by development, model, elevation type +
+  material). Unlike the queue/diff-driven entities above, this small fully-derived lookup is
+  **rebuilt wholesale each run** (resolve development→community + model→floor-plan via the
+  existing name maps, then DELETE-all + chunked INSERT). It feeds the close-out
+  `close_out_elevation` price (see [doc 01](./01-data-flow.md)). Rows that don't resolve are
+  dropped and counted in the sync_log note.
 
 **Notably absent and intentional:** every `override_*` column, `published`, `slug`,
 `description`, `image_url`, galleries.
