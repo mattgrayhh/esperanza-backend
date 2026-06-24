@@ -1221,23 +1221,27 @@ const CITY_COPY_STR_KEYS = new Set<string>([
 //   • communities: published communities whose city_id = this city
 //   • move-in homes: published QMIs whose effective city = this city
 //       (override_city_id wins over synced_city_id, mirroring the QMI mapper)
-//   • floor plans: published plans linked (community_ids CSV) to a PUBLISHED
-//       community in this city — "plans available in this city". Plans with no
-//       community linkage are intentionally excluded (not available anywhere).
+//   • floor plans: published plans summed PER published community in this city —
+//       a plan offered in N communities counts N times. This matches the legacy
+//       O'Neill city page ("X Floor Plans"), which is per-community, NOT distinct
+//       (verified 2026-06-24: McAllen 49, Edinburg 28 reconcile exactly under this
+//       method; COUNT(DISTINCT) undercounted at 39 / 28). A plan with no community
+//       linkage contributes 0 (not offered anywhere). Residual gaps vs legacy (e.g.
+//       Laredo) are missing floor_plans.communities memberships, fixed in the data.
 const CITY_COUNTS_SQL = `
   (SELECT COUNT(*) FROM communities cm
      WHERE cm.city_id = c.id AND cm.published = 1) AS community_count_live,
   (SELECT COUNT(*) FROM qmi q
      WHERE COALESCE(q.override_city_id, q.synced_city_id) = c.id
        AND q.published = 1) AS move_in_homes_count_live,
-  (SELECT COUNT(DISTINCT fp.id) FROM floor_plans fp
-     WHERE fp.published = 1
-       AND EXISTS (
-         SELECT 1 FROM communities cm2
-          WHERE cm2.city_id = c.id AND cm2.published = 1
+  (SELECT IFNULL(SUM(
+       (SELECT COUNT(*) FROM floor_plans fp
+          WHERE fp.published = 1
             AND ',' || REPLACE(IFNULL(fp.community_ids, ''), ' ', '') || ','
-                LIKE '%,' || cm2.id || ',%'
-       )) AS floor_plans_count_live`;
+                LIKE '%,' || cm.id || ',%')
+     ), 0)
+     FROM communities cm
+    WHERE cm.city_id = c.id AND cm.published = 1) AS floor_plans_count_live`;
 
 const cities: CollectionDef = {
   key: 'cities',
