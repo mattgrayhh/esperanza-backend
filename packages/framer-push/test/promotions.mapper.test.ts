@@ -152,6 +152,21 @@ describe('Promotions mapper — targets, image fallback, gate', () => {
     expect(item.draft).toBe(true);
     expect(sval(item.fieldData['published'])).toBe(false);
   });
+
+  it('emits a ROOT-RELATIVE cta_url as a link (regression: urlOf dropped internal paths)', () => {
+    const db = freshDb();
+    insertRow(db, 'promotions', {
+      id: 'recPROMO0005REL',
+      title: 'Blog Promo',
+      cta_url: '/blog/esperanza-homes-unveils-three-new-floor-plans/',
+      published: 1,
+      updated_at: '2026-05-30T12:00:00.000Z',
+    });
+    const row = db.prepare(def.selectByIdSql).get('recPROMO0005REL') as Record<string, unknown>;
+    const f = def.map(row).fieldData;
+    expect(f['cta_link']?.type).toBe('link');
+    expect(sval(f['cta_link'])).toBe('/blog/esperanza-homes-unveils-three-new-floor-plans/');
+  });
 });
 
 describe('Promotions mapper — pdf link + effective rate (migration 0020)', () => {

@@ -277,9 +277,16 @@ const imgIf = (v: unknown) => {
   const u = urlOf(v);
   return u === undefined ? undefined : image(u);
 };
+// urlOf only accepts absolute http(s) (new URL throws on relative), which silently
+// dropped internal CTA links like "/blog/..." / "/realtors" — they never pushed and
+// the field stayed empty in Framer. Link fields accept internal paths, so also pass
+// a root-relative path, in-page hash, or mailto:/tel: through verbatim.
 const linkIf = (v: unknown) => {
-  const u = urlOf(v);
-  return u === undefined ? undefined : link(u);
+  if (v == null) return undefined;
+  const s = String(v).trim();
+  if (s === '') return undefined;
+  const ok = urlOf(s) !== undefined || /^[/#]/.test(s) || /^(mailto:|tel:)/i.test(s);
+  return ok ? link(s) : undefined;
 };
 const ftIf = (v: unknown) => {
   const html = markdownToHtml(asString(v));
