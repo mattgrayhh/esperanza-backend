@@ -201,3 +201,43 @@ describe('Promotions mapper — pdf link + effective rate (migration 0020)', () 
     expect(item.fieldData['pdf']).toBeUndefined(); // linkIf drops absent url
   });
 });
+
+describe('Promotions mapper — community_count ("available in N communities")', () => {
+  const target = (db: ReturnType<typeof freshDb>, promo: string, type: string, id?: string) =>
+    db
+      .prepare(`INSERT INTO promotion_targets (promotion_id, target_type, target_id) VALUES (?, ?, ?)`)
+      .run(promo, type, id ?? null);
+
+  it('counts the distinct PUBLISHED communities a promo directly targets', async () => {
+    const db = freshDb();
+    insertRow(db, 'communities', { id: 'recCOMA', name: 'A', published: 1 });
+    insertRow(db, 'communities', { id: 'recCOMB', name: 'B', published: 1 });
+    insertRow(db, 'communities', { id: 'recCOMC', name: 'C', published: 0 }); // unpublished → excluded
+    insertRow(db, 'promotions', { id: 'recP_CC1', title: 'Three Targets', published: 1, updated_at: '2026-06-24T00:00:00.000Z' });
+    target(db, 'recP_CC1', 'community', 'recCOMA');
+    target(db, 'recP_CC1', 'community', 'recCOMB');
+    target(db, 'recP_CC1', 'community', 'recCOMC');
+
+    const row = await loadRowById(env(db), def, 'recP_CC1');
+    expect(sval(def.map(row!).fieldData['community_count'])).toBe(2);
+  });
+
+  it('a global promo counts ALL published communities', async () => {
+    const db = freshDb();
+    insertRow(db, 'communities', { id: 'recCOMA', name: 'A', published: 1 });
+    insertRow(db, 'communities', { id: 'recCOMB', name: 'B', published: 1 });
+    insertRow(db, 'communities', { id: 'recCOMC', name: 'C', published: 0 });
+    insertRow(db, 'promotions', { id: 'recP_CC2', title: 'Sitewide', published: 1, updated_at: '2026-06-24T00:00:00.000Z' });
+    target(db, 'recP_CC2', 'global');
+
+    const row = await loadRowById(env(db), def, 'recP_CC2');
+    expect(sval(def.map(row!).fieldData['community_count'])).toBe(2);
+  });
+
+  it('emits 0 (not dropped) when a promo reaches no published community', async () => {
+    const db = freshDb();
+    insertRow(db, 'promotions', { id: 'recP_CC3', title: 'Orphan', published: 1, updated_at: '2026-06-24T00:00:00.000Z' });
+    const row = await loadRowById(env(db), def, 'recP_CC3');
+    expect(sval(def.map(row!).fieldData['community_count'])).toBe(0);
+  });
+});
