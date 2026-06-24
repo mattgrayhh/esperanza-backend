@@ -189,6 +189,12 @@ interface QMIFilterState {
     touringAvailable: boolean
 }
 
+const slugifyCommunity = (s: string) =>
+    (s || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+
 const DEFAULT_QMI_FILTERS: QMIFilterState = {
     communities: [],
     cities: [],
@@ -1291,7 +1297,15 @@ export default function QuickMoveIns({
     useEffect(() => {
         let out = homes.filter((h) => {
             if (filters.communities.length && h.community) {
-                if (!filters.communities.includes(h.community)) return false
+                // Slug-aware: the city map's community links deep-link with the
+                // community SLUG (?community=<slug>), while the dropdown selects
+                // by exact name — match either form.
+                const hcSlug = slugifyCommunity(h.community)
+                const match = filters.communities.some(
+                    (sel) =>
+                        sel === h.community || slugifyCommunity(sel) === hcSlug
+                )
+                if (!match) return false
             } else if (filters.communities.length) return false
 
             if (filters.cities.length) {
