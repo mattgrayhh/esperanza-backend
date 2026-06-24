@@ -1104,6 +1104,13 @@ const promotions: CollectionDef = {
       image: imgIf(row['image_url']),
       pdf: linkIf(row['pdf_url']),
       rate: sIf(row['effective_rate']),
+      // Per-surface visibility toggles (migration 0021). Reached via `p.*`; an absent
+      // column (pre-migration prod) reads as undefined → emits false — no SQL error,
+      // unlike the explicit rate_override COALESCE. Each gates a Framer-side filter.
+      show_site_banner: bool(asBool(row['show_site_banner'])),
+      show_incentive_page: bool(asBool(row['show_incentive_page'])),
+      show_banner_button: bool(asBool(row['show_banner_button'])),
+      show_card_cta: bool(asBool(row['show_card_cta'])),
       community_ids: sIf(row['community_ids']),
       floor_plan_ids: sIf(row['floor_plan_ids']),
       collection_ids: sIf(row['collection_ids']),

@@ -214,10 +214,13 @@ FROM floor_plans fp
 WHERE fp.published = 1;
 
 -- =============================================================================
--- v_public_promotions — published promos with optional pdf_url, rate_override, and
--- computed effective_rate (override → site_settings.incentive_rate fallback).
+-- v_public_promotions — published promos with optional pdf_url, rate_override,
+-- computed effective_rate (override → site_settings.incentive_rate fallback), and
+-- the four per-surface visibility toggles.
 -- The `active` gate was RENAMED to `published` in migration 0005 (uniform gate name).
 -- pdf_url + rate_override columns added in migration 0020.
+-- show_site_banner / show_incentive_page / show_banner_button / show_card_cta added
+-- in migration 0021 (independent of the published gate AND of promotion_targets).
 -- RESOLUTION (which promo applies to a given QMI/community/city) is NOT baked here
 -- — see below.
 -- =============================================================================
@@ -229,6 +232,7 @@ SELECT
   p.pdf_url, p.rate_override,
   COALESCE(NULLIF(p.rate_override, ''),
     (SELECT value FROM site_settings WHERE key = 'incentive_rate')) AS effective_rate,
+  p.show_site_banner, p.show_incentive_page, p.show_banner_button, p.show_card_cta,
   p.sort_order, p.start_date, p.end_date, p.published
 FROM promotions p
 WHERE p.published = 1;

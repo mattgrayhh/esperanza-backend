@@ -534,6 +534,13 @@ const promotions: EntityFieldConfig = {
     { field: 'image_url', label: 'Image', widget: 'image', bucket: 'admin' },
     { field: 'pdf_url', label: 'PDF (optional)', widget: 'image', bucket: 'admin', help: 'Optional PDF (e.g. a flyer). Upload or drag a file; PDFs show as a document card.' },
     { field: 'rate_override', label: 'Rate Override %', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true, help: 'Blank = company-wide Incentive Rate. Enter a value to override this promo only.' },
+    // Per-surface visibility toggles (migration 0021). Independent of Published AND of
+    // Associated Locations — they compose: these say WHERE a promo may appear; the
+    // locations narrow WHICH pages. All default OFF; turn on a surface per promo.
+    { field: 'show_site_banner', label: 'Show on Site Banner', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Site-wide top banner (uses the Headline).' },
+    { field: 'show_incentive_page', label: 'Show on Incentive Page', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'The dedicated incentives page card.' },
+    { field: 'show_banner_button', label: 'Show Banner Button', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Render the CTA button inside the site banner.' },
+    { field: 'show_card_cta', label: 'Show Card CTA Button', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Render the CTA button on promo cards / location pages.' },
     { field: 'sort_order', label: 'Sort Order', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
     { field: 'start_date', label: 'Start Date', widget: 'date', bucket: 'admin', halfWidth: true },
     { field: 'end_date', label: 'End Date', widget: 'date', bucket: 'admin', halfWidth: true },
