@@ -450,6 +450,12 @@ export const promotions = sqliteTable(
     imageUrl: text('image_url'), // STABLE R2 url
     pdfUrl: text('pdf_url'), // STABLE R2 url of an optional promo PDF (Framer link)
     rateOverride: text('rate_override'), // TEXT; NULL/'' → inherit site_settings.incentive_rate
+    // Per-surface visibility toggles (migration 0021). Independent of `published`
+    // AND of promotion_targets; the two compose (surface = WHERE, targets = WHICH).
+    showSiteBanner: integer('show_site_banner', { mode: 'boolean' }).notNull().default(false),
+    showIncentivePage: integer('show_incentive_page', { mode: 'boolean' }).notNull().default(false),
+    showBannerButton: integer('show_banner_button', { mode: 'boolean' }).notNull().default(false),
+    showCardCta: integer('show_card_cta', { mode: 'boolean' }).notNull().default(false),
     sortOrder: integer('sort_order').notNull().default(0),
     startDate: text('start_date'),
     endDate: text('end_date'),

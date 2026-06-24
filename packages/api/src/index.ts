@@ -428,6 +428,11 @@ export interface PromotionPublic {
   image: string;
   pdf: string;
   rate: string;
+  // Per-surface visibility toggles (migration 0021); compose with location targeting.
+  showSiteBanner: boolean;
+  showIncentivePage: boolean;
+  showBannerButton: boolean;
+  showCardCta: boolean;
   expirationDate: string;
   communityIds: string[];
   floorPlanIds: string[];
@@ -507,6 +512,10 @@ export function serializePromotionRow(
     image,
     pdf: asStr(promo.pdf_url),
     rate: asStr((promo as Record<string, unknown>).effective_rate),
+    showSiteBanner: asBool(promo.show_site_banner),
+    showIncentivePage: asBool(promo.show_incentive_page),
+    showBannerButton: asBool(promo.show_banner_button),
+    showCardCta: asBool(promo.show_card_cta),
     expirationDate: asStr(promo.end_date),
     communityIds,
     floorPlanIds,

@@ -331,3 +331,60 @@ describe('promotions: pdf_url + effective rate resolution (migration 0020)', () 
     expect(row.effective_rate).toBeNull();
   });
 });
+
+describe('promotions: per-surface visibility toggles (migration 0021)', () => {
+  it('all four toggles default to 0 (OFF) for an existing-style insert', () => {
+    const db = freshDb();
+    db.prepare(`INSERT INTO promotions (id, title, published) VALUES ('recDefault', 'Default', 1)`).run();
+    const row = db
+      .prepare(
+        `SELECT show_site_banner, show_incentive_page, show_banner_button, show_card_cta
+           FROM v_public_promotions WHERE id='recDefault'`
+      )
+      .get() as Record<string, number>;
+    expect(row.show_site_banner).toBe(0);
+    expect(row.show_incentive_page).toBe(0);
+    expect(row.show_banner_button).toBe(0);
+    expect(row.show_card_cta).toBe(0);
+  });
+
+  it('the view exposes each toggle independently when set', () => {
+    const db = freshDb();
+    db.prepare(
+      `INSERT INTO promotions
+         (id, title, published, show_site_banner, show_incentive_page, show_banner_button, show_card_cta)
+       VALUES ('recMixed', 'Mixed', 1, 1, 0, 1, 0)`
+    ).run();
+    const row = db
+      .prepare(
+        `SELECT show_site_banner, show_incentive_page, show_banner_button, show_card_cta
+           FROM v_public_promotions WHERE id='recMixed'`
+      )
+      .get() as Record<string, number>;
+    expect(row.show_site_banner).toBe(1);
+    expect(row.show_incentive_page).toBe(0);
+    expect(row.show_banner_button).toBe(1);
+    expect(row.show_card_cta).toBe(0);
+  });
+
+  it('toggles are NOT NULL — a partial insert leaves the unset toggles at 0, not NULL', () => {
+    const db = freshDb();
+    db.prepare(
+      `INSERT INTO promotions (id, title, published, show_site_banner) VALUES ('recPartial', 'Partial', 1, 1)`
+    ).run();
+    const row = db
+      .prepare(`SELECT show_incentive_page, show_card_cta FROM promotions WHERE id='recPartial'`)
+      .get() as Record<string, number>;
+    expect(row.show_incentive_page).toBe(0);
+    expect(row.show_card_cta).toBe(0);
+  });
+
+  it('an unpublished promo is excluded from the view regardless of surface toggles', () => {
+    const db = freshDb();
+    db.prepare(
+      `INSERT INTO promotions (id, title, published, show_site_banner) VALUES ('recDraft', 'Draft', 0, 1)`
+    ).run();
+    const row = db.prepare(`SELECT id FROM v_public_promotions WHERE id='recDraft'`).get();
+    expect(row).toBeUndefined();
+  });
+});
