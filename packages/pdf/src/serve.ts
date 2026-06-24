@@ -11,8 +11,13 @@ import { loadFloorPlanData } from './data/floorplan';
 import { loadListData, type ListKind } from './data/list';
 import { renderPdf as realRender } from './render';
 
+// List renders (e.g. all QMIs ≈ 15 pages) sit near the renderer's 30s printToPDF default;
+// give them a generous ceiling so a cold rebuild can't time out (the failure that 1101'd the
+// old inline filtered render). Single-entity brochures finish in ~2s and pass no override.
+const LIST_RENDER_TIMEOUT_MS = 110_000;
+
 export interface ServeDeps {
-  render?: (env: Env, html: string, margins?: any) => Promise<Uint8Array>;
+  render?: (env: Env, html: string, margins?: any, timeoutMs?: number) => Promise<Uint8Array>;
   putObject?: (key: string, pdf: Uint8Array) => Promise<void>;
   getObject?: (key: string) => Promise<{ body: ReadableStream | Uint8Array; httpMetadata?: { contentType?: string } } | null>;
   activeVersion?: number;
@@ -101,7 +106,7 @@ export async function rebuild(
   if (!data) throw new Error('no data');
   const html = renderTemplate(type, theme, data);
   const dataHash = await stableHash(data);
-  const pdf = await render(env, html, theme.page.marginsMm);
+  const pdf = await render(env, html, theme.page.marginsMm, type === 'list' ? LIST_RENDER_TIMEOUT_MS : undefined);
   const key = r2KeyFor(type, entityId);
   await putObject(key, pdf);
   await markLive(env.DB, type, slug, { dataHash, themeVersion: version, bytes: pdf.byteLength, r2Key: key });

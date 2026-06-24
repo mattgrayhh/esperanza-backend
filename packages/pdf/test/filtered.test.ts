@@ -1,9 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import Database from 'better-sqlite3';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { d1FromSqlite } from './_d1adapter';
-import { resolveFiltered, renderFilteredJob } from '../src/filtered';
+import { loadFiltered, renderFilteredPrintPage, parseListFilters } from '../src/filtered';
 
 const DB = join(__dirname, '../../db');
 function mkDb() {
@@ -18,50 +18,37 @@ function mkDb() {
   return d1FromSqlite(d);
 }
 
-const PDF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]); // "%PDF-"
-
-describe('renderFilteredJob', () => {
-  it('renders the filtered list once and stores it at the resolved R2 key', async () => {
-    const env = { DB: mkDb(), PDF_PUBLIC_BASE_URL: 'https://pdf.test' } as any;
-    const store = new Map<string, Uint8Array>();
-    const render = vi.fn(async () => PDF_BYTES);
-    const deps = {
-      render,
-      getObject: async (k: string) => (store.has(k) ? { body: store.get(k)! } : null),
-      putObject: async (k: string, b: Uint8Array) => { store.set(k, b); },
-    };
-
-    const { key } = await resolveFiltered(env, 'qmis', new URLSearchParams('?city=mcallen'));
-    const result = await renderFilteredJob(env, 'qmis', '?city=mcallen', deps);
-
-    expect(result).toBe('rendered');
-    expect(render).toHaveBeenCalledTimes(1);
-    // render must be called with the generous bulk timeout (4th arg), not the 30s default.
-    expect((render.mock.calls[0] as any[])[3]).toBeGreaterThan(30_000);
-    expect(store.has(key)).toBe(true);
+describe('parseListFilters', () => {
+  it('maps query params to filters (status=available → availableNow)', () => {
+    const f = parseListFilters(new URLSearchParams('city=mcallen&minBeds=4&maxPrice=400000&status=available'));
+    expect(f).toMatchObject({ city: 'mcallen', minBeds: 4, maxPrice: 400000, availableNow: true });
   });
+});
 
-  it('is idempotent: skips rendering when the object already exists (dupe send / retry)', async () => {
+describe('loadFiltered', () => {
+  it('loads the active theme + filtered QMI data for the query', async () => {
     const env = { DB: mkDb(), PDF_PUBLIC_BASE_URL: 'https://pdf.test' } as any;
-    const { key } = await resolveFiltered(env, 'qmis', new URLSearchParams('?city=mcallen'));
-    const store = new Map<string, Uint8Array>([[key, PDF_BYTES]]); // already rendered
-    const render = vi.fn(async () => PDF_BYTES);
-    const deps = {
-      render,
-      getObject: async (k: string) => (store.has(k) ? { body: store.get(k)! } : null),
-      putObject: async (k: string, b: Uint8Array) => { store.set(k, b); },
-    };
-
-    const result = await renderFilteredJob(env, 'qmis', '?city=mcallen', deps);
-
-    expect(result).toBe('cached');
-    expect(render).not.toHaveBeenCalled();
+    const { theme, data } = await loadFiltered(env, 'qmis', new URLSearchParams('city=mcallen&minBeds=4'));
+    expect(theme).toBeTruthy();
+    const addrs = data.qmis.map((q: any) => q.address);
+    expect(addrs).toContain('100 A St');  // 4bd
+    expect(addrs).not.toContain('200 B St'); // 3bd filtered out
   });
+});
 
-  it('different filters resolve to different keys', async () => {
+describe('renderFilteredPrintPage', () => {
+  it('returns a full HTML doc with the list content plus a print toolbar + auto-print', async () => {
     const env = { DB: mkDb(), PDF_PUBLIC_BASE_URL: 'https://pdf.test' } as any;
-    const a = await resolveFiltered(env, 'qmis', new URLSearchParams('?city=mcallen'));
-    const b = await resolveFiltered(env, 'qmis', new URLSearchParams('?city=mcallen&minBeds=4'));
-    expect(a.key).not.toBe(b.key);
+    const { theme, data } = await loadFiltered(env, 'qmis', new URLSearchParams('city=mcallen'));
+    const html = renderFilteredPrintPage(theme, data);
+
+    expect(html.startsWith('<!DOCTYPE html>')).toBe(true);
+    expect(html.trimEnd().endsWith('</html>')).toBe(true);
+    expect(html).toContain('window.print()');       // manual button
+    expect(html).toContain('class="print-toolbar"'); // toolbar present
+    expect(html).toContain('@media print');          // toolbar hidden when printing
+    expect(html).toContain('100 A St');              // real list content rendered
+    // toolbar injected inside the body, before the closing tag
+    expect(html.indexOf('print-toolbar')).toBeLessThan(html.indexOf('</body>'));
   });
 });
