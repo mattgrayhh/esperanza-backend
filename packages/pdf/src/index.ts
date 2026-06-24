@@ -7,33 +7,9 @@ import { verifyPreviewToken } from './token';
 import { processJob, enqueueStaleLists, enqueueAllStale } from './queue';
 import { renderTemplate } from './templates';
 import { loadActiveTheme } from './theme';
-import { loadFilteredListData, type FilteredKind, type ListFilters } from './data/list';
-import { stableHash } from './hash';
-import { getObject, putObject } from './store';
-
-function parseListFilters(sp: URLSearchParams): ListFilters {
-  const n = (k: string): number | undefined => {
-    const v = sp.get(k);
-    if (v == null || v === '') return undefined;
-    const x = Number(v);
-    return Number.isFinite(x) ? x : undefined;
-  };
-  const s = (k: string): string | undefined => sp.get(k) || undefined;
-  return {
-    city: s('city'),
-    community: s('community'),
-    collection: s('collection'),
-    minBeds: n('minBeds'),
-    minBaths: n('minBaths'),
-    minPrice: n('minPrice'),
-    maxPrice: n('maxPrice'),
-    minSqft: n('minSqft'),
-    maxSqft: n('maxSqft'),
-    stories: n('stories'),
-    garage: n('garage'),
-    availableNow: sp.get('status') === 'available' || sp.get('availableNow') === 'true',
-  };
-}
+import type { FilteredKind } from './data/list';
+import { getObject } from './store';
+import { resolveFiltered, renderFilteredJob } from './filtered';
 
 export { BrowserRenderer } from './renderer-do';
 
@@ -107,36 +83,46 @@ export default {
     // On-demand FILTERED list PDFs — the "download current filter selection" button on the
     // Quick Move-Ins / Floor Plans filter pages. Filter combos are unbounded, so we render on
     // demand and cache in R2 keyed by a hash of (kind + filters + dataHash); the dataHash makes
-    // the cache self-invalidate when the matching inventory changes.
+    // the cache self-invalidate when the matching inventory changes. A full set (all ~126 QMIs
+    // ≈ 15 pages) exceeds the renderer's printToPDF timeout AND the Worker request budget, so we
+    // render OFF the request path: enqueue to RENDER_Q and show a poll page, identical to how
+    // every other PDF builds. Once in R2, repeat reads stream straight back (and edge-cache).
     const filteredMatch = url.pathname.match(/^\/pdf\/filtered\/(qmis|plans)$/);
     if (request.method === 'GET' && filteredMatch) {
       const cache = (caches as any).default;
       const cached = await cache.match(request);
       if (cached) return cached;
       const kind = filteredMatch[1] as FilteredKind;
-      const filters = parseListFilters(url.searchParams);
-      const { theme } = await loadActiveTheme(env.DB);
-      const data = await loadFilteredListData(env.DB, kind, filters, env.PDF_PUBLIC_BASE_URL);
-      const items = kind === 'qmis' ? data.qmis : data.cards;
-      const dataHash = await stableHash(items.map((i: any) => [i.id, i.price ?? null, i.availability ?? null]));
-      const key = `pdf/filtered/${kind}/${await stableHash({ filters, dataHash })}.pdf`;
-      let pdf: Uint8Array;
+      const { key } = await resolveFiltered(env, kind, url.searchParams);
       const obj = await getObject(env, key);
       if (obj) {
-        pdf = new Uint8Array(await obj.arrayBuffer());
-      } else {
-        const html = renderTemplate('list', theme, data);
-        pdf = await renderPdf(env, html, theme.page.marginsMm);
-        ctx.waitUntil(putObject(env, key, pdf));
+        const res = new Response(obj.body as any, {
+          headers: {
+            'content-type': 'application/pdf',
+            'cache-control': 'public, max-age=600, s-maxage=3600, stale-while-revalidate=86400',
+          },
+        });
+        ctx.waitUntil(cache.put(request, res.clone()));
+        return res;
       }
-      const res = new Response(pdf as unknown as BodyInit, {
-        headers: {
-          'content-type': 'application/pdf',
-          'cache-control': 'public, max-age=600, s-maxage=3600, stale-while-revalidate=86400',
-        },
-      });
-      ctx.waitUntil(cache.put(request, res.clone()));
-      return res;
+      // Not built yet: enqueue an out-of-band render and redirect to the building-poll page.
+      try { await env.RENDER_Q?.send({ type: 'list', slug: key, reason: 'filtered-cold', filtered: { kind, query: url.search } }); } catch { /* best-effort */ }
+      const base = (env.PDF_PUBLIC_BASE_URL || '').replace(/\/$/, '');
+      return Response.redirect(`${base}/poll/filtered/${kind}${url.search}`, 302);
+    }
+    // Poll page for a filtered render: re-resolve the same key and either redirect to the
+    // finished PDF or serve a self-refreshing "Building…" page. Does NOT enqueue (the /pdf
+    // route already did) so refreshes can't pile up duplicate jobs.
+    const filteredPollMatch = url.pathname.match(/^\/poll\/filtered\/(qmis|plans)$/);
+    if (request.method === 'GET' && filteredPollMatch) {
+      const kind = filteredPollMatch[1] as FilteredKind;
+      const { key } = await resolveFiltered(env, kind, url.searchParams);
+      const base = (env.PDF_PUBLIC_BASE_URL || '').replace(/\/$/, '');
+      if (await getObject(env, key)) {
+        return Response.redirect(`${base}/pdf/filtered/${kind}${url.search}`, 302);
+      }
+      const body = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="3"><title>Building…</title></head><body style="font-family:system-ui;text-align:center;padding:3rem"><p>Building your PDF…</p><p style="color:#888;font-size:.9rem">This page refreshes automatically.</p></body></html>`;
+      return new Response(body, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
     }
     const pdfMatch = url.pathname.match(/^\/pdf\/(community|qmi|floorplan|list)\/(.+)$/);
     if (request.method === 'GET' && pdfMatch) {
@@ -179,8 +165,11 @@ export default {
 
   async queue(batch: MessageBatch<RenderJob>, env: Env): Promise<void> {
     for (const msg of batch.messages) {
-      try { await processJob(env, msg.body); msg.ack(); }
-      catch { msg.retry(); }
+      try {
+        if (msg.body.filtered) await renderFilteredJob(env, msg.body.filtered.kind, msg.body.filtered.query);
+        else await processJob(env, msg.body);
+        msg.ack();
+      } catch { msg.retry(); }
     }
   },
 
