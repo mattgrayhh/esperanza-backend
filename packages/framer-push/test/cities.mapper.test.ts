@@ -90,8 +90,9 @@ describe('Cities mapper — live city-scoped counts override stored snapshots', 
     // recQ1 (synced) + recQ2 (override) — recQ3 unpublished, recQ4 other city
     expect(sval(f['move_in_homes_count'])).toBe(2);
 
-    // recFP1 + recFP2 (DISTINCT) — FP3 unpublished comm, FP4 unpublished plan,
-    // FP5 unlinked, FP6 other city, FP7 boundary non-match
+    // FP1 (→A) + FP2 (→A,OTHER; counts once for A) — FP3 unpublished comm,
+    // FP4 unpublished plan, FP5 unlinked, FP6 other city, FP7 boundary non-match.
+    // Per-community method, but no plan here is in BOTH A and B, so total = 2.
     expect(sval(f['floor_plans_count'])).toBe(2);
 
     // stored snapshot columns (999/888/777) are NOT what gets emitted
@@ -112,6 +113,23 @@ describe('Cities mapper — live city-scoped counts override stored snapshots', 
     expect(sval(f['community_count'])).toBe(1);
     expect(sval(f['move_in_homes_count'])).toBe(1);
     expect(sval(f['floor_plans_count'])).toBe(2);
+  });
+
+  it('counts a plan ONCE PER published in-city community (per-community, not distinct — matches legacy)', () => {
+    const db = freshDb();
+    insertRow(db, 'cities', { id: 'recCITYpc', city_name: 'PerComm', published: 1 });
+    insertRow(db, 'communities', { id: 'recCM_A', city_id: 'recCITYpc', published: 1 });
+    insertRow(db, 'communities', { id: 'recCM_B', city_id: 'recCITYpc', published: 1 });
+    insertRow(db, 'communities', { id: 'recCM_U', city_id: 'recCITYpc', published: 0 }); // unpublished → excluded
+    // one plan offered in BOTH published communities → counts twice
+    insertRow(db, 'floor_plans', { id: 'recFPboth', published: 1, community_ids: 'recCM_A, recCM_B' });
+    // a plan only in A → counts once
+    insertRow(db, 'floor_plans', { id: 'recFPa', published: 1, community_ids: 'recCM_A' });
+    // a plan in the unpublished community → does not count
+    insertRow(db, 'floor_plans', { id: 'recFPu', published: 1, community_ids: 'recCM_U' });
+
+    // A: recFPboth + recFPa = 2 ; B: recFPboth = 1 ; total = 3 (DISTINCT would be 2)
+    expect(sval(mapOne(db, 'recCITYpc').fieldData['floor_plans_count'])).toBe(3);
   });
 
   it('returns 0 (not undefined) when a city is truly empty', () => {
