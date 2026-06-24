@@ -1050,6 +1050,22 @@ const blogs: CollectionDef = {
 //    consumer (it needs the promotion_targets join + linked images); the map() here
 //    takes a pre-resolved `image_url` on the row.
 // =============================================================================
+
+// Live count of PUBLISHED communities a promo is available in — the legacy site's
+// "available in N communities" copy under the incentive tile. A global promo reaches
+// every published community; otherwise it's the distinct published communities it
+// directly targets. Prod targeting is community|global only (verified 2026-06-24), so
+// city/floor_plan/qmi targets aren't counted — add those branches when they're used.
+const PROMO_COMMUNITY_COUNT_SQL = `
+  (SELECT CASE
+     WHEN EXISTS (SELECT 1 FROM promotion_targets t
+                    WHERE t.promotion_id = p.id AND t.target_type = 'global')
+       THEN (SELECT COUNT(*) FROM communities WHERE published = 1)
+     ELSE (SELECT COUNT(DISTINCT t.target_id) FROM promotion_targets t
+             JOIN communities c ON c.id = t.target_id
+            WHERE t.promotion_id = p.id AND t.target_type = 'community'
+              AND c.published = 1)
+   END) AS community_count`;
 const promotions: CollectionDef = {
   key: 'promotions',
   defaultCollectionName: 'Promotions',
@@ -1066,7 +1082,8 @@ const promotions: CollectionDef = {
       (SELECT group_concat(t.target_id) FROM promotion_targets t
          WHERE t.promotion_id = p.id AND t.target_type = 'qmi') AS qmi_ids,
       (SELECT group_concat(t.target_id) FROM promotion_targets t
-         WHERE t.promotion_id = p.id AND t.target_type = 'city') AS city_ids
+         WHERE t.promotion_id = p.id AND t.target_type = 'city') AS city_ids,
+      ${PROMO_COMMUNITY_COUNT_SQL}
     FROM promotions p WHERE p.id = ?`,
   selectAllSql: `
     SELECT p.*,
@@ -1079,7 +1096,8 @@ const promotions: CollectionDef = {
       (SELECT group_concat(t.target_id) FROM promotion_targets t
          WHERE t.promotion_id = p.id AND t.target_type = 'qmi') AS qmi_ids,
       (SELECT group_concat(t.target_id) FROM promotion_targets t
-         WHERE t.promotion_id = p.id AND t.target_type = 'city') AS city_ids
+         WHERE t.promotion_id = p.id AND t.target_type = 'city') AS city_ids,
+      ${PROMO_COMMUNITY_COUNT_SQL}
     FROM promotions p`,
   map(row) {
     const id = String(row['id']);
@@ -1114,6 +1132,9 @@ const promotions: CollectionDef = {
       community_ids: sIf(row['community_ids']),
       floor_plan_ids: sIf(row['floor_plan_ids']),
       collection_ids: sIf(row['collection_ids']),
+      // "Available in N communities" count (see PROMO_COMMUNITY_COUNT_SQL). Always a
+      // number (COUNT never null), 0 included; bind into the incentive-tile copy.
+      community_count: nIf(row['community_count']),
     });
     return { id, slug, draft, fieldData };
   },
