@@ -31,6 +31,29 @@ export const SNOWFLAKE_CITIES = [
   'Mercedes',
 ] as const;
 
+/**
+ * QMI spec-flag override (O'Neill data-error guard).
+ *
+ * The QMI gate keys off MarkSystems `RHODES_SPEC_FLAG = 'Yes'`. A handful of homes
+ * are marketed "Available Now" on the authoritative legacy site (the source of
+ * truth — see project_esperanza_oneill_sync) yet MarkSystems has them flagged
+ * `RHODES_SPEC_FLAG = 'No'` (Pre-Sold). Those homes are wrongly dropped from the
+ * site. We can't relax the flag wholesale — the No/Not-Completed/Pre-Sold bucket is
+ * ~1,400 homes (mostly UNKNOWN-model presold lots) and would flood the catalog.
+ *
+ * So we keep the spec gate but OR-in an explicit, verified ECI allow-list: each
+ * entry is a home confirmed present on https://www.esperanzahomes.com/new-homes/available/.
+ * The other gate conditions (not-Completed, whitelist city) still apply, so a home
+ * here only flows through if it is genuinely active inventory. When MarkSystems
+ * fixes the flag at source, the entry becomes a harmless no-op (it already matches
+ * `RHODES_SPEC_FLAG = 'Yes'`).
+ *
+ * Verified 2026-06-24 against the legacy available-inventory listing.
+ */
+export const QMI_SPEC_FLAG_OVERRIDE_ECIS: readonly string[] = [
+  '005VF00000135', // 1413 Zurich Avenue, Villas On Freddy (McAllen) — Peppoli, "Available Now $258,990"
+];
+
 /** raw DEVELOPMENT_NAME → Airtable/D1 Community Name (worker.js:10-17). */
 export const COMMUNITY_NAME_MAP: Record<string, string> = {
   Anaqua: 'Anaqua at Tres Lagos',
@@ -238,9 +261,16 @@ export function qmisSql(env: SnowflakeEnv): string {
 FROM ${FQ(env)}.DM_HOUSE h
 LEFT JOIN ${FQ(env)}.FCT_HOUSESALES s
   ON h.HOUSE_ID = s.HOUSE_ID AND s.TRANSACTION_TYPE = 'Spec Home Inventory'
-WHERE h.RHODES_SPEC_FLAG = 'Yes'
+WHERE (h.RHODES_SPEC_FLAG = 'Yes'${specFlagOverrideClause()})
   AND h.SETTLEMENT_COMPLETION_FLAG != 'Completed'
   AND h.HOUSE_CITY IN (${cityList})`;
+}
+
+/** OR-clause that admits the verified spec-flag-override ECIs (empty when none). */
+function specFlagOverrideClause(): string {
+  if (QMI_SPEC_FLAG_OVERRIDE_ECIS.length === 0) return '';
+  const list = QMI_SPEC_FLAG_OVERRIDE_ECIS.map((e) => `'${e}'`).join(',');
+  return ` OR h.ECI_KEY IN (${list})`;
 }
 
 /** QUERY 3 — Floor Plans aggregate from DM_FLOOR_PLAN (0007). One row per model

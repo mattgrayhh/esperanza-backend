@@ -1,0 +1,46 @@
+// =============================================================================
+// QMI spec-flag override — homes marketed "Available Now" on the authoritative
+// legacy site but flagged RHODES_SPEC_FLAG='No' (Pre-Sold) in MarkSystems must
+// still be admitted by the QMI gate. The gate keeps the spec='Yes' requirement
+// but ORs in a verified ECI allow-list, while leaving the not-Completed and
+// whitelist-city guards intact so the override can't pull settled/out-of-region
+// homes. See QMI_SPEC_FLAG_OVERRIDE_ECIS in snowflake.ts.
+// =============================================================================
+
+import { describe, it, expect } from 'vitest';
+import { qmisSql, QMI_SPEC_FLAG_OVERRIDE_ECIS, type SnowflakeEnv } from '../src/snowflake.js';
+
+const env: SnowflakeEnv = {
+  SNOWFLAKE_ACCOUNT: 'lu51183.us-east-2.aws',
+  SNOWFLAKE_USER: 'u',
+  SNOWFLAKE_PASSWORD: 'p',
+  SNOWFLAKE_DATABASE: 'RHODES_ENTERPRISES',
+  SNOWFLAKE_WAREHOUSE: 'HAZARD_HOUSE_WH',
+  SNOWFLAKE_SCHEMA: 'ANALYTICS_ZONE',
+};
+
+describe('qmisSql spec-flag override', () => {
+  const sql = qmisSql(env);
+
+  it('still requires spec=Yes as the primary gate', () => {
+    expect(sql).toContain("h.RHODES_SPEC_FLAG = 'Yes'");
+  });
+
+  it('admits every override ECI via an OR clause', () => {
+    for (const eci of QMI_SPEC_FLAG_OVERRIDE_ECIS) {
+      expect(sql).toContain(`'${eci}'`);
+    }
+    expect(sql).toContain('OR h.ECI_KEY IN (');
+  });
+
+  it('includes 1413 Zurich (the verified Pre-Sold-but-available home)', () => {
+    expect(QMI_SPEC_FLAG_OVERRIDE_ECIS).toContain('005VF00000135');
+  });
+
+  it('keeps the not-Completed and whitelist-city guards (override is not a bypass)', () => {
+    expect(sql).toContain("h.SETTLEMENT_COMPLETION_FLAG != 'Completed'");
+    expect(sql).toContain('h.HOUSE_CITY IN (');
+    // The spec/override term is parenthesised so the AND guards bind to BOTH branches.
+    expect(sql).toMatch(/WHERE \(h\.RHODES_SPEC_FLAG = 'Yes' OR h\.ECI_KEY IN \([^)]*\)\)\s+AND h\.SETTLEMENT_COMPLETION_FLAG/);
+  });
+});
