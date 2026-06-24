@@ -828,6 +828,19 @@ const communities: CollectionDef = {
     const planListUrl = communitySlug ? `${PDF_LIST_BASE}/pdf/list/community-${communitySlug}-plans` : undefined;
     const saleListUrl = communitySlug ? `${PDF_LIST_BASE}/pdf/list/community-${communitySlug}-qmis` : undefined;
 
+    // Deep-link to the Quick Move-Ins page pre-filtered to this community. The
+    // community list on the city page binds its item link to this. Framer's link
+    // control strips query strings from internal paths, and a frame link.href can't
+    // carry a ComputedValue prefix — so we emit the FULL external URL here (same host
+    // trick the city "Explore Our Communities" CTA uses). Uses the community NAME (the
+    // QMI filter's exact match key) so matching is independent of slug customization.
+    // ponytail: host hardcoded to the framer.app deploy host; swap to the canonical
+    // domain at DNS cutover, alongside the city-explore link.
+    const communityName = asString(row['name']);
+    const qmiFilterUrl = communityName
+      ? `https://daily-popover-555030.framer.app/new-homes/available?community=${encodeURIComponent(communityName)}`
+      : undefined;
+
     // lat/long: parse from map_coordinates "lat,long" if the numeric cols are null
     let latitude = numField(row['latitude']);
     let longitude = numField(row['longitude']);
@@ -935,6 +948,7 @@ const communities: CollectionDef = {
       // Emitted as link/number directly; created in Framer via POST /schema.
       plan_list_pdf_url: linkIf(planListUrl),
       sale_list_pdf_url: linkIf(saleListUrl),
+      qmi_filter_url: linkIf(qmiFilterUrl),
       plan_count: nIf(row['plan_count']),
       home_count: nIf(row['home_count']),
       incentive: sIf(row['incentive']),

@@ -189,6 +189,43 @@ interface QMIFilterState {
     touringAvailable: boolean
 }
 
+const slugifyCommunity = (s: string) =>
+    (s || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+
+const DEFAULT_QMI_FILTERS: QMIFilterState = {
+    communities: [],
+    cities: [],
+    priceRange: "",
+    dateAvailable: "",
+    collections: [],
+    floorPlans: [],
+    bathrooms: "",
+    bedrooms: "",
+    squareFeet: "",
+    homeTypes: [],
+    touringAvailable: false,
+}
+
+// Seed the filter from the page URL so links can deep-link into a pre-filtered
+// view, e.g. /new-homes/available/?community=Las%20Brisas%20at%20Tres%20Lagos.
+// Mirrors Communities.tsx's ?city= handling — values are the exact community /
+// city NAME (the filter matches by name), URLSearchParams handles decoding.
+function parseQMIFiltersFromSearch(search: string): QMIFilterState {
+    if (typeof window === "undefined" || !search) return { ...DEFAULT_QMI_FILTERS }
+    const params = new URLSearchParams(search)
+    if (!params.toString()) return { ...DEFAULT_QMI_FILTERS }
+    const community = params.get("community")
+    const city = params.get("city")
+    return {
+        ...DEFAULT_QMI_FILTERS,
+        communities: community ? [community] : [],
+        cities: city ? [city] : [],
+    }
+}
+
 interface QuickMoveInsProps {
     cacheWorkerUrl?: string
     tileUrl?: string
@@ -844,19 +881,11 @@ export default function QuickMoveIns({
     const [mobileView, setMobileView] = useState<"list" | "map">("list")
     const [sortBy, setSortBy] = useState<string>("sqft-asc")
     const [hoveredCardId, setHoveredCardId] = useState<string | null>(null)
-    const [filters, setFilters] = useState<QMIFilterState>({
-        communities: [],
-        cities: [],
-        priceRange: "",
-        dateAvailable: "",
-        collections: [],
-        floorPlans: [],
-        bathrooms: "",
-        bedrooms: "",
-        squareFeet: "",
-        homeTypes: [],
-        touringAvailable: false,
-    })
+    const [filters, setFilters] = useState<QMIFilterState>(() =>
+        typeof window !== "undefined"
+            ? parseQMIFiltersFromSearch(window.location.search)
+            : { ...DEFAULT_QMI_FILTERS }
+    )
 
     // Mortgage rates driving the card payment figures. Defaults come from the props
     // (standard = market rate / struck-through, incentive = promo rate / green). If
@@ -1268,7 +1297,15 @@ export default function QuickMoveIns({
     useEffect(() => {
         let out = homes.filter((h) => {
             if (filters.communities.length && h.community) {
-                if (!filters.communities.includes(h.community)) return false
+                // Slug-aware: the city map's community links deep-link with the
+                // community SLUG (?community=<slug>), while the dropdown selects
+                // by exact name — match either form.
+                const hcSlug = slugifyCommunity(h.community)
+                const match = filters.communities.some(
+                    (sel) =>
+                        sel === h.community || slugifyCommunity(sel) === hcSlug
+                )
+                if (!match) return false
             } else if (filters.communities.length) return false
 
             if (filters.cities.length) {
