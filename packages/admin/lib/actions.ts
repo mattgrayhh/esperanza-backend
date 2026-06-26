@@ -85,6 +85,35 @@ interface AuditInput {
   actor: string;
 }
 
+// Public api (esperanza-api) edge-cache purge. The api Worker caches each
+// /api/public/<entity> for its TTL (qmi 60s, the rest 300s) and exposes a
+// ?purge=1 hook. Admin writes must purge or an edit only shows after the TTL —
+// the "I changed it but it still shows" class. Mirrors saveSiteSettings.
+// A promotions edit (publish/targeting/fields) flattens onto community + city +
+// qmi rows via the api's resolveEffectivePromo, so it purges those dependents
+// too — not just /promotions. Note admin `floor_plans` → api path `floorplans`.
+const PUBLIC_CACHE_DEPS: Record<string, string[]> = {
+  promotions: ['promotions', 'communities', 'cities', 'qmi'],
+  communities: ['communities', 'cities', 'qmi'],
+  floor_plans: ['floorplans', 'qmi'],
+  qmi: ['qmi'],
+  cities: ['cities'],
+  collections: ['collections'],
+  images: ['images'],
+  blogs: ['blogs'],
+  testimonials: ['testimonials'],
+};
+
+/** Best-effort: a purge failure must never fail the save (the TTL is the backstop). */
+async function purgePublicCache(apiBaseUrl: string | undefined, collection: string): Promise<void> {
+  const base = (apiBaseUrl ?? '').replace(/\/+$/, '');
+  const entities = PUBLIC_CACHE_DEPS[collection];
+  if (!base || !entities) return;
+  await Promise.all(
+    entities.map((e) => fetch(`${base}/api/public/${e}?purge=1`, { method: 'GET' }).catch(() => {}))
+  );
+}
+
 /**
  * Insert audit rows and enqueue a single Framer push for the changed record. Call
  * AFTER the D1 write committed. `collection` must be a framer-push CollectionKey
@@ -116,6 +145,17 @@ async function postWrite(
 
   const env = getCloudflareContext().env;
   await env.FRAMER_QUEUE.send({ collection, action: 'upsert', id });
+
+  // Purge the public api edge cache for this entity (+ promo-coupled dependents)
+  // so the edit shows before the TTL instead of after it. Best-effort.
+  try {
+    await purgePublicCache(
+      (env as unknown as { API_PUBLIC_URL?: string }).API_PUBLIC_URL,
+      collection
+    );
+  } catch {
+    /* TTL backstop */
+  }
 
   // Mark affected PDF brochures stale + enqueue re-renders (best-effort, event-driven freshness).
   try {

@@ -16,6 +16,13 @@ of commands. Part 3 is the glossary of every name and identifier in the system.
    bound yet.
 3. Is there a **stale redirect** shadowing the page? Some legacy URLs 308-redirect and hide
    the live CMS page. That's a Framer/operator config issue.
+4. Is the page driven by a **no-code Fetch** (e.g. company rates, or a community's resolved
+   promo banner/badge) rather than CMS? Those read `esperanza-api` (`/api/public/<entity>`),
+   which caches each entity (qmi 60s, the rest 300s). Admin writes now auto-purge that cache
+   (`postWrite` → `purgePublicCache`; promotions edits also purge `communities`/`cities`/`qmi`
+   because the resolved promo is flattened onto those). If a Fetch-driven surface still lags,
+   the purge is best-effort and the TTL (≤5 min) is the backstop — wait it out or hit
+   `GET {API_PUBLIC_URL}/api/public/<entity>?purge=1`.
 
 ### "A whole collection stopped updating in Framer"
 Almost always a **field-type mismatch**: `field_definitions.framer_type` (D1) ≠ the live
