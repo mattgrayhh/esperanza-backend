@@ -8,16 +8,16 @@ import React, { useEffect, useMemo, useState, useCallback } from "react"
 import { addPropertyControls, ControlType } from "framer"
 
 const STAT_ICONS = {
-    garage: "https://static.esperanzahomes.com/esperanza_homes/images/stats/garage.svg",
-    stairs: "https://static.esperanzahomes.com/esperanza_homes/images/stats/stairs.svg",
-    livingSqft: "https://static.esperanzahomes.com/esperanza_homes/images/stats/livingsqft.svg",
-    bed: "https://static.esperanzahomes.com/esperanza_homes/images/stats/bedroom.svg",
-    bath: "https://static.esperanzahomes.com/esperanza_homes/images/stats/bathroom.svg",
-    sqft: "https://static.esperanzahomes.com/esperanza_homes/images/stats/sqft.svg",
+    garage: "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/images/stats/garage.svg",
+    stairs: "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/images/stats/stairs.svg",
+    livingSqft: "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/images/stats/livingsqft.svg",
+    bed: "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/images/stats/bedroom.svg",
+    bath: "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/images/stats/bathroom.svg",
+    sqft: "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/images/stats/sqft.svg",
 }
 
 const TOUR_ICON =
-    "https://static.esperanzahomes.com/esperanza_homes/images/stats/tour-icon.svg"
+    "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/images/stats/tour-icon.svg"
 
 declare const RenderTarget: {
     current: () => string
@@ -253,8 +253,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2413,
         priceFrom: 212990,
         images: [
-            "https://media.esperanzahomes.com/153/2022/12/19/ACUNA_GAME_ROOM_CONTEMPORARY_BRICK_SE_V01.jpg?width=1920&height=1279&fit=bounds&ois=6f8a874",
-            "https://media.esperanzahomes.com/153/2022/12/19/ACUNA_GAME_ROOM_CONTEMPORARY_STUCCO_SC_V02.jpg?width=1920&height=1279&fit=bounds&ois=c386056",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/12/19/ACUNA_GAME_ROOM_CONTEMPORARY_BRICK_SE_V01.jpg?width=1920&height=1279&fit=bounds&ois=6f8a874",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/12/19/ACUNA_GAME_ROOM_CONTEMPORARY_STUCCO_SC_V02.jpg?width=1920&height=1279&fit=bounds&ois=c386056",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/acuna-ii/",
@@ -274,8 +274,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 3639,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2024/4/26/Agave_Tuscan_Brick_Color_Render_V03.jpg?width=1920&height=1279&fit=bounds&ois=142c25a",
-            "https://media.esperanzahomes.com/153/2024/4/26/Agave_Tuscan_Stucco_Color_Render_V02.jpg?width=1920&height=1279&fit=bounds&ois=1c175a4",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/4/26/Agave_Tuscan_Brick_Color_Render_V03.jpg?width=1920&height=1279&fit=bounds&ois=142c25a",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/4/26/Agave_Tuscan_Stucco_Color_Render_V02.jpg?width=1920&height=1279&fit=bounds&ois=1c175a4",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/agave/",
@@ -295,8 +295,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 1949,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/7/3/Allegrini_Contemporary_Stucco_Color_Render_V03_1.jpg?width=1920&height=1279&fit=bounds&ois=e6c8bac",
-            "https://media.esperanzahomes.com/153/2025/7/3/Allegrini_Traditional_Stucco_Color_Render_V02_1.jpg?width=1920&height=1279&fit=bounds&ois=4b613f3",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/7/3/Allegrini_Contemporary_Stucco_Color_Render_V03_1.jpg?width=1920&height=1279&fit=bounds&ois=e6c8bac",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/7/3/Allegrini_Traditional_Stucco_Color_Render_V02_1.jpg?width=1920&height=1279&fit=bounds&ois=4b613f3",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/allegrini/",
@@ -316,8 +316,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2228,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2022/2/22/ANTINORI__CONTEMPORARY_STUCCO_S-C_V03.jpg?width=1920&height=1279&fit=bounds&ois=93f804d",
-            "https://media.esperanzahomes.com/153/2022/2/22/ANTINORI__TRADITIONAL_STUCCO_S-K_V02.jpg?width=1920&height=1279&fit=bounds&ois=eab1f70",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/22/ANTINORI__CONTEMPORARY_STUCCO_S-C_V03.jpg?width=1920&height=1279&fit=bounds&ois=93f804d",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/22/ANTINORI__TRADITIONAL_STUCCO_S-K_V02.jpg?width=1920&height=1279&fit=bounds&ois=eab1f70",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/antinori/",
@@ -337,8 +337,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 1911,
         priceFrom: 173990,
         images: [
-            "https://media.esperanzahomes.com/153/2022/4/12/BAHIA_TUSCAN_STUCCO_S-A-V04.jpg?width=1920&height=1279&fit=bounds&ois=eb3fcf8",
-            "https://media.esperanzahomes.com/153/2022/4/12/BAHIA_CONTEMP_STUCCO_S-C-V04.jpg?width=1920&height=1279&fit=bounds&ois=f31504d",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/4/12/BAHIA_TUSCAN_STUCCO_S-A-V04.jpg?width=1920&height=1279&fit=bounds&ois=eb3fcf8",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/4/12/BAHIA_CONTEMP_STUCCO_S-C-V04.jpg?width=1920&height=1279&fit=bounds&ois=f31504d",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/bahia/",
@@ -358,8 +358,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 3588,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2022/2/18/BARBADOS_TRADITIONAL_STUCCO_S-K_V01.jpg?width=1920&height=1279&fit=bounds&ois=37e71cc",
-            "https://media.esperanzahomes.com/153/2022/2/18/BARBADOS_TUSCAN_S_A_V01.jpg?width=1920&height=1279&fit=bounds&ois=01be45b",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/18/BARBADOS_TRADITIONAL_STUCCO_S-K_V01.jpg?width=1920&height=1279&fit=bounds&ois=37e71cc",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/18/BARBADOS_TUSCAN_S_A_V01.jpg?width=1920&height=1279&fit=bounds&ois=01be45b",
         ],
         url: "/floorplans/barbados/",
     },
@@ -378,8 +378,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 1275,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/8/19/Bear_-_Farmhouse_v2.jpg?width=1920&height=1279&fit=bounds&ois=b62592b",
-            "https://media.esperanzahomes.com/153/2025/6/30/063025_5740_St_Dominic_Dr_Bear_Traditional_Brick-_04.jpg?width=1920&height=1280&fit=bounds&ois=4b1575e",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/8/19/Bear_-_Farmhouse_v2.jpg?width=1920&height=1279&fit=bounds&ois=b62592b",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/6/30/063025_5740_St_Dominic_Dr_Bear_Traditional_Brick-_04.jpg?width=1920&height=1280&fit=bounds&ois=4b1575e",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/bear/",
@@ -399,8 +399,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2382,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/5/29/Benanti_-_Contemporary_Stucco_V04.jpg?width=1920&height=1279&fit=bounds&ois=2c45b1c",
-            "https://media.esperanzahomes.com/153/2025/5/29/Benanti_-_Traditional_Stucco_V04.jpg?width=1920&height=1279&fit=bounds&ois=ba5c648",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/5/29/Benanti_-_Contemporary_Stucco_V04.jpg?width=1920&height=1279&fit=bounds&ois=2c45b1c",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/5/29/Benanti_-_Traditional_Stucco_V04.jpg?width=1920&height=1279&fit=bounds&ois=ba5c648",
         ],
         url: "/floorplans/benanti/",
     },
@@ -419,8 +419,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 4101,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/11/26/Blanco_Traditional_Brick_V01.jpg?width=1920&height=1279&fit=bounds&ois=9b59c5a",
-            "https://media.esperanzahomes.com/153/2025/11/26/Blanco_Farmhouse_V01.jpg?width=1920&height=1279&fit=bounds&ois=3b797f9",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/11/26/Blanco_Traditional_Brick_V01.jpg?width=1920&height=1279&fit=bounds&ois=9b59c5a",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/11/26/Blanco_Farmhouse_V01.jpg?width=1920&height=1279&fit=bounds&ois=3b797f9",
         ],
         url: "/floorplans/blanco/",
     },
@@ -439,8 +439,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2015,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/12/23/Plan_31_Bluebonnet_Contemporary_Stucco_V01.jpg?width=1920&height=1279&fit=bounds&ois=592b74c",
-            "https://media.esperanzahomes.com/153/2025/12/23/Plan_31_Bluebonnet_Traditional_Brick_V01.jpg?width=1920&height=1279&fit=bounds&ois=3943b85",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/12/23/Plan_31_Bluebonnet_Contemporary_Stucco_V01.jpg?width=1920&height=1279&fit=bounds&ois=592b74c",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/12/23/Plan_31_Bluebonnet_Traditional_Brick_V01.jpg?width=1920&height=1279&fit=bounds&ois=3943b85",
         ],
         url: "/floorplans/bluebonnet/",
     },
@@ -459,8 +459,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 3595,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2024/10/1/Plan_12_Brazos_Farmhouse_Color_Render_V01.jpg?width=1920&height=1279&fit=bounds&ois=8f41776",
-            "https://media.esperanzahomes.com/153/2024/10/1/Plan_12_Brazos_Contemporary_Stucco_Color_Render_V01.jpg?width=1920&height=1279&fit=bounds&ois=c4f6bbe",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/10/1/Plan_12_Brazos_Farmhouse_Color_Render_V01.jpg?width=1920&height=1279&fit=bounds&ois=8f41776",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/10/1/Plan_12_Brazos_Contemporary_Stucco_Color_Render_V01.jpg?width=1920&height=1279&fit=bounds&ois=c4f6bbe",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/brazos/",
@@ -480,8 +480,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 3660,
         priceFrom: 350990,
         images: [
-            "https://media.esperanzahomes.com/153/2022/2/21/CAPISTRANO_CONTEMPORARY_STUCCO_SD_V03.jpg?width=1920&height=1279&fit=bounds&ois=c851efe",
-            "https://media.esperanzahomes.com/153/2022/2/21/CAPISTRANO_FARMHOUSE_HARDIE_SH_V04.jpg?width=1920&height=1279&fit=bounds&ois=88ce9ad",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/21/CAPISTRANO_CONTEMPORARY_STUCCO_SD_V03.jpg?width=1920&height=1279&fit=bounds&ois=c851efe",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/21/CAPISTRANO_FARMHOUSE_HARDIE_SH_V04.jpg?width=1920&height=1279&fit=bounds&ois=88ce9ad",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/capistrano/",
@@ -501,8 +501,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 4174,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/11/17/Plan_27_Cedar_Contemporary_Stucco_V03.jpg?width=1920&height=1279&fit=bounds&ois=4f8ad5d",
-            "https://media.esperanzahomes.com/153/2025/11/17/Plan_27_Cedar_Farmhouse_V03.jpg?width=1920&height=1279&fit=bounds&ois=54ae61c",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/11/17/Plan_27_Cedar_Contemporary_Stucco_V03.jpg?width=1920&height=1279&fit=bounds&ois=4f8ad5d",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/11/17/Plan_27_Cedar_Farmhouse_V03.jpg?width=1920&height=1279&fit=bounds&ois=54ae61c",
         ],
         url: "/floorplans/cedar/",
     },
@@ -521,8 +521,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 1476,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/8/19/Chacon_-_Traditional_Brick_v2.jpg?width=1920&height=1279&fit=bounds&ois=290f574",
-            "https://media.esperanzahomes.com/153/2025/8/19/Chacon_-_Contemporary_Stucco_v2.jpg?width=1920&height=1279&fit=bounds&ois=2513edc",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/8/19/Chacon_-_Traditional_Brick_v2.jpg?width=1920&height=1279&fit=bounds&ois=290f574",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/8/19/Chacon_-_Contemporary_Stucco_v2.jpg?width=1920&height=1279&fit=bounds&ois=2513edc",
         ],
         url: "/floorplans/chacon/",
     },
@@ -541,8 +541,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 4148,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/12/22/Plan_30_Cimarron_Tuscan_Stucco_V02.jpg?width=1920&height=1279&fit=bounds&ois=d73ebd3",
-            "https://media.esperanzahomes.com/153/2025/12/22/Plan_30_Cimarron_Traditional_Brick_V02.jpg?width=1920&height=1279&fit=bounds&ois=2c72473",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/12/22/Plan_30_Cimarron_Tuscan_Stucco_V02.jpg?width=1920&height=1279&fit=bounds&ois=d73ebd3",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/12/22/Plan_30_Cimarron_Traditional_Brick_V02.jpg?width=1920&height=1279&fit=bounds&ois=2c72473",
         ],
         url: "/floorplans/cimarron/",
     },
@@ -561,8 +561,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 1963,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2021/9/15/CORTONO_V02_Page_1.jpg?width=1920&height=1279&fit=bounds&ois=f9fc4db",
-            "https://media.esperanzahomes.com/153/2021/9/15/CORTONO_V02_Page_2.jpg?width=1920&height=1279&fit=bounds&ois=6f2dac1",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2021/9/15/CORTONO_V02_Page_1.jpg?width=1920&height=1279&fit=bounds&ois=f9fc4db",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2021/9/15/CORTONO_V02_Page_2.jpg?width=1920&height=1279&fit=bounds&ois=6f2dac1",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/cortono/",
@@ -582,8 +582,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 1731,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/5/20/Cottage_-_Tuscan_-_Stucco.jpg?width=1920&height=1279&fit=bounds&ois=4b4c885",
-            "https://media.esperanzahomes.com/153/2025/5/20/Cottage_-_Traditional_-_Stucco.jpg?width=1920&height=1279&fit=bounds&ois=47be4a9",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/5/20/Cottage_-_Tuscan_-_Stucco.jpg?width=1920&height=1279&fit=bounds&ois=4b4c885",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/5/20/Cottage_-_Traditional_-_Stucco.jpg?width=1920&height=1279&fit=bounds&ois=47be4a9",
         ],
         url: "/floorplans/cottage/",
     },
@@ -602,8 +602,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 1376,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/8/19/Cuervo_-_Contemporary_Stucco_v2.jpg?width=1920&height=1279&fit=bounds&ois=6984e03",
-            "https://media.esperanzahomes.com/153/2025/8/19/Cuervo_-_Farmhouse_v2.jpg?width=1920&height=1279&fit=bounds&ois=5fa410c",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/8/19/Cuervo_-_Contemporary_Stucco_v2.jpg?width=1920&height=1279&fit=bounds&ois=6984e03",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/8/19/Cuervo_-_Farmhouse_v2.jpg?width=1920&height=1279&fit=bounds&ois=5fa410c",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/cuervo/",
@@ -623,8 +623,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2513,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2022/2/18/CYPRESS_TRADITIONAL_STUCCO_S-L_V01.jpg?width=1920&height=1279&fit=bounds&ois=a1da6ae",
-            "https://media.esperanzahomes.com/153/2022/2/18/CYPRESS_TUSCAN_STUCCO_S-B_V01.jpg?width=1920&height=1279&fit=bounds&ois=c73bf04",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/18/CYPRESS_TRADITIONAL_STUCCO_S-L_V01.jpg?width=1920&height=1279&fit=bounds&ois=a1da6ae",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/18/CYPRESS_TUSCAN_STUCCO_S-B_V01.jpg?width=1920&height=1279&fit=bounds&ois=c73bf04",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/cypress/",
@@ -644,8 +644,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2332,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2022/2/18/EBONY_TUSCAN_STUCCO_S-B_V02.jpg?width=1920&height=1279&fit=bounds&ois=326c04c",
-            "https://media.esperanzahomes.com/153/2022/2/18/EBONY_TRADITIONAL_STUCCO_S-K_V02.jpg?width=1920&height=1279&fit=bounds&ois=583a1c1",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/18/EBONY_TUSCAN_STUCCO_S-B_V02.jpg?width=1920&height=1279&fit=bounds&ois=326c04c",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/18/EBONY_TRADITIONAL_STUCCO_S-K_V02.jpg?width=1920&height=1279&fit=bounds&ois=583a1c1",
         ],
         url: "/floorplans/ebony/",
     },
@@ -664,8 +664,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 3208,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/6/5/Elm_Farmhouse_Color_Render_V03.jpg?width=1920&height=1279&fit=bounds&ois=c36c71a",
-            "https://media.esperanzahomes.com/153/2025/6/5/Elm_Contemporary_Stucco_Color_Render_V02.jpg?width=1920&height=1279&fit=bounds&ois=ec67dab",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/6/5/Elm_Farmhouse_Color_Render_V03.jpg?width=1920&height=1279&fit=bounds&ois=c36c71a",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/6/5/Elm_Contemporary_Stucco_Color_Render_V02.jpg?width=1920&height=1279&fit=bounds&ois=ec67dab",
         ],
         url: "/floorplans/elm/",
     },
@@ -684,8 +684,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2157,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2024/7/3/Encino_-_FHH.jpg?width=1920&height=1279&fit=bounds&ois=9f71e8f",
-            "https://media.esperanzahomes.com/153/2024/7/3/Encino_-_TSS.jpg?width=1920&height=1279&fit=bounds&ois=959e35c",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/7/3/Encino_-_FHH.jpg?width=1920&height=1279&fit=bounds&ois=9f71e8f",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/7/3/Encino_-_TSS.jpg?width=1920&height=1279&fit=bounds&ois=959e35c",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/encino/",
@@ -705,8 +705,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2906,
         priceFrom: 249990,
         images: [
-            "https://media.esperanzahomes.com/153/2022/11/8/FRANCISCO_FARMHOUSE_V05.jpg?width=1920&height=1279&fit=bounds&ois=0270cb7",
-            "https://media.esperanzahomes.com/153/2022/11/8/CONTEMPORARY_STUCCO_V05.jpg?width=1920&height=1279&fit=bounds&ois=2395949",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/11/8/FRANCISCO_FARMHOUSE_V05.jpg?width=1920&height=1279&fit=bounds&ois=0270cb7",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/11/8/CONTEMPORARY_STUCCO_V05.jpg?width=1920&height=1279&fit=bounds&ois=2395949",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/francisco-i/",
@@ -726,8 +726,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 3675,
         priceFrom: 283990,
         images: [
-            "https://media.esperanzahomes.com/153/2022/11/8/FRANCISCO_2_FARMHOUSE_HARDIE.jpg?width=1920&height=1279&fit=bounds&ois=2e74fee",
-            "https://media.esperanzahomes.com/153/2022/11/8/FRANCISCO_2_STORY_CONTEMPORARY_BRICK_V2.jpg?width=1920&height=1279&fit=bounds&ois=06b71ef",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/11/8/FRANCISCO_2_FARMHOUSE_HARDIE.jpg?width=1920&height=1279&fit=bounds&ois=2e74fee",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/11/8/FRANCISCO_2_STORY_CONTEMPORARY_BRICK_V2.jpg?width=1920&height=1279&fit=bounds&ois=06b71ef",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/francisco-ii/",
@@ -747,8 +747,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 3940,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2024/9/25/Fresno_-_Color_Render_-_Tuscan_Stucco_-_V03.jpg?width=1920&height=1279&fit=bounds&ois=304c891",
-            "https://media.esperanzahomes.com/153/2024/9/25/Fresno_-_Color_Render_-_Traditional_Brick_-_V03.jpg?width=1920&height=1279&fit=bounds&ois=7248ea7",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/9/25/Fresno_-_Color_Render_-_Tuscan_Stucco_-_V03.jpg?width=1920&height=1279&fit=bounds&ois=304c891",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/9/25/Fresno_-_Color_Render_-_Traditional_Brick_-_V03.jpg?width=1920&height=1279&fit=bounds&ois=7248ea7",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/fresno/",
@@ -768,8 +768,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2753,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2022/2/22/GRAPA_CONTEMPORARY_STUCCO_S-D_V02.jpg?width=1920&height=1279&fit=bounds&ois=8a9de3d",
-            "https://media.esperanzahomes.com/153/2022/2/22/GRAPA-TRANSITIONAL-STUCCO-S-L.jpg?width=1920&height=1279&fit=bounds&ois=9669f0b",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/22/GRAPA_CONTEMPORARY_STUCCO_S-D_V02.jpg?width=1920&height=1279&fit=bounds&ois=8a9de3d",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/22/GRAPA-TRANSITIONAL-STUCCO-S-L.jpg?width=1920&height=1279&fit=bounds&ois=9669f0b",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/grapa/",
@@ -789,8 +789,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2856,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/5/29/Hackberry_Tuscan_Stucco_Color_Render_V03.jpg?width=1920&height=1279&fit=bounds&ois=e030c47",
-            "https://media.esperanzahomes.com/153/2025/5/29/Hackberry_-_Contemporary_-_Stucco.jpg?width=1920&height=1279&fit=bounds&ois=b610b44",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/5/29/Hackberry_Tuscan_Stucco_Color_Render_V03.jpg?width=1920&height=1279&fit=bounds&ois=e030c47",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/5/29/Hackberry_-_Contemporary_-_Stucco.jpg?width=1920&height=1279&fit=bounds&ois=b610b44",
         ],
         url: "/floorplans/hackberry/",
     },
@@ -809,8 +809,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2442,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/5/20/Hickory_-_Farmhouse_-_Hardie.jpg?width=1920&height=1279&fit=bounds&ois=bc6fdd8",
-            "https://media.esperanzahomes.com/153/2025/5/20/Hickory_-_Tuscan_-_Stucco.jpg?width=1920&height=1279&fit=bounds&ois=e20dcf6",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/5/20/Hickory_-_Farmhouse_-_Hardie.jpg?width=1920&height=1279&fit=bounds&ois=bc6fdd8",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/5/20/Hickory_-_Tuscan_-_Stucco.jpg?width=1920&height=1279&fit=bounds&ois=e20dcf6",
         ],
         url: "/floorplans/hickory/",
     },
@@ -829,8 +829,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 1652,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/7/1/Indigo_-_Contemporary_Stucco_-_V01.jpg?width=1920&height=1279&fit=bounds&ois=8bd725f",
-            "https://media.esperanzahomes.com/153/2025/7/1/Indigo_-_Farmhouse_-_V01.jpg?width=1920&height=1279&fit=bounds&ois=f6709c7",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/7/1/Indigo_-_Contemporary_Stucco_-_V01.jpg?width=1920&height=1279&fit=bounds&ois=8bd725f",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/7/1/Indigo_-_Farmhouse_-_V01.jpg?width=1920&height=1279&fit=bounds&ois=f6709c7",
         ],
         url: "/floorplans/indigo/",
     },
@@ -849,8 +849,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2303,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/2/7/Iris_-_Tuscan_-_Stucco.jpg?width=1920&height=1279&fit=bounds&ois=4f1a59a",
-            "https://media.esperanzahomes.com/153/2025/2/7/Iris_-_Traditional_-_Brick.jpg?width=1920&height=1279&fit=bounds&ois=932fbd2",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/2/7/Iris_-_Tuscan_-_Stucco.jpg?width=1920&height=1279&fit=bounds&ois=4f1a59a",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/2/7/Iris_-_Traditional_-_Brick.jpg?width=1920&height=1279&fit=bounds&ois=932fbd2",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/iris/",
@@ -870,8 +870,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2292,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/6/5/Jasmine_Farmhouse_Color_Render_V0180.jpg?width=1920&height=1279&fit=bounds&ois=7ed5ca9",
-            "https://media.esperanzahomes.com/153/2025/6/5/Jasmine_Tuscan_Stucco_Color_Render_V0122.jpg?width=1920&height=1279&fit=bounds&ois=105c927",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/6/5/Jasmine_Farmhouse_Color_Render_V0180.jpg?width=1920&height=1279&fit=bounds&ois=7ed5ca9",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/6/5/Jasmine_Tuscan_Stucco_Color_Render_V0122.jpg?width=1920&height=1279&fit=bounds&ois=105c927",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/jasmine/",
@@ -891,8 +891,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2783,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/7/1/Juniper_-_Contemporary_Stucco_-_V01.jpg?width=1920&height=1279&fit=bounds&ois=c110b37",
-            "https://media.esperanzahomes.com/153/2025/7/1/Juniper_-_Traditional_Brick_-_V01.jpg?width=1920&height=1279&fit=bounds&ois=7bc2f0e",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/7/1/Juniper_-_Contemporary_Stucco_-_V01.jpg?width=1920&height=1279&fit=bounds&ois=c110b37",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/7/1/Juniper_-_Traditional_Brick_-_V01.jpg?width=1920&height=1279&fit=bounds&ois=7bc2f0e",
         ],
         url: "/floorplans/juniper/",
     },
@@ -911,8 +911,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2359,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/11/20/Plan_26_Laurel_Traditional_Brick_V03.jpg?width=1920&height=1279&fit=bounds&ois=0794309",
-            "https://media.esperanzahomes.com/153/2025/11/20/Plan_26_Laurel_Tuscan_Stucco_V02.jpg?width=1920&height=1279&fit=bounds&ois=325ce92",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/11/20/Plan_26_Laurel_Traditional_Brick_V03.jpg?width=1920&height=1279&fit=bounds&ois=0794309",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/11/20/Plan_26_Laurel_Tuscan_Stucco_V02.jpg?width=1920&height=1279&fit=bounds&ois=325ce92",
         ],
         url: "/floorplans/laurel/",
     },
@@ -931,8 +931,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2845,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2024/10/1/Plan_11_Luna_Contemporary_Stucco_Color_Render_V02.jpg?width=1920&height=1279&fit=bounds&ois=5b0474a",
-            "https://media.esperanzahomes.com/153/2024/10/1/Plan_11_Luna_Farmhouse_Color_Render_V01.jpg?width=1920&height=1279&fit=bounds&ois=c6a7287",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/10/1/Plan_11_Luna_Contemporary_Stucco_Color_Render_V02.jpg?width=1920&height=1279&fit=bounds&ois=5b0474a",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/10/1/Plan_11_Luna_Farmhouse_Color_Render_V01.jpg?width=1920&height=1279&fit=bounds&ois=c6a7287",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/luna/",
@@ -952,8 +952,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 1454,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/5/29/Lunelli_-_Traditional_Stucco_V04.jpg?width=1920&height=1279&fit=bounds&ois=bd61647",
-            "https://media.esperanzahomes.com/153/2025/5/29/Lunelli_-_Tuscan_Stucco_V04.jpg?width=1920&height=1279&fit=bounds&ois=fa61610",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/5/29/Lunelli_-_Traditional_Stucco_V04.jpg?width=1920&height=1279&fit=bounds&ois=bd61647",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/5/29/Lunelli_-_Tuscan_Stucco_V04.jpg?width=1920&height=1279&fit=bounds&ois=fa61610",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/lunelli/",
@@ -973,8 +973,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 3526,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2024/4/25/Magnolia_Farmhouse_Color_Render_V01.jpg?width=1920&height=1279&fit=bounds&ois=4d0dca6",
-            "https://media.esperanzahomes.com/153/2024/4/25/Magnolia_Contemporary_Brick_Color_Render_V01.jpg?width=1920&height=1279&fit=bounds&ois=4c5ac67",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/4/25/Magnolia_Farmhouse_Color_Render_V01.jpg?width=1920&height=1279&fit=bounds&ois=4d0dca6",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/4/25/Magnolia_Contemporary_Brick_Color_Render_V01.jpg?width=1920&height=1279&fit=bounds&ois=4c5ac67",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/magnolia/",
@@ -994,8 +994,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2948,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2022/2/18/MANZANITA_TUSCAN_S-B_R1.jpg?width=1920&height=1279&fit=bounds&ois=bb1a931",
-            "https://media.esperanzahomes.com/153/2022/2/18/MANZANITA_TRADITIONAL_S-K_R1.jpg?width=1920&height=1279&fit=bounds&ois=c801db5",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/18/MANZANITA_TUSCAN_S-B_R1.jpg?width=1920&height=1279&fit=bounds&ois=bb1a931",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/18/MANZANITA_TRADITIONAL_S-K_R1.jpg?width=1920&height=1279&fit=bounds&ois=c801db5",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/manzanita/",
@@ -1015,8 +1015,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 1899,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2024/7/3/Marigold_-_TDB.jpg?width=1920&height=1279&fit=bounds&ois=3b37fb9",
-            "https://media.esperanzahomes.com/153/2024/7/22/Marigold_-_CTB_-_Contemporary_-_Brick.jpg?width=1920&height=1279&fit=bounds&ois=9a754d2",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/7/3/Marigold_-_TDB.jpg?width=1920&height=1279&fit=bounds&ois=3b37fb9",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/7/22/Marigold_-_CTB_-_Contemporary_-_Brick.jpg?width=1920&height=1279&fit=bounds&ois=9a754d2",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/marigold/",
@@ -1036,8 +1036,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 3009,
         priceFrom: 250990,
         images: [
-            "https://media.esperanzahomes.com/153/2022/2/18/MONTE_TRADITIONAL_BRICK_S-J_V01.jpg?width=1920&height=1279&fit=bounds&ois=49be86f",
-            "https://media.esperanzahomes.com/153/2022/2/18/MONTE_CONTEMPORY_STUCCO_S-C_V01.jpg?width=1920&height=1279&fit=bounds&ois=8595566",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/18/MONTE_TRADITIONAL_BRICK_S-J_V01.jpg?width=1920&height=1279&fit=bounds&ois=49be86f",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/18/MONTE_CONTEMPORY_STUCCO_S-C_V01.jpg?width=1920&height=1279&fit=bounds&ois=8595566",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/monte/",
@@ -1057,8 +1057,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2574,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/5/29/Mulberry_Contemporary_Stucco_Color_Render_V03.jpg?width=1920&height=1279&fit=bounds&ois=5c85baa",
-            "https://media.esperanzahomes.com/153/2025/5/30/Mulberry_Traditional_Brick_Color_Render_V04.jpg?width=1920&height=1279&fit=bounds&ois=fc5c30a",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/5/29/Mulberry_Contemporary_Stucco_Color_Render_V03.jpg?width=1920&height=1279&fit=bounds&ois=5c85baa",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/5/30/Mulberry_Traditional_Brick_Color_Render_V04.jpg?width=1920&height=1279&fit=bounds&ois=fc5c30a",
         ],
         url: "/floorplans/mulberry/",
     },
@@ -1077,8 +1077,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2592,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2021/9/15/NIKOLA_V02_Page_1.jpg?width=1920&height=1279&fit=bounds&ois=98c101f",
-            "https://media.esperanzahomes.com/153/2021/9/15/NIKOLA_V02_Page_2.jpg?width=1920&height=1279&fit=bounds&ois=bb4ba6f",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2021/9/15/NIKOLA_V02_Page_1.jpg?width=1920&height=1279&fit=bounds&ois=98c101f",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2021/9/15/NIKOLA_V02_Page_2.jpg?width=1920&height=1279&fit=bounds&ois=bb4ba6f",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/nikola/",
@@ -1098,8 +1098,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 3358,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/12/22/Plan_32_Nueces_Farmhouse_V02.jpg?width=1920&height=1279&fit=bounds&ois=e211844",
-            "https://media.esperanzahomes.com/153/2025/12/22/Plan_32_Nueces_Tuscan_Stucco_V02.jpg?width=1920&height=1279&fit=bounds&ois=b5ce31f",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/12/22/Plan_32_Nueces_Farmhouse_V02.jpg?width=1920&height=1279&fit=bounds&ois=e211844",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/12/22/Plan_32_Nueces_Tuscan_Stucco_V02.jpg?width=1920&height=1279&fit=bounds&ois=b5ce31f",
         ],
         url: "/floorplans/nueces/",
     },
@@ -1118,8 +1118,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2874,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2025/5/30/Oak_Tuscan_Stucco_Color_Render_V03.jpg?width=1920&height=1279&fit=bounds&ois=8f21f57",
-            "https://media.esperanzahomes.com/153/2025/5/29/Oak_Contemporary_Stucco_Color_Render_V02.jpg?width=1920&height=1279&fit=bounds&ois=f28ef72",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/5/30/Oak_Tuscan_Stucco_Color_Render_V03.jpg?width=1920&height=1279&fit=bounds&ois=8f21f57",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2025/5/29/Oak_Contemporary_Stucco_Color_Render_V02.jpg?width=1920&height=1279&fit=bounds&ois=f28ef72",
         ],
         url: "/floorplans/oak/",
     },
@@ -1138,8 +1138,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 3104,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2022/2/21/PALM_TRADITIONALSTUCCO_S-K_R1.jpg?width=1920&height=1279&fit=bounds&ois=3643a35",
-            "https://media.esperanzahomes.com/153/2022/2/21/PALM_TUSCAN_STUCCO_S-A_R1.jpg?width=1920&height=1279&fit=bounds&ois=b3b5cdb",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/21/PALM_TRADITIONALSTUCCO_S-K_R1.jpg?width=1920&height=1279&fit=bounds&ois=3643a35",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/21/PALM_TUSCAN_STUCCO_S-A_R1.jpg?width=1920&height=1279&fit=bounds&ois=b3b5cdb",
         ],
         url: "/floorplans/palm/",
     },
@@ -1158,8 +1158,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 1804,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2022/2/18/PALMETTO_TRADITIONAL_STUCCO_S-L_V02.jpg?width=1920&height=1279&fit=bounds&ois=f05bef9",
-            "https://media.esperanzahomes.com/153/2022/2/18/PALMETTO_TUSCAN_STUCCO_S-B_V01.jpg?width=1920&height=1279&fit=bounds&ois=bdedad6",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/18/PALMETTO_TRADITIONAL_STUCCO_S-L_V02.jpg?width=1920&height=1279&fit=bounds&ois=f05bef9",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/18/PALMETTO_TUSCAN_STUCCO_S-B_V01.jpg?width=1920&height=1279&fit=bounds&ois=bdedad6",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/palmetto/",
@@ -1179,8 +1179,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 1948,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2024/4/26/Paloma_Tuscan_Stucco_Color_Render_V02.jpg?width=1920&height=1279&fit=bounds&ois=f7932fb",
-            "https://media.esperanzahomes.com/153/2024/4/26/Paloma_Traditional_Brick_Color_Render_V02.jpg?width=1920&height=1279&fit=bounds&ois=1d06d83",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/4/26/Paloma_Tuscan_Stucco_Color_Render_V02.jpg?width=1920&height=1279&fit=bounds&ois=f7932fb",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/4/26/Paloma_Traditional_Brick_Color_Render_V02.jpg?width=1920&height=1279&fit=bounds&ois=1d06d83",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/paloma/",
@@ -1200,8 +1200,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 2592,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2024/10/1/Plan_8_Pecan_Traditional_Brick_Color_Render_V01.jpg?width=1920&height=1279&fit=bounds&ois=3eb0e40",
-            "https://media.esperanzahomes.com/153/2024/10/1/Plan_8_Pecan_Tuscan_Stucco_Color_Render_V02.jpg?width=1920&height=1279&fit=bounds&ois=7bc8a7f",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/10/1/Plan_8_Pecan_Traditional_Brick_Color_Render_V01.jpg?width=1920&height=1279&fit=bounds&ois=3eb0e40",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/10/1/Plan_8_Pecan_Tuscan_Stucco_Color_Render_V02.jpg?width=1920&height=1279&fit=bounds&ois=7bc8a7f",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/pecan/",
@@ -1221,8 +1221,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 1845,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2022/2/22/PEPPOLI_CONTEMPORARY_STUCCO-S-D_V02.jpg?width=1920&height=1279&fit=bounds&ois=7d66106",
-            "https://media.esperanzahomes.com/153/2022/2/22/PEPPOLI_TRANSITIONAL_STUCCO-S-L.jpg?width=1920&height=1279&fit=bounds&ois=897ef26",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/22/PEPPOLI_CONTEMPORARY_STUCCO-S-D_V02.jpg?width=1920&height=1279&fit=bounds&ois=7d66106",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/22/PEPPOLI_TRANSITIONAL_STUCCO-S-L.jpg?width=1920&height=1279&fit=bounds&ois=897ef26",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/peppoli/",
@@ -1242,8 +1242,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 1471,
         priceFrom: 144990,
         images: [
-            "https://media.esperanzahomes.com/153/2022/2/22/PRESIDIO_CONTEMPORARY_STUCCO-S-C_V02.jpg?width=1920&height=1279&fit=bounds&ois=b433647",
-            "https://media.esperanzahomes.com/153/2022/2/22/PRESIDIO_FARMHOUSE_HARDIE-S-G_V02.jpg?width=1920&height=1279&fit=bounds&ois=6d7d74b",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/22/PRESIDIO_CONTEMPORARY_STUCCO-S-C_V02.jpg?width=1920&height=1279&fit=bounds&ois=b433647",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/22/PRESIDIO_FARMHOUSE_HARDIE-S-G_V02.jpg?width=1920&height=1279&fit=bounds&ois=6d7d74b",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/presidio/",
@@ -1263,8 +1263,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 720,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2022/2/18/RV_CASITA_SCHEME_A_V03.jpg?width=1920&height=1279&fit=bounds&ois=35754f5",
-            "https://media.esperanzahomes.com/153/2023/2/24/1-2_5T4On9q.jpg?width=1920&height=1280&fit=bounds&ois=8fe25c5",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/18/RV_CASITA_SCHEME_A_V03.jpg?width=1920&height=1279&fit=bounds&ois=35754f5",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2023/2/24/1-2_5T4On9q.jpg?width=1920&height=1280&fit=bounds&ois=8fe25c5",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/rv-casita/",
@@ -1284,8 +1284,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 480,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2022/2/18/DELUXE_COACH_HOUSE_SCHEME_A_V01.jpg?width=1920&height=1279&fit=bounds&ois=664621a",
-            "https://media.esperanzahomes.com/153/2024/6/19/1-1.jpg?width=1920&height=1280&fit=bounds&ois=e138922",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/18/DELUXE_COACH_HOUSE_SCHEME_A_V01.jpg?width=1920&height=1279&fit=bounds&ois=664621a",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/6/19/1-1.jpg?width=1920&height=1280&fit=bounds&ois=e138922",
         ],
         url: "/floorplans/rv-deluxe-coach-house/",
     },
@@ -1304,8 +1304,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 4955,
         priceFrom: 0,
         images: [
-            "https://media.esperanzahomes.com/153/2024/7/16/Plan_5_-_Color_Render_-_Traditional_Stucco_-_V01.jpg?width=1920&height=1279&fit=bounds&ois=be4fdc2",
-            "https://media.esperanzahomes.com/153/2024/7/17/Plan_5_-_Color_Render_-_Contemporary_Stucco_-_V02.jpg?width=1920&height=1279&fit=bounds&ois=1826251",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/7/16/Plan_5_-_Color_Render_-_Traditional_Stucco_-_V01.jpg?width=1920&height=1279&fit=bounds&ois=be4fdc2",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2024/7/17/Plan_5_-_Color_Render_-_Contemporary_Stucco_-_V02.jpg?width=1920&height=1279&fit=bounds&ois=1826251",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/sage/",
@@ -1325,8 +1325,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 3459,
         priceFrom: 278990,
         images: [
-            "https://media.esperanzahomes.com/153/2022/2/23/LORENZO_Contemporary_Stucco_SC_V05.jpg?width=1920&height=1279&fit=bounds&ois=6c88177",
-            "https://media.esperanzahomes.com/153/2022/2/23/LORENZO_Farmhouse_Hardie_SG_V05.jpg?width=1920&height=1279&fit=bounds&ois=47c444d",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/23/LORENZO_Contemporary_Stucco_SC_V05.jpg?width=1920&height=1279&fit=bounds&ois=6c88177",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/23/LORENZO_Farmhouse_Hardie_SG_V05.jpg?width=1920&height=1279&fit=bounds&ois=47c444d",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/san-lorenzo/",
@@ -1346,8 +1346,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 4107,
         priceFrom: 328990,
         images: [
-            "https://media.esperanzahomes.com/153/2022/4/12/LORENZO_2_Traditional_Brick_SF_V03.jpg?width=1920&height=1279&fit=bounds&ois=d4ba1e7",
-            "https://media.esperanzahomes.com/153/2022/4/12/LORENZO_2_Contemporary_Stucco_SC_V03.jpg?width=1920&height=1279&fit=bounds&ois=142aa7c",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/4/12/LORENZO_2_Traditional_Brick_SF_V03.jpg?width=1920&height=1279&fit=bounds&ois=d4ba1e7",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/4/12/LORENZO_2_Contemporary_Stucco_SC_V03.jpg?width=1920&height=1279&fit=bounds&ois=142aa7c",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/san-lorenzo-ii/",
@@ -1367,8 +1367,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 1887,
         priceFrom: 171990,
         images: [
-            "https://media.esperanzahomes.com/153/2023/2/10/Unknown-5.jpeg?width=1920&height=1279&fit=bounds&ois=a9e13a3",
-            "https://media.esperanzahomes.com/153/2023/2/10/Unknown-4.jpeg?width=1920&height=1279&fit=bounds&ois=bd05dc1",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2023/2/10/Unknown-5.jpeg?width=1920&height=1279&fit=bounds&ois=a9e13a3",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2023/2/10/Unknown-4.jpeg?width=1920&height=1279&fit=bounds&ois=bd05dc1",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/san-luis/",
@@ -1388,8 +1388,8 @@ const EMBEDDED_FLOOR_PLANS: FloorPlan[] = [
         totalSqft: 4394,
         priceFrom: 337990,
         images: [
-            "https://media.esperanzahomes.com/153/2022/2/18/SAN_SABA_Tuscon_Stucco_S-A_V04.jpg?width=1920&height=1279&fit=bounds&ois=5acf2bb",
-            "https://media.esperanzahomes.com/153/2022/2/18/SAN_SABA_TRADITIONAL_STUCCO_S-K_V03.jpg?width=1920&height=1279&fit=bounds&ois=b2d0ba1",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/18/SAN_SABA_Tuscon_Stucco_S-A_V04.jpg?width=1920&height=1279&fit=bounds&ois=5acf2bb",
+            "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets-media/153/2022/2/18/SAN_SABA_TRADITIONAL_STUCCO_S-K_V03.jpg?width=1920&height=1279&fit=bounds&ois=b2d0ba1",
         ],
         virtualTourUrl: "https://my.matterport.com/show/?m=placeholder",
         url: "/floorplans/san-saba/",
@@ -1485,8 +1485,8 @@ export default function FloorPlansCatalog({
             style.textContent = `
                 @font-face {
                     font-family: 'Bodoni';
-                    src: url('https://static.esperanzahomes.com/esperanza_homes/fonts/c22464fe-a274-436b-a1ab-4fa958bb6df4.woff2') format('woff2'),
-                         url('https://static.esperanzahomes.com/esperanza_homes/fonts/2b19eeea-00ba-42af-b306-77f62dbab741.woff') format('woff');
+                    src: url('https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/fonts/c22464fe-a274-436b-a1ab-4fa958bb6df4.woff2') format('woff2'),
+                         url('https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/fonts/2b19eeea-00ba-42af-b306-77f62dbab741.woff') format('woff');
                     font-display: swap;
                 }
             `
@@ -2246,7 +2246,7 @@ export default function FloorPlansCatalog({
                     appearance: none;
                     -webkit-appearance: none;
                     background-color: var(--fp-white);
-                    background-image: url("https://static.esperanzahomes.com/esperanza_homes/images/green-down-arrow.svg");
+                    background-image: url("https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/images/green-down-arrow.svg");
                     background-position: right 15px center;
                     background-repeat: no-repeat;
                     background-size: 16px;
