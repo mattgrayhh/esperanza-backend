@@ -9,16 +9,16 @@ import React, { useEffect, useMemo, useRef, useState } from "react"
 import { addPropertyControls, ControlType } from "framer"
 
 const STAT_ICONS = {
-    garage: "https://static.esperanzahomes.com/esperanza_homes/images/stats/garage.svg",
-    stairs: "https://static.esperanzahomes.com/esperanza_homes/images/stats/stairs.svg",
-    livingSqft: "https://static.esperanzahomes.com/esperanza_homes/images/stats/livingsqft.svg",
-    bed: "https://static.esperanzahomes.com/esperanza_homes/images/stats/bedroom.svg",
-    bath: "https://static.esperanzahomes.com/esperanza_homes/images/stats/bathroom.svg",
-    sqft: "https://static.esperanzahomes.com/esperanza_homes/images/stats/sqft.svg",
+    garage: "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/images/stats/garage.svg",
+    stairs: "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/images/stats/stairs.svg",
+    livingSqft: "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/images/stats/livingsqft.svg",
+    bed: "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/images/stats/bedroom.svg",
+    bath: "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/images/stats/bathroom.svg",
+    sqft: "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/images/stats/sqft.svg",
 }
 
 const MAP_PIN_SVG =
-    "https://static.esperanzahomes.com/esperanza_homes/images/map_pin.svg"
+    "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/images/map_pin.svg"
 
 type MapTilePreset =
     | "positron"
@@ -967,8 +967,8 @@ export default function QuickMoveIns({
             style.textContent = `
                 @font-face {
                     font-family: 'Bodoni';
-                    src: url('https://static.esperanzahomes.com/esperanza_homes/fonts/c22464fe-a274-436b-a1ab-4fa958bb6df4.woff2') format('woff2'),
-                         url('https://static.esperanzahomes.com/esperanza_homes/fonts/2b19eeea-00ba-42af-b306-77f62dbab741.woff') format('woff');
+                    src: url('https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/fonts/c22464fe-a274-436b-a1ab-4fa958bb6df4.woff2') format('woff2'),
+                         url('https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/fonts/2b19eeea-00ba-42af-b306-77f62dbab741.woff') format('woff');
                     font-display: swap;
                 }
             `
@@ -2508,7 +2508,7 @@ export default function QuickMoveIns({
                     appearance: none;
                     -webkit-appearance: none;
                     background-color: var(--qmi-white);
-                    background-image: url("https://static.esperanzahomes.com/esperanza_homes/images/green-down-arrow.svg");
+                    background-image: url("https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/assets/images/green-down-arrow.svg");
                     background-position: right 15px center;
                     background-repeat: no-repeat;
                     background-size: 16px;
