@@ -255,13 +255,13 @@ export async function createEntity(
   return { ok: true, id };
 }
 
-// Belt-and-suspenders sanitize for blog rich-text HTML. The BlogContentEditor (TipTap
+// Belt-and-suspenders sanitize for rich-text HTML. The RichTextEditor (TipTap
 // StarterKit + Link + Image) already restricts output to the Framer-safe node/mark set,
 // so this is a SECOND line of defense against anything that slips in (e.g. a future
 // paste-handler regression). Minimal + dependency-free (the Worker has no DOM): drop
 // <script>/<style>/<iframe> blocks entirely and strip inline on*= event handlers. Not a
 // full HTML parser — intentionally narrow, mirroring the editor's known-good output.
-function sanitizeBlogHtml(html: string): string {
+function sanitizeRichHtml(html: string): string {
   return html
     // Remove <script>/<style>/<iframe> elements and their contents.
     .replace(/<(script|style|iframe)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
@@ -390,11 +390,14 @@ export async function saveEntity(
     if (typeof rawValue === 'string' && rawValue.includes('airtableusercontent.com')) {
       return { ok: false, error: `Refusing to store an Airtable attachment URL in ${field}` };
     }
-    // Belt-and-suspenders: scrub blog rich-text HTML before it's written (the WYSIWYG
+    // Belt-and-suspenders: scrub rich-text HTML before it's written. ALL rich fields now
+    // store WYSIWYG HTML (RichTextEditor), so sanitize any HTML-bearing string value (the
     // editor already constrains output to the Framer-safe tag subset; this strips any
-    // <script>/<style>/<iframe>/on*= that could slip through).
+    // <script>/<style>/<iframe>/on*= that could slip through). No-op on plain text.
     const cleanValue =
-      def.key === 'blogs' && field === 'content' ? sanitizeBlogHtml(rawValue) : rawValue;
+      typeof rawValue === 'string' && /<[a-z][\s\S]*>/i.test(rawValue)
+        ? sanitizeRichHtml(rawValue)
+        : rawValue;
     const coerced = cleanValue === '' ? null : coerceForColumn(def.key, field, cleanValue);
     const oldValue = row[col.column];
     // Skip no-op writes so we don't spam audit_log.

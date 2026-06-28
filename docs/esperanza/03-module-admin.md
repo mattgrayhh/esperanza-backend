@@ -66,11 +66,31 @@ Field `type` → widget mapping (`typeToWidget()`):
 | `type` | Widget |
 |---|---|
 | `text`, `long`, `number`, `currency`, `bool`, `date`, `url`, `select` | `GenericField` |
-| `rich` | rich-text (TipTap) editor with inline R2 image upload |
+| `rich` | `RichTextEditor` — universal TipTap WYSIWYG (headings, bullet/numbered lists, bold/italic, links, quotes, inline R2 images) for ALL rich fields |
 | `image` | `ImageUploader` |
 | `imageGallery` / `elevationGallery` | `ImageGalleryEditor` / elevation grid editor |
 | `syncedOverride` (QMI etc.) | `SyncedOverrideField` — shows the Snowflake `synced_` value + an override box |
 | bespoke: `hoaLinks`, `jsonBlocks`, `promoScopeTag`, `communityFloorPlans` | custom editors with their own save buttons |
+
+#### Rich-text editor (`RichTextEditor`)
+Every `rich` field (community description/amenities, the floor-plan `*_rich` copy blocks,
+city venue copy, blog content, …) uses one TipTap WYSIWYG so marketing formats content
+visually — no markdown syntax. Notes:
+- **Storage = Framer-safe HTML** (`h1`–`h4`, `p`, `strong`, `em`, `a`, `ul`, `ol`, `li`,
+  `blockquote`, `br`, `img`). TipTap's schema constrains output; `saveEntity` also runs
+  `sanitizeRichHtml` (strips `<script>/<style>/<iframe>/on*=`) as a second line of defense.
+- **Legacy values were markdown** (e.g. amenities `- bullet`). `lib/markdown.ts:toEditorHtml`
+  converts markdown→HTML on load so it renders correctly; the field is rewritten as HTML on
+  the next save (progressive migration — no bulk data change needed).
+- **framer-push `ftIf`** is HTML-aware: passes HTML through, falls back to markdown→HTML for
+  any not-yet-edited value. So the swap is backward compatible; no Framer field re-type
+  (these stay `formattedText`) and no mandatory backfill.
+- **Toolbar offers H1/H2/H3 + Body.** H1 is available because it was requested, but a Framer
+  page already has its own page-title H1 — prefer H2/H3 for in-body section headings to avoid
+  duplicate-H1 SEO.
+- **Inline image upload** needs the record id (R2 key `<entity>/<id>/…`); on the few detail
+  screens that render a field without an id the image button is hidden (text formatting still
+  works).
 
 ### ★ Adding a new editable field (the standard procedure)
 A new field is **two changes**, code + data:

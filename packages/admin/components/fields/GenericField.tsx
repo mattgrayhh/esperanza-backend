@@ -18,7 +18,7 @@
 //
 // Phase-B Field-Builder widgets route OUT to dedicated components, all preserving the
 // hidden-input name={field} FormData contract:
-//   * richtext → RichTextField (markdown toolbar + preview)        [19]
+//   * richtext / wysiwyg → RichTextEditor (TipTap WYSIWYG → Framer-safe HTML)  [19]
 //   * currency → CurrencyField ($-formatted display, stores number)
 //   * select WITH optionItems → SelectField ({value,label} from options_json)  [21]
 // =============================================================================
@@ -27,8 +27,7 @@ import { useState } from 'react';
 import type { SelectOption } from '../../lib/select-options';
 import type { SelectOptionItem } from '../../lib/field-config';
 import { DatePicker } from './DatePicker';
-import { RichTextField } from './RichTextField';
-import { BlogContentEditor } from './BlogContentEditor';
+import { RichTextEditor } from './RichTextEditor';
 import { CurrencyField } from './CurrencyField';
 import { SelectField as BuilderSelectField } from './SelectField';
 import { cn } from '@/lib/utils';
@@ -60,8 +59,8 @@ export interface GenericFieldProps {
     | 'synced';
   value: string;
   step?: 'any' | '1';
-  /** Record context — required ONLY by the 'wysiwyg' widget (BlogContentEditor) to key
-   *  its inline image uploads to R2 (<entity>/<id>/…). Threaded from EntityEditForm. */
+  /** Record context — used by the RichTextEditor (richtext/wysiwyg) to key its inline
+   *  image uploads to R2 (<entity>/<id>/…). Threaded from EntityEditForm. */
   entity?: string;
   id?: string;
   options?: SelectOption[];
@@ -93,20 +92,18 @@ export function GenericField({
 }: GenericFieldProps) {
   // Field-Builder widgets render their own label + hidden name={field} input, so
   // short-circuit to them (avoids a double label and keeps the FormData contract).
-  if (widget === 'richtext') {
-    return <RichTextField field={field} label={label} value={value} help={help} />;
-  }
-  // wysiwyg: the TipTap blog editor (Framer-safe HTML + inline R2 image upload). Same
-  // hidden name={field} FormData contract as RichTextField; needs entity+id for uploads.
-  if (widget === 'wysiwyg') {
+  // richtext + wysiwyg both render the universal TipTap WYSIWYG (Framer-safe HTML +
+  // inline R2 image upload). Same hidden name={field} FormData contract. entity+id are
+  // optional — the image button hides when id is absent (a few detail screens omit it).
+  if (widget === 'richtext' || widget === 'wysiwyg') {
     return (
-      <BlogContentEditor
+      <RichTextEditor
         field={field}
         label={label}
         value={value}
         help={help}
-        entity={entity ?? ''}
-        id={id ?? ''}
+        entity={entity}
+        id={id}
       />
     );
   }
@@ -142,8 +139,8 @@ export function GenericField({
       ) : widget === 'select' ? (
         <SelectField field={field} value={value} options={options} staticOptions={staticOptions} />
       ) : widget === 'textarea' ? (
-        // NOTE: 'richtext' is handled above by RichTextField (markdown toolbar + preview);
-        // this branch is the plain long-text textarea only.
+        // NOTE: 'richtext'/'wysiwyg' are handled above by RichTextEditor; this branch is
+        // the plain long-text textarea only.
         <Textarea name={field} defaultValue={value} rows={3} />
       ) : widget === 'number' ? (
         <Input
