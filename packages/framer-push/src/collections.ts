@@ -288,17 +288,13 @@ const linkIf = (v: unknown) => {
   const ok = urlOf(s) !== undefined || /^[/#]/.test(s) || /^(mailto:|tel:)/i.test(s);
   return ok ? link(s) : undefined;
 };
-const ftIf = (v: unknown) => {
-  const html = markdownToHtml(asString(v));
-  return html === '' ? undefined : formattedText(html);
-};
-// htmlFt — for fields whose D1 value is already sanitized HTML (Framer-subset:
-// h2-h6/p/strong/em/a/ul/ol/li/blockquote/br/img), e.g. blogs.content after the
-// legacy re-scrape and the admin TipTap WYSIWYG. Passes HTML through verbatim so
-// inline images/links/headings survive. Falls back to markdownToHtml for any
-// legacy plain-text/markdown value (no tags yet) so paragraphs still render. The
+// ftIf — markdown/HTML → formattedText. The admin RichTextEditor now stores Framer-safe
+// HTML (h1-h4/p/strong/em/a/ul/ol/li/blockquote/br/img) for ALL rich fields, so values
+// arrive as HTML once edited. Pass HTML through verbatim (inline images/links/headings
+// survive); fall back to markdownToHtml for any not-yet-migrated legacy markdown/plain
+// value so paragraphs/lists still render. Backward compatible during the rollout. The
 // field_definitions pin (formattedText) makes applyTypeOverrides a no-op here.
-const htmlFt = (v: unknown) => {
+const ftIf = (v: unknown) => {
   const raw = asString(v) ?? '';
   if (raw.trim() === '') return undefined;
   const html = /<[a-z][\s\S]*>/i.test(raw) ? raw : markdownToHtml(raw);
@@ -1052,7 +1048,7 @@ const blogs: CollectionDef = {
       // Rich text: D1 stores Framer-subset HTML (re-scraped legacy + TipTap WYSIWYG).
       // formattedText so headings/links/inline images render. field_definitions pins
       // blogs.content → formattedText (was string).
-      content: htmlFt(row['content']),
+      content: ftIf(row['content']),
       // Real Framer date field (was string). field_definitions pins blogs.publish_date → date.
       publish_date: dateIf(row['publish_date']),
       featured_image: imgIf(row['featured_image']),

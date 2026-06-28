@@ -85,6 +85,8 @@ export function CommunityRemainingFields({
                         optionItems={f.optionItems}
                         readOnly={f.readOnly}
                         help={f.help}
+                        entity="communities"
+                        id={id}
                       />
                     </div>
                   );
