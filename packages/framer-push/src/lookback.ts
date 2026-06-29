@@ -36,6 +36,18 @@ import { COLLECTION_KEYS } from './types.js';
 export const CRON_LOOKBACK_MINUTES = 1500;
 
 /**
+ * Weekly FULL-reconcile window. The 25h nightly backstop can only recover a row
+ * whose event-driven push dropped within the last day — a row stale longer than
+ * that ages out of every nightly window and never re-pushes (the failure mode
+ * behind QMI availability badges silently lagging D1). Once a week we widen the
+ * window far enough that the cutoff predates every row, so collectChangedMessages
+ * re-enqueues the ENTIRE published catalog through the same idempotent queue path
+ * (addItems is upsert-by-id; not the synchronous /backfill route, so no 1101).
+ * ~50 years in minutes — any value older than the oldest updated_at works.
+ */
+export const FULL_RECONCILE_MINUTES = 60 * 24 * 366 * 50;
+
+/**
  * Resolve the lookback window from the optional CRON_LOOKBACK_MINUTES env var
  * (wrangler [vars] are strings), falling back to the 25h default. Guards against
  * a missing/blank/non-positive value.

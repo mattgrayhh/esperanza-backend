@@ -33,6 +33,7 @@ import {
 import { connectFramer } from './framer.js';
 import {
   CRON_LOOKBACK_MINUTES,
+  FULL_RECONCILE_MINUTES,
   resolveLookbackMinutes,
   changedIdsSql,
   lookbackCutoffIso,
@@ -106,10 +107,16 @@ async function enqueue(env: Env, messages: FramerSyncMessage[]): Promise<void> {
   }
 }
 
-export async function runLookback(env: Env, nowMs = Date.now()): Promise<{ enqueued: number }> {
+export async function runLookback(
+  env: Env,
+  nowMs = Date.now(),
+  lookbackMinutesOverride?: number
+): Promise<{ enqueued: number }> {
   const startedAt = new Date(nowMs).toISOString();
   const start = Date.now();
-  const lookbackMinutes = resolveLookbackMinutes(env.CRON_LOOKBACK_MINUTES);
+  const lookbackMinutes =
+    lookbackMinutesOverride ?? resolveLookbackMinutes(env.CRON_LOOKBACK_MINUTES);
+  const mode = lookbackMinutesOverride ? 'weekly full reconcile' : 'nightly backstop';
   try {
     const messages = await collectChangedMessages(env, nowMs, lookbackMinutes);
     if (messages.length > 0) await enqueue(env, messages);
@@ -118,7 +125,7 @@ export async function runLookback(env: Env, nowMs = Date.now()): Promise<{ enque
       startedAt,
       finishedAt: new Date().toISOString(),
       durationS: (Date.now() - start) / 1000,
-      notes: `nightly backstop lookback (${lookbackMinutes}m) enqueued ${messages.length} message(s)`,
+      notes: `${mode} lookback (${lookbackMinutes}m) enqueued ${messages.length} message(s)`,
     });
     return { enqueued: messages.length };
   } catch (err) {
@@ -380,12 +387,16 @@ async function handleFetch(request: Request, env: Env): Promise<Response> {
 
 export default {
   async scheduled(
-    _event: unknown,
+    event: { scheduledTime?: number },
     env: Env,
     ctx: { waitUntil(p: Promise<unknown>): void }
   ): Promise<void> {
     configureImageTransform(env.IMAGES_TRANSFORM_BASE, env.IMAGES_TRANSFORM_OPTS);
-    ctx.waitUntil(runLookback(env));
+    // The cron fires daily at 09:00 UTC. Six days a week it runs the 25h backstop;
+    // on Sundays it widens to a FULL reconcile so any row whose push silently
+    // dropped >25h ago (and thus aged out of every nightly window) is re-enqueued.
+    const isSunday = new Date(event?.scheduledTime ?? Date.now()).getUTCDay() === 0;
+    ctx.waitUntil(runLookback(env, Date.now(), isSunday ? FULL_RECONCILE_MINUTES : undefined));
   },
 
   async queue(
