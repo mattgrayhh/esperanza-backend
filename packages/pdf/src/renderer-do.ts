@@ -10,7 +10,13 @@ const KEEP_ALIVE_MS = 180_000;
 interface RenderReq {
   html: string;
   marginsMm?: { top: number; right: number; bottom: number; left: number };
+  // Per-render override for the setContent + printToPDF timeouts (ms). Large/bulk lists need
+  // more than the 30s default; the failure mode otherwise is the "Page.printToPDF failed:
+  // timeout 30000ms exceeded" exception (surfaced to the client as a Cloudflare 1101).
+  timeoutMs?: number;
 }
+
+const DEFAULT_RENDER_TIMEOUT_MS = 30_000;
 
 /**
  * Durable Object that owns ONE browser and reuses it across every render.
@@ -58,16 +64,17 @@ export class BrowserRenderer {
   }
 
   async fetch(req: Request): Promise<Response> {
-    const { html, marginsMm }: RenderReq = await req.json();
+    const { html, marginsMm, timeoutMs }: RenderReq = await req.json();
     const m = marginsMm ?? { top: 12, right: 12, bottom: 12, left: 12 };
+    const timeout = timeoutMs && timeoutMs > 0 ? timeoutMs : DEFAULT_RENDER_TIMEOUT_MS;
     const browser = await this.ensureBrowser();
     const page = await browser.newPage();
     try {
-      await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30_000 });
+      await page.setContent(html, { waitUntil: 'networkidle0', timeout });
       await page.evaluate(() => (document as any).fonts?.ready).catch(() => {});
       // preferCSSPageSize lets each template own its @page size + margins (set in wrapHtml).
       // Some templates (e.g. the QMI grid) render full-bleed over a background image.
-      const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true });
+      const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true, timeout });
       void m; // margins now come from CSS @page, not the page.pdf call
       console.log(`[DO] rendered ${pdf.byteLength}b; connected=${browser.isConnected()}`);
       return new Response(pdf as unknown as BodyInit, { headers: { 'content-type': 'application/pdf' } });

@@ -7,33 +7,8 @@ import { verifyPreviewToken } from './token';
 import { processJob, enqueueStaleLists, enqueueAllStale } from './queue';
 import { renderTemplate } from './templates';
 import { loadActiveTheme } from './theme';
-import { loadFilteredListData, type FilteredKind, type ListFilters } from './data/list';
-import { stableHash } from './hash';
-import { getObject, putObject } from './store';
-
-function parseListFilters(sp: URLSearchParams): ListFilters {
-  const n = (k: string): number | undefined => {
-    const v = sp.get(k);
-    if (v == null || v === '') return undefined;
-    const x = Number(v);
-    return Number.isFinite(x) ? x : undefined;
-  };
-  const s = (k: string): string | undefined => sp.get(k) || undefined;
-  return {
-    city: s('city'),
-    community: s('community'),
-    collection: s('collection'),
-    minBeds: n('minBeds'),
-    minBaths: n('minBaths'),
-    minPrice: n('minPrice'),
-    maxPrice: n('maxPrice'),
-    minSqft: n('minSqft'),
-    maxSqft: n('maxSqft'),
-    stories: n('stories'),
-    garage: n('garage'),
-    availableNow: sp.get('status') === 'available' || sp.get('availableNow') === 'true',
-  };
-}
+import type { FilteredKind } from './data/list';
+import { loadFiltered, renderFilteredPrintPage } from './filtered';
 
 export { BrowserRenderer } from './renderer-do';
 
@@ -104,39 +79,22 @@ export default {
       const pdf = await renderPdf(env, html, theme.page.marginsMm);
       return new Response(pdf as unknown as BodyInit, { headers: { 'content-type': 'application/pdf' } });
     }
-    // On-demand FILTERED list PDFs — the "download current filter selection" button on the
-    // Quick Move-Ins / Floor Plans filter pages. Filter combos are unbounded, so we render on
-    // demand and cache in R2 keyed by a hash of (kind + filters + dataHash); the dataHash makes
-    // the cache self-invalidate when the matching inventory changes.
+    // On-demand FILTERED lists — the "download current filter selection" button on the Quick
+    // Move-Ins / Floor Plans filter pages. Served as a print-ready HTML page (visitor hits Print
+    // → Save as PDF), NOT a server-rendered PDF: a full set (all ~126 QMIs ≈ 15 pages) exceeds
+    // the headless renderer's printToPDF timeout (the Cloudflare 1101). The browser paginates via
+    // the template's @page CSS, so this is instant and scales to any result size.
     const filteredMatch = url.pathname.match(/^\/pdf\/filtered\/(qmis|plans)$/);
     if (request.method === 'GET' && filteredMatch) {
-      const cache = (caches as any).default;
-      const cached = await cache.match(request);
-      if (cached) return cached;
       const kind = filteredMatch[1] as FilteredKind;
-      const filters = parseListFilters(url.searchParams);
-      const { theme } = await loadActiveTheme(env.DB);
-      const data = await loadFilteredListData(env.DB, kind, filters, env.PDF_PUBLIC_BASE_URL);
-      const items = kind === 'qmis' ? data.qmis : data.cards;
-      const dataHash = await stableHash(items.map((i: any) => [i.id, i.price ?? null, i.availability ?? null]));
-      const key = `pdf/filtered/${kind}/${await stableHash({ filters, dataHash })}.pdf`;
-      let pdf: Uint8Array;
-      const obj = await getObject(env, key);
-      if (obj) {
-        pdf = new Uint8Array(await obj.arrayBuffer());
-      } else {
-        const html = renderTemplate('list', theme, data);
-        pdf = await renderPdf(env, html, theme.page.marginsMm);
-        ctx.waitUntil(putObject(env, key, pdf));
-      }
-      const res = new Response(pdf as unknown as BodyInit, {
+      const { theme, data } = await loadFiltered(env, kind, url.searchParams);
+      const html = renderFilteredPrintPage(theme, data);
+      return new Response(html, {
         headers: {
-          'content-type': 'application/pdf',
-          'cache-control': 'public, max-age=600, s-maxage=3600, stale-while-revalidate=86400',
+          'content-type': 'text/html; charset=utf-8',
+          'cache-control': 'public, max-age=300, s-maxage=600, stale-while-revalidate=86400',
         },
       });
-      ctx.waitUntil(cache.put(request, res.clone()));
-      return res;
     }
     const pdfMatch = url.pathname.match(/^\/pdf\/(community|qmi|floorplan|list)\/(.+)$/);
     if (request.method === 'GET' && pdfMatch) {
