@@ -77,6 +77,11 @@ describe('Communities mapper — rich text, HOA links, coords, gates', () => {
     expect(sval(f['image_url'])).toBe('https://media.esperanzahomes.com/com/tres-lagos/hero.jpg');
     expect(sval(f['secondary_image'])).toContain('/2.jpg');
 
+    // embed_image = first gallery image as a discrete single-image field (here the
+    // gallery falls back to photo_gallery_image_url, so gallery[0] = g1.jpg).
+    expect(f['embed_image']?.type).toBe('image');
+    expect(sval(f['embed_image'])).toBe('https://media.esperanzahomes.com/com/tres-lagos/g1.jpg');
+
     // markdown → HTML formattedText
     // description is rich text (ftIf): plain copy is wrapped in <p>…</p>.
     expect(f['description']?.type).toBe('formattedText');
