@@ -9,6 +9,7 @@ import { freshDb, d1, insertRow } from './helpers.js';
 import {
   lookbackCutoffIso,
   CRON_LOOKBACK_MINUTES,
+  FULL_RECONCILE_MINUTES,
   resolveLookbackMinutes,
   changedIdsSql,
 } from '../src/lookback.js';
@@ -129,6 +130,21 @@ describe('cron lookback selector (collectChangedMessages)', () => {
     const ids = messages.map((m) => m.id).sort();
     expect(ids).toEqual(['recCOM24h', 'recQMI20h']);
     expect(ids).not.toContain('recBLOG26h');
+  });
+
+  it('weekly FULL_RECONCILE_MINUTES re-enqueues rows the 25h backstop excludes', async () => {
+    const db = freshDb();
+    const HR = 60 * MIN;
+    // A row stale 60 days — far past the 25h backstop, so it has aged out of every
+    // nightly window (this is the silent-staleness case the weekly full reconcile fixes).
+    insertRow(db, 'qmi', { id: 'recQMIancient', published: 1, updated_at: iso(NOW - 60 * 24 * HR) });
+    const env = { DB: d1(db) } as unknown as Env;
+
+    // 25h backstop: excluded.
+    expect((await collectChangedMessages(env, NOW)).map((m) => m.id)).not.toContain('recQMIancient');
+    // Weekly full reconcile window: included.
+    const full = await collectChangedMessages(env, NOW, FULL_RECONCILE_MINUTES);
+    expect(full.map((m) => m.id)).toContain('recQMIancient');
   });
 
   it('respects a CRON_LOOKBACK_MINUTES env override', async () => {

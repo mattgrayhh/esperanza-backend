@@ -26,7 +26,10 @@ compatibility_flags = ["nodejs_compat"]
 # schedule (bhh-marks-sync 0 8, qmi-brochure 0 6, ingest 0 */4, rhodes every-15-min).
 # The 25h (1500-min) lookback window (CRON_LOOKBACK_MINUTES) catches a full day in
 # one run; addItems is upsert-by-id so re-pushing rows already sent event-driven is
-# idempotent/harmless. Still enqueues ONLY changed rows — never a full backfill.
+# idempotent/harmless. Mon–Sat it enqueues ONLY changed rows. On SUNDAY the same
+# 09:00 run widens to a FULL reconcile (re-enqueues the entire published catalog via
+# the queue, no synchronous /backfill so no 1101) — the backstop for rows whose event
+# push silently dropped >25h ago and would otherwise stay stale forever.
 [triggers]
 crons = ["0 9 * * *"]
 
