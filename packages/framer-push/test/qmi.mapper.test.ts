@@ -313,18 +313,21 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
     });
     const env = consumerEnv(db);
 
+    // description is rich text now (ftIf → formattedText): plain copy is wrapped in <p>.
     const fb = qmiDef.map((await loadRowById(env, qmiDef, 'recQMIdescFB0001'))!);
-    expect(sval(fb.fieldData['description'])).toBe(
-      'The Verbena, part of our Haven Collection, blends light and space.'
+    expect(fb.fieldData['description']?.type).toBe('formattedText');
+    expect(String(sval(fb.fieldData['description']))).toContain(
+      '<p>The Verbena, part of our Haven Collection, blends light and space.</p>'
     );
-    // the raw FP value still flows separately (contract has both fields)
+    // the raw FP value still flows separately as a plain string (contract has both fields)
     expect(sval(fb.fieldData['fp_description'])).toBe(
       'The Verbena, part of our Haven Collection, blends light and space.'
     );
 
     const ov = qmiDef.map((await loadRowById(env, qmiDef, 'recQMIdescOV0001'))!);
-    expect(sval(ov.fieldData['description'])).toBe(
-      'This specific home features a custom outdoor kitchen.'
+    expect(ov.fieldData['description']?.type).toBe('formattedText');
+    expect(String(sval(ov.fieldData['description']))).toContain(
+      '<p>This specific home features a custom outdoor kitchen.</p>'
     );
     expect(sval(ov.fieldData['fp_description'])).toBe(
       'The Verbena, part of our Haven Collection, blends light and space.'
@@ -339,18 +342,22 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
       description: '',
       fp_description: 'Plan copy wins over an empty override.',
     });
-    expect(sval(item.fieldData['description'])).toBe('Plan copy wins over an empty override.');
+    expect(item.fieldData['description']?.type).toBe('formattedText');
+    expect(String(sval(item.fieldData['description']))).toContain(
+      '<p>Plan copy wins over an empty override.</p>'
+    );
   });
 
-  it('emits an explicit empty description when neither qmi nor FP has copy (clear propagates)', () => {
-    // String fields mirror D1 exactly: with no copy from either source, description emits
-    // str('') (not dropped) so Framer clears it rather than retaining a stale value
-    // (addItems merges — a dropped field keeps its previous value on the live site).
+  it('drops description when neither qmi nor FP has copy (ftIf drops empties)', () => {
+    // ftIf (rich text) drops an empty value rather than emitting str('') — same as
+    // communities.description. With no copy from either source the field is omitted, so
+    // addItems leaves the (empty) live field untouched. In practice the FP copy is the
+    // fallback and is non-empty, so an override clear still propagates the plan copy.
     const db = freshDb();
     insertRow(db, 'qmi', { id: 'recQMIdescNONE01', published: 1, synced_address: '13 Bare Rd' });
     const row = db.prepare(qmiDef.selectByIdSql).get('recQMIdescNONE01') as Record<string, unknown>;
     const item = qmiDef.map(row);
-    expect(item.fieldData['description']).toEqual({ type: 'string', value: '' });
+    expect(item.fieldData['description']).toBeUndefined();
   });
 
   it('photo_gallery: dropped while qmi.photo_gallery_json does not exist (tolerant probe)', async () => {

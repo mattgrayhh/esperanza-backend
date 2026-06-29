@@ -85,6 +85,16 @@ visually — no markdown syntax. Notes:
 - **framer-push `ftIf`** is HTML-aware: passes HTML through, falls back to markdown→HTML for
   any not-yet-edited value. So the swap is backward compatible; no Framer field re-type
   (these stay `formattedText`) and no mandatory backfill.
+  - **Exception — `qmi.description`:** this one was a plain `textarea` pushed via `sIf`
+    (Framer `string`), so promoting it to the rich editor (+ `ftIf`) **does** require a
+    one-time Framer re-type. On the QMI detail screen the Description editor overrides the
+    floor-plan copy: leave it blank and the linked plan's description flows through (shown
+    read-only beneath the editor); set it to reformat that copy for this home — e.g. turn
+    the features into a real bullet list. The fallback now renders markdown too, so a plan
+    whose copy is `- Feature` lines shows bullets even without an override. Rollout order
+    (the field type must match before the batch, per the framer-push golden rule):
+    reseed `field_definitions` `--remote` → `/push-schema` (re-types `qmi.description`
+    `string`→`formattedText`) → deploy → `/backfill?keys=qmi` (long timeout, ~356 homes).
 - **Toolbar offers H1/H2/H3 + Body.** H1 is available because it was requested, but a Framer
   page already has its own page-title H1 — prefer H2/H3 for in-body section headings to avoid
   duplicate-H1 SEO.

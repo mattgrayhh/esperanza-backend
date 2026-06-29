@@ -261,7 +261,7 @@ const qmi: EntityFieldConfig = {
     { field: 'photo_gallery_json', label: 'Photo Gallery', widget: 'imageGallery', bucket: 'admin', help: 'Per-home photos shown on the listing detail page — use this for upgraded-option photos. Upload in display order.' },
     { field: 'page_url', label: 'Page URL', widget: 'text', bucket: 'admin' },
     { field: 'dynamic_pdf', label: 'Dynamic PDF', widget: 'text', bucket: 'admin' },
-    { field: 'description', label: 'Description', widget: 'textarea', bucket: 'admin' },
+    { field: 'description', label: 'Description', widget: 'richtext', bucket: 'admin', help: 'Leave blank to use the floor-plan copy. Set this only to override the plan description for this home (e.g. to format the features as bullet points).' },
     { field: 'upgrades', label: 'Upgrades', widget: 'textarea', bucket: 'admin' },
     { field: 'incentive', label: 'Incentive', widget: 'textarea', bucket: 'admin' },
     { field: 'virtual_tour_url', label: 'Virtual Tour URL', widget: 'text', bucket: 'admin' },
