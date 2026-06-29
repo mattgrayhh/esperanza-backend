@@ -126,6 +126,11 @@ export interface QmiDetailView {
   /** description: home-specific (admin) text falls back to the floor-plan copy. */
   description: string;
   descriptionFromFloorPlan: boolean;
+  /** the home's OWN override copy (raw qmi.description) — empty ⇒ the editor falls
+   *  through to the floor-plan copy. Drives the editable Description field's value. */
+  ownDescription: string;
+  /** the linked floor plan's copy — shown read-only as a reference / starting point. */
+  floorPlanDescription: string;
 
   slug: string;
   moveInDate: string;
@@ -402,6 +407,8 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
 
     description,
     descriptionFromFloorPlan,
+    ownDescription: homeDescription,
+    floorPlanDescription: fpDescription,
 
     slug: s(r.slug),
     moveInDate: s(effectiveValue(r.synced_move_in_date, r.override_move_in_date)),

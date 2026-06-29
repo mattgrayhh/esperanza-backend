@@ -196,7 +196,12 @@ const MAPPER_FRAMER_TYPE: Record<string, string> = {
   'communities.lending': 'link',
   'floor_plans.description': 'string',
   'qmi.postal_code': 'string',
-  'qmi.description': 'string',
+  // qmi.description: rich text — widget 'richtext' (→ 'rich' → framerType 'formattedText');
+  // the mapper now emits ftIf (HTML/markdown→formattedText) so an override renders with
+  // bullets, and the floor-plan fallback markdown ("- Feature") renders too. No pin needed,
+  // matching communities.description. (Was pinned 'string' when this was a plain textarea
+  // pushed via sIf.) The live Framer qmi.description field MUST be re-typed to formattedText
+  // (push-schema) before the next qmi backfill, or the whole batch aborts.
   'qmi.upgrades': 'string',
   'qmi.incentive': 'string',
   'qmi.move_in_date': 'string',

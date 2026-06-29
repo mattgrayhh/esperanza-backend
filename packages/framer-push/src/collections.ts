@@ -671,10 +671,13 @@ const qmi: CollectionDef = {
       floor_plan_image: imgIf(row['fp_floor_plan_image']),
       // Floor-plan-default → QMI-override content resolution (same COALESCE the
       // PDF renderer applies in packages/pdf/src/data/qmi.ts): the site binds this
-      // ONE plain field; an editor sets qmi.description only to override the plan
-      // copy. Empty-string counts as "unset" (asString('') → undefined → fallback).
-      // The raw FP value keeps flowing separately as fp_description below.
-      description: sIf(asString(row['description']) ?? fpScalar(row['fp_description'])),
+      // ONE field; an editor sets qmi.description (admin TipTap WYSIWYG) only to
+      // override the plan copy. Empty-string counts as "unset" (asString('') →
+      // undefined → fallback). ftIf is HTML-aware: an override's HTML passes through,
+      // and the plain/markdown floor-plan fallback ("- Feature") renders as a bullet
+      // list. The live Framer field is formattedText (re-typed via push-schema; the
+      // 'qmi.description' string pin was removed). fp_description still flows separately.
+      description: ftIf(asString(row['description']) ?? fpScalar(row['fp_description'])),
       // QMI's OWN photo gallery (qmi.photo_gallery_json — column added by a
       // parallel migration; enrichRow() probes for it until the projection carries
       // it). Deliberately NO fallback to the floor plan's gallery: null/absent →

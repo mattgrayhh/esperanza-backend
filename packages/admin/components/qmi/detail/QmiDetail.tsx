@@ -338,6 +338,36 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
               </CardContent>
             </Card>
 
+            {/* Description — editable override (universal TipTap WYSIWYG). Blank ⇒ the
+                floor-plan copy is used on the site (shown below for reference). Set it to
+                reformat the plan copy for this home — e.g. the features as bullet points.
+                Submits name="description" via the same saveEntity FormData; the mapper
+                pushes it as formattedText (ftIf). */}
+            <Card>
+              <CardHeader className="border-b">
+                <CardTitle>Description</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <GenericField
+                  field="description"
+                  label="Description"
+                  widget="richtext"
+                  value={view.ownDescription}
+                  entity="qmi"
+                  id={view.id}
+                  help="Leave blank to use the floor-plan copy shown below. Set it only to override the plan description for this home — e.g. to format the features as bullet points."
+                />
+                {view.ownDescription.trim() === '' && view.floorPlanDescription.trim() ? (
+                  <div className="space-y-1.5 rounded-lg border border-dashed bg-muted/40 p-3">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Floor-plan copy (used on the site while the override above is blank)
+                    </p>
+                    <ExpandableDescription text={view.floorPlanDescription} />
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+
             <div className="flex items-center gap-3">
               <Button type="submit" disabled={pending}>
                 {pending ? 'Saving…' : 'Save changes'}
@@ -400,22 +430,6 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
         </CardContent>
       </Card>
 
-      {/* ── Description (expandable; home copy falls back to the floor-plan copy) ── */}
-      <Card className="py-5">
-        <CardContent className="space-y-3 px-5">
-          <h2 className="text-lg font-semibold">
-            Description
-            {view.descriptionFromFloorPlan ? (
-              <span className="ml-2 text-xs font-normal text-muted-foreground">(from floor plan)</span>
-            ) : null}
-          </h2>
-          {view.description.trim() ? (
-            <ExpandableDescription text={view.description} />
-          ) : (
-            <p className="text-sm text-muted-foreground">No description yet.</p>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
