@@ -907,6 +907,12 @@ const communities: CollectionDef = {
       secondary_image_alt: sIf(row['secondary_image_alt']),
       photo_gallery_image: imgIf(row['photo_gallery_image_url']),
       photo_gallery: galIf(photo),
+      // Embed Image = the FIRST gallery image as a discrete single-image field, so
+      // Framer can bind one image directly (a CMS Gallery array can't be bound as a
+      // single image). Derived from `photo` (= photo_gallery_json, falling back to
+      // photo_gallery_image_url) so it always tracks gallery[0] — no stored column.
+      // Created in Framer via POST /schema (image), like plan_list_pdf_url below.
+      embed_image: imgIf(photo[0]),
       photo_gallery_image_alt: sIf(row['photo_gallery_image_alt']),
       description_image: imgIf(row['description_image_url']),
       community_logo: imgIf(row['community_logo_url']),
