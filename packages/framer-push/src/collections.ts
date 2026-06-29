@@ -548,7 +548,11 @@ const floorPlans: CollectionDef = {
       hero_image_2: imgIf(row['hero_image_2']),
       hero_image_3: imgIf(row['hero_image_3']),
       floor_plan_image: imgIf(row['floor_plan_image']),
-      description: sIf(row['description']),
+      // Rich text (admin TipTap WYSIWYG, widget 'richtext'). ftIf is HTML-aware: HTML
+      // passes through, plain/markdown ("- Feature") renders as a bullet list. Live
+      // Framer field re-typed string→formattedText (push-schema; the 'floor_plans.
+      // description' string pin was removed). QMI inherits this copy via fp_description.
+      description: ftIf(row['description']),
       plan_viewer_url: sIf(row['plan_viewer_url']),
       virtual_tour_url: sIf(row['virtual_tour_url']),
       master_bed_location: sIf(row['master_bed_location']),

@@ -194,7 +194,11 @@ const MAPPER_FRAMER_TYPE: Record<string, string> = {
   'communities.featured_video': 'string',
   'communities.schedule_visit': 'link',
   'communities.lending': 'link',
-  'floor_plans.description': 'string',
+  // floor_plans.description: rich text — widget 'richtext' → formattedText. Mapper emits
+  // ftIf (HTML/markdown→formattedText) so bullets render. No pin needed, matching
+  // communities.description. (Was pinned 'string' when pushed via sIf.) The live Framer
+  // field MUST be re-typed string→formattedText (push-schema) before the next floor_plans
+  // backfill, or the whole batch aborts.
   'qmi.postal_code': 'string',
   // qmi.description: rich text — widget 'richtext' (→ 'rich' → framerType 'formattedText');
   // the mapper now emits ftIf (HTML/markdown→formattedText) so an override renders with

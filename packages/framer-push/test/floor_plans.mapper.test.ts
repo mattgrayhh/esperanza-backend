@@ -36,6 +36,20 @@ describe('Floor Plans mapper — floor_plan_image', () => {
     expect(item.fieldData['floor_plan_image']).toEqual({ type: 'image', value: FP_URL });
   });
 
+  it('pushes description as formattedText (rich text; bullets render)', () => {
+    const db = freshDb();
+    insertRow(db, 'floor_plans', {
+      id: 'recFPdesc',
+      name: 'Verbena',
+      slug: 'verbena',
+      published: 1,
+      description: '- Granite Countertops\n- Ash Wood Cabinets',
+    });
+    const item = mapOne(db, 'recFPdesc');
+    expect(item.fieldData['description']?.type).toBe('formattedText');
+    expect(String(sval(item.fieldData['description']))).toContain('<li>Granite Countertops</li>');
+  });
+
   it('drops floor_plan_image when null', () => {
     const db = freshDb();
     insertRow(db, 'floor_plans', {
