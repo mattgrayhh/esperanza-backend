@@ -780,3 +780,31 @@ describe('normalizeLatLng', () => {
     expect(normalizeLatLng(null)).toBe('');
   });
 });
+
+// =============================================================================
+// floorplans: per-community pricing. A plan is offered in many communities at
+// different prices; the Floor Plans browse must show that community's own lowest
+// price (community_elevation_prices) once a Community filter is selected, not the
+// dev-wide cheapest (starting_price). The serializer surfaces the per-community map
+// keyed by community NAME (matching the `communities` CSV the filter reads).
+// =============================================================================
+describe('serializeFloorPlanRow communityPrices', () => {
+  const baseRow = { id: 'recFP1', name: 'Indigo', slug: 'indigo', starting_price: 215990 };
+
+  it('passes the per-community price map through, keyed by community name', () => {
+    const out = serializeFloorPlanRow(baseRow as any, null, {
+      'Palo Alto Groves': 251990,
+      'Vista Verde': 219990,
+    });
+    expect(out.startingPrice).toBe(215990); // dev-wide cheapest unchanged
+    expect(out.communityPrices).toEqual({
+      'Palo Alto Groves': 251990,
+      'Vista Verde': 219990,
+    });
+  });
+
+  it('defaults to an empty object when a plan has no community prices', () => {
+    const out = serializeFloorPlanRow(baseRow as any);
+    expect(out.communityPrices).toEqual({});
+  });
+});
