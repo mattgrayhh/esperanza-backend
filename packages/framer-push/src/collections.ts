@@ -1068,6 +1068,11 @@ const blogs: CollectionDef = {
       // 0012: Vimeo URL string, same convention as communities.featured_video.
       video_url: sIf(row['video_url']),
       seo_description: sIf(row['seo_description']),
+      // 0022: CSV of community rec-IDs this blog applies to (many-to-many).
+      // Same key/string shape as floor_plans/qmi/cities so a Community CMS page
+      // filters the Blogs collection with `community_ids Contains {communityId}`.
+      // Backfilled from the legacy community pages' news modules.
+      community_ids: sIf(row['community_ids']),
     });
     return { id, slug, draft, fieldData };
   },
