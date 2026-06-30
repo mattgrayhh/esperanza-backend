@@ -44,3 +44,20 @@ describe('qmisSql spec-flag override', () => {
     expect(sql).toMatch(/WHERE \(h\.RHODES_SPEC_FLAG = 'Yes' OR h\.ECI_KEY IN \([^)]*\)\)\s+AND h\.SETTLEMENT_COMPLETION_FLAG/);
   });
 });
+
+describe('qmisSql active-sale exclusion (availability follows the sale lifecycle)', () => {
+  const sql = qmisSql(env);
+
+  it("excludes homes whose LATEST FCT_HOUSESALES transaction is an active sale", () => {
+    // The home is dropped only when its newest transaction is sold / under contract.
+    expect(sql).toContain("TRANSACTION_TYPE IN ('Sales from housemaster', 'Pending Sale')");
+    expect(sql).toContain('h.HOUSE_ID NOT IN (');
+    // "latest" = ROW_NUMBER over a per-house, date-descending window.
+    expect(sql).toMatch(/ROW_NUMBER\(\)\s+OVER\s*\(\s*PARTITION BY HOUSE_ID\s+ORDER BY TRANSACTION_DATE DESC/);
+    expect(sql).toContain('WHERE rn = 1');
+  });
+
+  it('still seeds price from the Spec Home Inventory join (unchanged)', () => {
+    expect(sql).toContain("s.TRANSACTION_TYPE = 'Spec Home Inventory'");
+  });
+});

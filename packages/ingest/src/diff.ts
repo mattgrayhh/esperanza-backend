@@ -209,7 +209,16 @@ export function evaluateUnpublishGuard(
   candidateCount: number,
   publishedEciCount: number,
   eciKeyedCount: number,
-  snowflakeCount: number
+  snowflakeCount: number,
+  /**
+   * Operator force (manual `POST /run?force=1` only): bypass the over-published
+   * FRACTION heuristic, which is a proxy that mis-fires on a legitimate bulk of
+   * real sales (e.g. the 2026-06-30 sale-lifecycle fix: 32 genuinely-sold homes
+   * unpublishing at once = 24% > 20%). The truncation tripwire (snowflakeShrunk)
+   * is NEVER bypassed — a forced run on a shrunk/partial Snowflake result still
+   * refuses to unpublish, since that is the actual 2026-06-11 incident signal.
+   */
+  forceUnpublish = false
 ): UnpublishGuardResult {
   const base: UnpublishGuardResult = {
     tripped: false,
@@ -222,6 +231,7 @@ export function evaluateUnpublishGuard(
   if (candidateCount < UNPUBLISH_GUARD_MIN_CANDIDATES) return base;
 
   const overPublishedFraction =
+    !forceUnpublish &&
     publishedEciCount > 0 &&
     candidateCount > UNPUBLISH_GUARD_MAX_PUBLISHED_FRACTION * publishedEciCount;
   const snowflakeShrunk =
@@ -380,7 +390,9 @@ export function diff(
   snowflakeFloorPlans: SnowflakeFloorPlanRow[] = [],
   existingCommunities: ExistingCommunity[] = [],
   existingFloorPlans: ExistingFloorPlan[] = [],
-  communityPriceFrom: Map<string, number> = new Map()
+  communityPriceFrom: Map<string, number> = new Map(),
+  /** Operator force: bypass the over-published fraction heuristic (see evaluateUnpublishGuard). */
+  forceUnpublish = false
 ): DiffResult {
   const messages: SyncMessage[] = [];
   const stats = {
@@ -474,7 +486,8 @@ export function diff(
     unpublishCandidates.length,
     publishedEciCount,
     eciKeyedCount,
-    snowflakeQmis.length
+    snowflakeQmis.length,
+    forceUnpublish
   );
   if (!unpublishGuard.tripped) {
     messages.push(...unpublishCandidates);
