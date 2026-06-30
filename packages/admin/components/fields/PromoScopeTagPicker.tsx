@@ -68,18 +68,19 @@ export function PromoScopeTagPicker({
   const totalScoped =
     sel.cities.length + sel.communities.length + sel.floorPlans.length + sel.qmis.length;
 
+  const scope: PromoScope =
+    mode === 'global'
+      ? { type: 'global' }
+      : {
+          type: 'scoped',
+          cities: sel.cities,
+          communities: sel.communities,
+          floorPlans: sel.floorPlans,
+          qmis: sel.qmis,
+        };
+
   function onSave() {
     startTransition(async () => {
-      const scope: PromoScope =
-        mode === 'global'
-          ? { type: 'global' }
-          : {
-              type: 'scoped',
-              cities: sel.cities,
-              communities: sel.communities,
-              floorPlans: sel.floorPlans,
-              qmis: sel.qmis,
-            };
       const res = await savePromotionTargets(promoId, scope);
       onResult?.(res.ok ? 'Targeting saved' : `Error: ${res.error}`);
     });
@@ -87,6 +88,10 @@ export function PromoScopeTagPicker({
 
   return (
     <div className="grid gap-4">
+      {/* Mirror the live scope into the parent <form> so the page's primary Save
+          persists targets too — saveEntity reads __promo_targets. The standalone
+          "Save targeting" button stays as a secondary path. */}
+      <input type="hidden" name="__promo_targets" value={JSON.stringify(scope)} />
       <div className="flex gap-6 text-sm">
         <Label className="font-normal">
           <input

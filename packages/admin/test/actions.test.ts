@@ -345,6 +345,28 @@ describe('savePromotionTargets — replace-all promotion_targets honoring the CH
     expect(res.ok).toBe(false);
     expect(targetsFor('p1')).toHaveLength(0);
   });
+
+  // The page's PRIMARY Save (saveEntity) must persist targeting via the hidden
+  // __promo_targets field — the picker's standalone action never landed in prod.
+  it('saveEntity persists targeting from the hidden __promo_targets field', async () => {
+    const res = await saveEntity(
+      'promotions',
+      'p1',
+      form({ __promo_targets: JSON.stringify({ type: 'scoped', communities: ['recCommA'] }) })
+    );
+    expect(res).toEqual({ ok: true });
+    expect(targetsFor('p1')).toEqual([{ target_type: 'community', target_id: 'recCommA' }]);
+  });
+
+  it('saveEntity ignores an empty scoped selection (no-op, does not error)', async () => {
+    const res = await saveEntity(
+      'promotions',
+      'p1',
+      form({ __promo_targets: JSON.stringify({ type: 'scoped', communities: [] }) })
+    );
+    expect(res).toEqual({ ok: true });
+    expect(targetsFor('p1')).toHaveLength(0);
+  });
 });
 
 // sanity: the imported Drizzle tables resolve to the expected physical tables.
