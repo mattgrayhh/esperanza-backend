@@ -78,14 +78,22 @@ export function ImageUploader({
     if (!file) return;
     setErr(null);
     startTransition(async () => {
-      const res = await uploadImage(entity, id, field, file);
-      if (res.ok) {
-        setUrl(res.url);
-      } else {
-        setErr(res.error);
+      try {
+        const res = await uploadImage(entity, id, field, file);
+        if (res.ok) {
+          setUrl(res.url);
+        } else {
+          setErr(res.error);
+        }
+      } catch (e) {
+        // A THROWN server action (transient worker/R2 hiccup, OpenNext body/infra
+        // failure) would otherwise silently revert the spinner with no feedback —
+        // looks like the upload "stalls out". Surface it so the operator can retry.
+        setErr(e instanceof Error ? e.message : 'Upload failed — please retry.');
+      } finally {
+        // allow re-picking the same filename
+        if (fileRef.current) fileRef.current.value = '';
       }
-      // allow re-picking the same filename
-      if (fileRef.current) fileRef.current.value = '';
     });
   }
 
