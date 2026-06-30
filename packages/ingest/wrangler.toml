@@ -65,6 +65,9 @@ SNOWFLAKE_USER = "matt_hazard_house"
 SNOWFLAKE_DATABASE = "RHODES_ENTERPRISES"
 SNOWFLAKE_WAREHOUSE = "HAZARD_HOUSE_WH"
 SNOWFLAKE_SCHEMA = "ANALYTICS_ZONE"
+# Public base of the esperanza-pdf worker. A synced QMI create self-registers a
+# pdf_renders row + backfills qmi.dynamic_pdf against this base (consumer.ts).
+PDF_PUBLIC_BASE_URL = "https://esperanza-pdf.round-base-ed8c.workers.dev"
 
 # Secrets (set via `wrangler secret put`):
 #   SNOWFLAKE_PASSWORD   — Snowflake REST login password
