@@ -540,7 +540,8 @@ export function serializePromotionRow(
 // =============================================================================
 export function serializeFloorPlanRow(
   row: Row,
-  resolved: ResolvedPromo | null = null
+  resolved: ResolvedPromo | null = null,
+  communityPrices?: Record<string, number>
 ): Record<string, Json> {
   return {
     id: String(row['id']),
@@ -549,6 +550,11 @@ export function serializeFloorPlanRow(
     comingSoon: asBool(row['coming_soon']),
     collection: asStr(row['collection']),
     startingPrice: asNumOrNull(row['starting_price']),
+    // Per-community lowest price (MIN community_elevation_prices.sales_price), keyed by
+    // community NAME to match the `communities` CSV / Community filter. A plan is offered in
+    // many communities at different prices; startingPrice above is the dev-wide cheapest, so
+    // the Floor Plans browse shows that community's own price once a community is selected.
+    communityPrices: communityPrices ?? {},
     bedroomMin: asIntOrNull(row['bedroom_min']),
     bedroomMax: asIntOrNull(row['bedroom_max']),
     bathroomMin: asNumOrNull(row['bathroom_min']),
@@ -812,10 +818,31 @@ async function buildPayload(
       const ctx = await loadPromoContext(session);
       const res = await session.prepare('SELECT * FROM v_public_floor_plans').all();
       const rows = (res.results ?? []) as unknown as Row[];
+      // Per-community lowest price per plan, from community_elevation_prices (Snowflake-derived,
+      // per community × plan × elevation). Keyed by floor_plan_id → { communityName: minPrice }.
+      const cepRes = await session
+        .prepare(
+          `SELECT cep.floor_plan_id AS fp_id, c.name AS community, MIN(cep.sales_price) AS price
+             FROM community_elevation_prices cep
+             JOIN communities c ON c.id = cep.community_id
+            WHERE cep.sales_price > 0
+            GROUP BY cep.floor_plan_id, c.name`
+        )
+        .all();
+      const cepByPlan = new Map<string, Record<string, number>>();
+      for (const r of (cepRes.results ?? []) as unknown as Row[]) {
+        const fpId = asStr(r['fp_id']);
+        const community = asStr(r['community']);
+        const price = asNumOrNull(r['price']);
+        if (!fpId || !community || price == null) continue;
+        const map = cepByPlan.get(fpId) ?? {};
+        map[community] = price;
+        cepByPlan.set(fpId, map);
+      }
       const floorplans = rows.map((row) => {
         // floor-plan page context: only floor_plan-targeted (or global) promos match.
         const resolved = resolveFor(ctx, 'city', { floorPlanId: String(row['id']) }, now);
-        return serializeFloorPlanRow(row, resolved);
+        return serializeFloorPlanRow(row, resolved, cepByPlan.get(String(row['id'])));
       });
       return { floorplans, ts };
     }
