@@ -781,7 +781,10 @@ const communities: CollectionDef = {
             LIKE '%,' || communities.id || ',%') AS plan_count,
     (SELECT COUNT(*) FROM qmi q2
       WHERE q2.published = 1
-        AND COALESCE(q2.override_community_id, q2.synced_community_id) = communities.id) AS home_count
+        AND COALESCE(q2.override_community_id, q2.synced_community_id) = communities.id) AS home_count,
+    (SELECT MAX(COALESCE(q3.override_postal_code, q3.synced_postal_code)) FROM qmi q3
+      WHERE COALESCE(q3.override_community_id, q3.synced_community_id) = communities.id
+        AND COALESCE(q3.override_postal_code, q3.synced_postal_code) IS NOT NULL) AS postal_code
   FROM communities WHERE id = ?`,
   selectAllSql: `SELECT *,
     COALESCE(override_square_footage_range, synced_square_footage_range) AS square_footage_range,
@@ -814,7 +817,10 @@ const communities: CollectionDef = {
             LIKE '%,' || communities.id || ',%') AS plan_count,
     (SELECT COUNT(*) FROM qmi q2
       WHERE q2.published = 1
-        AND COALESCE(q2.override_community_id, q2.synced_community_id) = communities.id) AS home_count
+        AND COALESCE(q2.override_community_id, q2.synced_community_id) = communities.id) AS home_count,
+    (SELECT MAX(COALESCE(q3.override_postal_code, q3.synced_postal_code)) FROM qmi q3
+      WHERE COALESCE(q3.override_community_id, q3.synced_community_id) = communities.id
+        AND COALESCE(q3.override_postal_code, q3.synced_postal_code) IS NOT NULL) AS postal_code
   FROM communities`,
   map(row) {
     const id = String(row['id']);
@@ -895,6 +901,11 @@ const communities: CollectionDef = {
       // the real relationship is floor_plans.communities + community_count.
       town: sIf(row['town']),
       address: sIf(row['address']),
+      // ZIP for the community address block. The community row has no postal column, so
+      // it's derived (SQL above) from the community's own homes' zip — every community's
+      // homes share exactly one zip. Emitted as string to match qmi.postal_code's live
+      // "ZIP" field. Communities with no homes derive NULL → empty string (no zip shown).
+      postal_code: sIf(row['postal_code']),
       // Get Directions = the Google Maps link. The dedicated `directions` column is
       // empty for every community, so fall back to map_coordinates (which holds the
       // maps.google.com URL) — that's the link the button is meant to surface.

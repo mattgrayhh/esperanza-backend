@@ -339,4 +339,25 @@ describe('Communities mapper — rich text, HOA links, coords, gates', () => {
     expect(f['plan_list_pdf_url']).toBeUndefined();
     expect(f['sale_list_pdf_url']).toBeUndefined();
   });
+
+  it('derives postal_code (string) from the community\'s homes', () => {
+    const db = freshDb();
+    insertRow(db, 'communities', {
+      id: 'recCOMzip00001', name: 'Zip Town', slug: 'zip-town', published: 1,
+    });
+    // two homes in this community, same zip (the real-world invariant)
+    insertRow(db, 'qmi', { id: 'recH1', synced_community_id: 'recCOMzip00001', synced_postal_code: 78504 });
+    insertRow(db, 'qmi', { id: 'recH2', synced_community_id: 'recCOMzip00001', synced_postal_code: 78504 });
+    const f = mapOne(db, 'recCOMzip00001').fieldData;
+    expect(f['postal_code']).toEqual({ type: 'string', value: '78504' });
+  });
+
+  it('emits empty postal_code when the community has no homes', () => {
+    const db = freshDb();
+    insertRow(db, 'communities', {
+      id: 'recCOMzip00002', name: 'No Homes', slug: 'no-homes', published: 1,
+    });
+    const f = mapOne(db, 'recCOMzip00002').fieldData;
+    expect(f['postal_code']).toEqual({ type: 'string', value: '' });
+  });
 });
