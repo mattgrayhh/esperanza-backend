@@ -70,6 +70,9 @@ export interface GenericFieldProps {
   optionItems?: SelectOptionItem[];
   readOnly?: boolean;
   help?: string;
+  /** boolean widget only: fires when the switch flips, so a parent form can react live
+   *  (e.g. progressive-disclosure section gating). */
+  onValueChange?: (on: boolean) => void;
 }
 
 function FieldLabel({ label }: { label: string }) {
@@ -89,6 +92,7 @@ export function GenericField({
   help,
   entity,
   id,
+  onValueChange,
 }: GenericFieldProps) {
   // Field-Builder widgets render their own label + hidden name={field} input, so
   // short-circuit to them (avoids a double label and keeps the FormData contract).
@@ -135,7 +139,7 @@ export function GenericField({
           {value === '' ? '—' : value}
         </span>
       ) : widget === 'boolean' ? (
-        <BooleanField field={field} value={value} />
+        <BooleanField field={field} value={value} onValueChange={onValueChange} />
       ) : widget === 'select' ? (
         <SelectField field={field} value={value} options={options} staticOptions={staticOptions} />
       ) : widget === 'textarea' ? (
@@ -161,12 +165,27 @@ export function GenericField({
 
 // boolean: a Switch for presentation, plus a controlled hidden input that ALWAYS submits
 // '1' or '0' so saveEntity coerces it to a real boolean (never '' → NULL).
-function BooleanField({ field, value }: { field: string; value: string }) {
+function BooleanField({
+  field,
+  value,
+  onValueChange,
+}: {
+  field: string;
+  value: string;
+  onValueChange?: (on: boolean) => void;
+}) {
   const [on, setOn] = useState(value === 'true' || value === '1');
   return (
     <div className="flex h-8 items-center gap-2">
       <input type="hidden" name={field} value={on ? '1' : '0'} />
-      <Switch checked={on} onCheckedChange={setOn} aria-label={field} />
+      <Switch
+        checked={on}
+        onCheckedChange={(next) => {
+          setOn(next);
+          onValueChange?.(next);
+        }}
+        aria-label={field}
+      />
       <span className="text-sm text-muted-foreground">{on ? 'true' : 'false'}</span>
     </div>
   );

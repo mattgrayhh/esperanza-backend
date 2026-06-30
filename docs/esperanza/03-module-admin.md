@@ -187,6 +187,18 @@ compiles them into `lib/help-content.generated.ts`, rendered at `/help`.
 | Change audit/enqueue behavior | `lib/actions.ts` (`postWrite`), `lib/audit-chunk.ts` |
 | Add/edit help | `help-content/*.md` then `npm run gen:help` |
 
+### Progressive-disclosure fields (`gatedBy`)
+
+A `FieldConfig` can set `gatedBy: '<toggle_field>'` — the field (or the promoScope
+side-widget) stays hidden in the edit form until that sibling boolean toggle is ON.
+`EntityEditForm` tracks the toggles' live values (seeded from their current value, updated
+via `GenericField`'s `onValueChange`) and shows/hides the gated fields, the Media-rail
+images, and the scope picker as you flip a switch — no save needed. `gatedBy` is
+render-only static config (carried through `field-config-source` → `build-edit-view` →
+`FieldView`/`PromoScopeView`); it is NOT persisted in `field_definitions`. The promotion
+form uses it for the Site Banner / Card / Incentive Page surface sections (mig 0023 added
+the per-surface `card_button_text` / `card_button_link` / `card_copy` columns).
+
 ### Promotion targeting saves with the page Save
 
 `PromoScopeTagPicker` (the "Targeting Scope" side-widget on a promotion) mirrors its

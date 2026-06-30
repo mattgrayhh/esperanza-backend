@@ -215,7 +215,8 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
   }
 
   // Promotion targeting scope (needs the promotion_targets rows + full option lists).
-  if (cfg.fields.some((f) => f.widget === 'promoScopeTag')) {
+  const promoScopeField = cfg.fields.find((f) => f.widget === 'promoScopeTag');
+  if (promoScopeField) {
     const targets = (await db
       .select()
       .from(promotionTargets)
@@ -234,6 +235,7 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
         qmis: pick('qmi'),
       },
       options,
+      gatedBy: promoScopeField.gatedBy,
     });
   }
 
@@ -300,6 +302,7 @@ export function buildFieldView(
       value: s(col(row, f.field)),
       help: f.help,
       group: f.group,
+      gatedBy: f.gatedBy,
     };
   }
 
@@ -328,6 +331,7 @@ export function buildFieldView(
       help: f.help,
       halfWidth: f.halfWidth,
       group: f.group,
+      gatedBy: f.gatedBy,
     };
   }
 
@@ -351,13 +355,13 @@ export function buildFieldView(
     f.widget !== 'syncedOverride' &&
     isImageField(f.field);
   if (f.widget === 'imageGallery') {
-    return { kind: 'imageGallery', field: f.field, label: f.label, value: fieldValue, help: f.help, group: f.group };
+    return { kind: 'imageGallery', field: f.field, label: f.label, value: fieldValue, help: f.help, group: f.group, gatedBy: f.gatedBy };
   }
   if (f.widget === 'elevationGallery') {
-    return { kind: 'elevationGallery', field: f.field, label: f.label, value: fieldValue, help: f.help, group: f.group };
+    return { kind: 'elevationGallery', field: f.field, label: f.label, value: fieldValue, help: f.help, group: f.group, gatedBy: f.gatedBy };
   }
   if (f.widget === 'image' || forceImage) {
-    return { kind: 'image', field: f.field, label: f.label, value: fieldValue, help: f.help, group: f.group };
+    return { kind: 'image', field: f.field, label: f.label, value: fieldValue, help: f.help, group: f.group, gatedBy: f.gatedBy };
   }
 
   // TARGETED WYSIWYG upgrade: the BLOG `content` field renders with the true TipTap

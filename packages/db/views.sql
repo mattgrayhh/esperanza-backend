@@ -229,6 +229,7 @@ CREATE VIEW v_public_promotions AS
 SELECT
   p.id, p.title, p.banner_text, p.badge_text, p.copy,
   p.cta_label, p.cta_url, p.image_url,
+  p.card_button_text, p.card_button_link, p.card_copy,
   p.pdf_url, p.rate_override,
   COALESCE(NULLIF(p.rate_override, ''),
     (SELECT value FROM site_settings WHERE key = 'incentive_rate')) AS effective_rate,

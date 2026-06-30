@@ -159,8 +159,11 @@ interface PromoRow {
   banner_text: unknown;
   badge_text: unknown;
   copy: unknown;
-  cta_label: unknown;
-  cta_url: unknown;
+  cta_label: unknown; // SITE BANNER button text
+  cta_url: unknown; // SITE BANNER button link
+  card_button_text: unknown; // CARD button text (mig 0023)
+  card_button_link: unknown; // CARD button link (mig 0023)
+  card_copy: unknown; // CARD body copy (mig 0023)
   image_url: unknown;
   sort_order: number | null;
   start_date: string | null;
@@ -668,17 +671,20 @@ interface PromoContext {
 
 function toResolved(p: PromoRow | null): ResolvedPromo | null {
   if (!p) return null;
-  // Card surfaces: the badge (badge_text) shows whenever it's set; the CTA button is
-  // gated by the promo's `show_card_cta` toggle (the "two options" per card — corner
-  // badge vs CTA button). banner_text (incentive line) keeps flowing when a promo
-  // resolves. ponytail: incentive text not gated; flip here if marketing wants it tied
-  // to show_card_cta too.
-  const showCardCta = asBool(p.show_card_cta);
+  // Card surfaces use the promo's CARD fields (separate per surface — migration 0023):
+  // badge_text = top-left overlay, card_copy = card body line, card_button_text/_link =
+  // card CTA. The whole card treatment is gated by the `show_card_cta` ("Show on Cards")
+  // toggle — off ⇒ this promo contributes nothing to cards. (The banner's cta_label/cta_url
+  // and banner_text are a separate surface, served via serializePromotionRow.)
+  const showCard = asBool(p.show_card_cta);
+  if (!showCard) {
+    return { promoBannerText: '', promoBadgeText: '', promoCtaLabel: '', promoCtaLink: '' };
+  }
   return {
-    promoBannerText: asStr(p.banner_text),
+    promoBannerText: asStr(p.card_copy),
     promoBadgeText: asStr(p.badge_text),
-    promoCtaLabel: showCardCta ? asStr(p.cta_label) : '',
-    promoCtaLink: showCardCta ? asStr(p.cta_url) : '',
+    promoCtaLabel: asStr(p.card_button_text),
+    promoCtaLink: asStr(p.card_button_link),
   };
 }
 

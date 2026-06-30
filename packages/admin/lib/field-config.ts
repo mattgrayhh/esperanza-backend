@@ -96,6 +96,11 @@ export interface FieldConfig {
   /** Field Builder visibility: false hides the field from the edit FORM (field_definitions
    *  .visible_in_form). Defaults true. Lets operators remove fields (feedback [7]-[11]). */
   visibleInForm?: boolean;
+  /** Progressive disclosure: name of a sibling boolean (toggle) field that gates this one.
+   *  The field is hidden in the form until that toggle is ON. Render-only (static config,
+   *  not persisted / not operator-editable) — drives the promotion surface sections
+   *  (Site Banner / Card / Incentive Page). The toggle field itself has no `gatedBy`. */
+  gatedBy?: string;
 }
 
 export interface ListColumn {
@@ -524,28 +529,44 @@ const promotions: EntityFieldConfig = {
   ],
   fields: [
     // gate column renamed from `active` to `published` in migration 0005.
+    // ── Promotion (always visible) ──────────────────────────────────────────
     { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish', help: 'The single gate; published=false → framer draft:true.' },
-    { field: 'title', label: 'Title', widget: 'text', bucket: 'admin', help: 'Internal name (not shown on the site).' },
-    { field: 'banner_text', label: 'Headline', widget: 'text', bucket: 'admin' },
-    { field: 'copy', label: 'Description', widget: 'textarea', bucket: 'admin' },
-    { field: 'badge_text', label: 'Banner Overlay Promo', widget: 'text', bucket: 'admin', help: 'Card image banner text.' },
-    { field: 'cta_label', label: 'CTA Label', widget: 'text', bucket: 'admin' },
-    { field: 'cta_url', label: 'CTA URL', widget: 'text', bucket: 'admin' },
-    { field: 'image_url', label: 'Image', widget: 'image', bucket: 'admin' },
-    { field: 'pdf_url', label: 'PDF (optional)', widget: 'image', bucket: 'admin', help: 'Optional PDF (e.g. a flyer). Upload or drag a file; PDFs show as a document card.' },
-    { field: 'rate_override', label: 'Rate Override %', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true, help: 'Blank = company-wide Incentive Rate. Enter a value to override this promo only.' },
-    // Per-surface visibility toggles (migration 0021). Independent of Published AND of
-    // Associated Locations — they compose: these say WHERE a promo may appear; the
-    // locations narrow WHICH pages. All default OFF; turn on a surface per promo.
-    { field: 'show_site_banner', label: 'Show on Site Banner', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Site-wide top banner (uses the Headline).' },
-    { field: 'show_incentive_page', label: 'Show on Incentive Page', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'The dedicated incentives page card.' },
-    { field: 'show_banner_button', label: 'Show Banner Button', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Render the CTA button inside the site banner.' },
-    { field: 'show_card_cta', label: 'Show Card CTA Button', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Render the CTA button on promo cards / location pages.' },
-    { field: 'sort_order', label: 'Sort Order', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
-    { field: 'start_date', label: 'Start Date', widget: 'date', bucket: 'admin', halfWidth: true },
-    { field: 'end_date', label: 'End Date', widget: 'date', bucket: 'admin', halfWidth: true },
+    { field: 'title', label: 'Title', widget: 'text', bucket: 'admin', group: 'Promotion', help: 'Internal name + the title shown on the incentive page.' },
+    { field: 'rate_override', label: 'Rate Override %', widget: 'number', bucket: 'admin', group: 'Promotion', step: 'any', halfWidth: true, help: 'Blank = company-wide Incentive Rate. Enter a value to override this promo only.' },
+    { field: 'sort_order', label: 'Sort Order', widget: 'number', bucket: 'admin', group: 'Promotion', step: '1', halfWidth: true },
+    { field: 'start_date', label: 'Start Date', widget: 'date', bucket: 'admin', group: 'Promotion', halfWidth: true },
+    { field: 'end_date', label: 'End Date', widget: 'date', bucket: 'admin', group: 'Promotion', halfWidth: true },
+
+    // ── Surface sections: each toggle reveals only its own fields (progressive
+    //    disclosure via `gatedBy`). Toggles default OFF. "Separate per surface" — the
+    //    banner button (cta_label/cta_url) is independent of the card button
+    //    (card_button_text/card_button_link). See migration 0023.
+
+    // Site Banner
+    { field: 'show_site_banner', label: 'Show on Site Banner', widget: 'boolean', bucket: 'admin', group: 'Site Banner', help: 'Site-wide top banner.' },
+    { field: 'banner_text', label: 'Banner Copy', widget: 'text', bucket: 'admin', group: 'Site Banner', gatedBy: 'show_site_banner' },
+    { field: 'cta_label', label: 'Banner Button Text', widget: 'text', bucket: 'admin', group: 'Site Banner', gatedBy: 'show_site_banner', halfWidth: true, help: 'Leave blank for no button.' },
+    { field: 'cta_url', label: 'Banner Button Link', widget: 'text', bucket: 'admin', group: 'Site Banner', gatedBy: 'show_site_banner', halfWidth: true },
+
+    // Card (QMI / community / floor-plan cards — one shared card surface)
+    { field: 'show_card_cta', label: 'Show on Cards', widget: 'boolean', bucket: 'admin', group: 'Card', help: 'Show this promo on home / community / floor-plan cards.' },
+    { field: 'badge_text', label: 'Card Banner Text', widget: 'text', bucket: 'admin', group: 'Card', gatedBy: 'show_card_cta', help: 'Image-overlaid banner on the top-left corner of the card.' },
+    { field: 'card_button_text', label: 'Card Button Text', widget: 'text', bucket: 'admin', group: 'Card', gatedBy: 'show_card_cta', halfWidth: true, help: 'Leave blank for no button.' },
+    { field: 'card_button_link', label: 'Card Button Link', widget: 'text', bucket: 'admin', group: 'Card', gatedBy: 'show_card_cta', halfWidth: true },
+    { field: 'card_copy', label: 'Card Copy', widget: 'textarea', bucket: 'admin', group: 'Card', gatedBy: 'show_card_cta' },
+
+    // Incentive Page
+    { field: 'show_incentive_page', label: 'Show on Incentive Page', widget: 'boolean', bucket: 'admin', group: 'Incentive Page', help: 'The dedicated incentives page card.' },
+    { field: 'copy', label: 'Description / Excerpt', widget: 'textarea', bucket: 'admin', group: 'Incentive Page', gatedBy: 'show_incentive_page' },
+    { field: 'image_url', label: 'Image', widget: 'image', bucket: 'admin', gatedBy: 'show_incentive_page' },
+    { field: 'pdf_url', label: 'PDF (optional)', widget: 'image', bucket: 'admin', gatedBy: 'show_incentive_page', help: 'Optional PDF (e.g. a flyer). Upload or drag a file; PDFs show as a document card.' },
+    { field: 'promotion_targets', label: 'Available Homes / Communities', widget: 'promoScopeTag', bucket: 'target', gatedBy: 'show_incentive_page' },
+
+    // ── Retired / hidden ────────────────────────────────────────────────────
+    // show_banner_button retired: the banner button now shows whenever Banner Button Text
+    // is filled in (column kept; hidden from the form).
+    { field: 'show_banner_button', label: 'Show Banner Button', widget: 'boolean', bucket: 'admin', visibleInForm: false },
     { field: 'applies_to', label: 'Applies-To Label (legacy)', widget: 'text', bucket: 'admin', help: 'Informational only; does NOT drive targeting.', visibleInForm: false },
-    { field: 'promotion_targets', label: 'Associated Locations', widget: 'promoScopeTag', bucket: 'target' },
   ],
 };
 

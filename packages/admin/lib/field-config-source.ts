@@ -188,6 +188,8 @@ function rowToFieldConfig(row: FieldDefinition, staticField: FieldConfig | undef
     ...(row.help != null ? { help: row.help } : staticField?.help ? { help: staticField.help } : {}),
     ...(row.halfWidth ? { halfWidth: true } : {}),
     ...(row.groupLabel ? { group: row.groupLabel } : staticField?.group ? { group: staticField.group } : {}),
+    // Render-only progressive-disclosure gate (static config; not persisted).
+    ...(staticField?.gatedBy ? { gatedBy: staticField.gatedBy } : {}),
     visibleInForm: row.visibleInForm,
     ...(syncedColumn ? { syncedColumn } : {}),
     ...(displayColumn ? { displayColumn } : {}),

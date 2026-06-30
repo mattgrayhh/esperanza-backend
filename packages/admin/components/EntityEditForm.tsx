@@ -76,6 +76,7 @@ export type FieldView =
       help?: string;
       halfWidth?: boolean;
       group?: string;
+      gatedBy?: string;
     }
   | {
       kind: 'image';
@@ -84,6 +85,7 @@ export type FieldView =
       value: string;
       help?: string;
       group?: string;
+      gatedBy?: string;
     }
   | {
       kind: 'imageGallery';
@@ -92,6 +94,7 @@ export type FieldView =
       value: string; // serialized JSON array of URLs
       help?: string;
       group?: string;
+      gatedBy?: string;
     }
   | {
       kind: 'elevationGallery';
@@ -100,6 +103,7 @@ export type FieldView =
       value: string; // serialized JSON array of { url, type }
       help?: string;
       group?: string;
+      gatedBy?: string;
     }
   | {
       kind: 'syncedOverride';
@@ -113,6 +117,7 @@ export type FieldView =
       help?: string;
       halfWidth?: boolean;
       group?: string;
+      gatedBy?: string;
     };
 
 export interface PublishGateView {
@@ -141,6 +146,8 @@ export interface PromoScopeView {
     floorPlans: SelectOption[];
     qmis: SelectOption[];
   };
+  /** Progressive disclosure: hide until this sibling toggle field is ON. */
+  gatedBy?: string;
 }
 export interface CommunityFloorPlansView {
   kind: 'communityFloorPlans';
@@ -192,6 +199,25 @@ export function EntityEditForm({
   const imageFields = fields.filter((f) => f.kind === 'image');
   const mainFields = fields.filter((f) => f.kind !== 'image');
 
+  // Progressive disclosure: a field (or the promoScope side-widget) can declare
+  // `gatedBy: <toggleField>` and stay hidden until that boolean toggle is ON. Track the
+  // live toggle values so flipping a switch reveals/hides its section without saving.
+  // (Promotion surface sections: Site Banner / Card / Incentive Page.)
+  const gateNames = new Set<string>();
+  for (const f of fields) if (f.gatedBy) gateNames.add(f.gatedBy);
+  for (const w of sideWidgets) if (w.kind === 'promoScope' && w.gatedBy) gateNames.add(w.gatedBy);
+  const [toggleOn, setToggleOn] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    for (const f of fields) {
+      if (f.kind === 'generic' && gateNames.has(f.field)) {
+        init[f.field] = f.value === 'true' || f.value === '1';
+      }
+    }
+    return init;
+  });
+  const isVisible = (gatedBy?: string) => !gatedBy || toggleOn[gatedBy] === true;
+  const visibleImageFields = imageFields.filter((f) => isVisible(f.gatedBy));
+
   // [21][5][6] Group the main fields into section cards by their `group`
   // (field_definitions.group_label). Ungrouped fields fall under "Details".
   // First-seen order is preserved so the Field Builder's sort drives section order.
@@ -211,6 +237,7 @@ export function EntityEditForm({
   const sections: { label: string; fields: MainField[] }[] = [];
   const sectionIndex = new Map<string, number>();
   for (const f of mainFields) {
+    if (!isVisible(f.gatedBy)) continue; // hidden until its toggle is on
     const g = groupOf(f);
     let idx = sectionIndex.get(g);
     if (idx === undefined) {
@@ -272,7 +299,7 @@ export function EntityEditForm({
         {/* In preview mode, force single-column layout — the preview panel is ~350px and
             viewport-based breakpoints (lg/sm) would otherwise trigger on the full browser
             width, causing the 2-column grids to overflow the narrow card. */}
-        <div className={cn('grid gap-5', !preview && imageFields.length ? 'lg:grid-cols-[1fr_20rem]' : 'grid-cols-1')}>
+        <div className={cn('grid gap-5', !preview && visibleImageFields.length ? 'lg:grid-cols-[1fr_20rem]' : 'grid-cols-1')}>
           {/* MAIN column — one Card per field group (feedback [21][5][6]); ungrouped
               fields collapse into a single "Details" section. */}
           <div className="min-w-0 space-y-5">
@@ -347,6 +374,11 @@ export function EntityEditForm({
                           help={f.help}
                           entity={segment}
                           id={id}
+                          onValueChange={
+                            gateNames.has(f.field)
+                              ? (on) => setToggleOn((prev) => ({ ...prev, [f.field]: on }))
+                              : undefined
+                          }
                         />
                       </div>
                     );
@@ -364,13 +396,13 @@ export function EntityEditForm({
           </div>
 
           {/* RIGHT RAIL: image widgets (still inside the form → same FormData). */}
-          {imageFields.length ? (
+          {visibleImageFields.length ? (
             <Card className="self-start">
               <CardHeader className="border-b">
                 <CardTitle>Media</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4">
-                {imageFields.map((f) =>
+                {visibleImageFields.map((f) =>
                   f.kind === 'image' ? (
                     <ImageUploader
                       key={f.field}
@@ -391,9 +423,11 @@ export function EntityEditForm({
 
       {preview
         ? null
-        : sideWidgets.map((w, i) => (
-            <SideWidgetBlock key={i} entityKey={entityKey} id={id} widget={w} onResult={setMsg} />
-          ))}
+        : sideWidgets.map((w, i) =>
+            w.kind === 'promoScope' && !isVisible(w.gatedBy) ? null : (
+              <SideWidgetBlock key={i} entityKey={entityKey} id={id} widget={w} onResult={setMsg} />
+            )
+          )}
     </div>
   );
 }

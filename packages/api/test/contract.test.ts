@@ -348,7 +348,13 @@ function seedPromotions(db: Database.Database) {
   insT.run({ p: 'recPROMOglobal', t: 'global', i: null });
   // The winning community promo enables its card CTA; the global one leaves it OFF
   // (default 0) so the gating both-ways is exercised by the flatten tests.
-  db.prepare(`UPDATE promotions SET show_card_cta=1 WHERE id='recPROMOcomm1'`).run();
+  db.prepare(
+    `UPDATE promotions SET show_card_cta=1,
+       card_copy='Rogers Coves Card Copy',
+       card_button_text='See This Home',
+       card_button_link='/x-card'
+     WHERE id='recPROMOcomm1'`
+  ).run();
 }
 
 // Build promo context the way the Worker does (active promos + targets + name maps).
@@ -384,13 +390,16 @@ function resolvedFor(
 ): ResolvedPromo | null {
   const winner = resolveEffectivePromo(entity, ids, ctx.promos, ctx.targets, NOW);
   if (!winner) return null;
-  // Mirror the Worker's toResolved(): the card CTA is gated by show_card_cta.
-  const showCardCta = winner['show_card_cta'] === 1 || winner['show_card_cta'] === true;
+  // Mirror the Worker's toResolved(): cards use the CARD fields (card_copy / badge_text /
+  // card_button_text / card_button_link), and the whole card surface is gated by
+  // show_card_cta. Off ⇒ the promo contributes nothing to cards.
+  const showCard = winner['show_card_cta'] === 1 || winner['show_card_cta'] === true;
+  if (!showCard) return { promoBannerText: '', promoBadgeText: '', promoCtaLabel: '', promoCtaLink: '' };
   return {
-    promoBannerText: String(winner['banner_text'] ?? ''),
+    promoBannerText: String(winner['card_copy'] ?? ''),
     promoBadgeText: String(winner['badge_text'] ?? ''),
-    promoCtaLabel: showCardCta ? String(winner['cta_label'] ?? '') : '',
-    promoCtaLink: showCardCta ? String(winner['cta_url'] ?? '') : '',
+    promoCtaLabel: String(winner['card_button_text'] ?? ''),
+    promoCtaLink: String(winner['card_button_link'] ?? ''),
   };
 }
 
@@ -570,10 +579,10 @@ describe('/qmi — raw passthrough contract', () => {
       cityId: r['city_id'] as string,
     });
     expect(resolved).not.toBeNull();
-    // lowest sort_order community promo wins over the global one
-    expect(resolved!.promoBannerText).toBe('Rogers Coves Banner WINNER');
+    // lowest sort_order community promo wins over the global one; cards use card_copy
+    expect(resolved!.promoBannerText).toBe('Rogers Coves Card Copy');
     const rec = serializeQmiRow(r, resolved);
-    expect(rec.fields['promo_text']).toBe('Rogers Coves Banner WINNER');
+    expect(rec.fields['promo_text']).toBe('Rogers Coves Card Copy');
   });
 
   it('card_badge_text falls back to the home’s raw D1 incentive (live-site source of truth)', () => {
@@ -665,17 +674,18 @@ describe('/communities — mapped dense contract', () => {
       cityId: 'recLfQGdbcgD8iTCi',
     });
     const c = serializeCommunityRow(r, resolved);
-    expect(c.promoBannerText).toBe('Rogers Coves Banner WINNER');
+    expect(c.promoBannerText).toBe('Rogers Coves Card Copy'); // cards use card_copy
     expect(c.promoBadgeText).toBe('Limited');
-    expect(c.promoCtaLabel).toBe('View Details'); // show_card_cta=1 → CTA shown
+    expect(c.promoCtaLabel).toBe('See This Home'); // card_button_text, show_card_cta=1
   });
 
-  it('CTA is gated by show_card_cta — a resolved promo with the toggle OFF drops the CTA', () => {
+  it('cards are gated by show_card_cta — a resolved promo with the toggle OFF contributes nothing', () => {
     const ctx = buildPromoCtx(db);
-    // No community-specific promo for the draft community → the global promo resolves;
-    // it leaves show_card_cta=0, so the banner/badge flow but the CTA is suppressed.
+    // No community-specific promo for the draft community → the global promo resolves,
+    // but it leaves show_card_cta=0, so the whole card surface is suppressed.
     const resolved = resolvedFor(ctx, 'community', { communityId: 'recDRAFT000000000' });
-    expect(resolved?.promoBannerText).toBe('Sitewide Banner');
+    expect(resolved?.promoBannerText).toBe('');
+    expect(resolved?.promoBadgeText).toBe('');
     expect(resolved?.promoCtaLabel).toBe('');
     expect(resolved?.promoCtaLink).toBe('');
   });

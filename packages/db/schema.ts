@@ -445,8 +445,14 @@ export const promotions = sqliteTable(
     bannerText: text('banner_text'),
     badgeText: text('badge_text'),
     copy: text('copy'),
-    ctaLabel: text('cta_label'),
-    ctaUrl: text('cta_url'),
+    ctaLabel: text('cta_label'), // SITE BANNER button text (per-surface, mig 0023)
+    ctaUrl: text('cta_url'), // SITE BANNER button link (per-surface, mig 0023)
+    // CARD surface fields (mig 0023) — independent of the banner's cta_label/cta_url so a
+    // promo can word its card button/copy differently from its banner. badge_text is the
+    // card's top-left image overlay text. card_copy is the card's body copy.
+    cardButtonText: text('card_button_text'),
+    cardButtonLink: text('card_button_link'),
+    cardCopy: text('card_copy'),
     imageUrl: text('image_url'), // STABLE R2 url
     pdfUrl: text('pdf_url'), // STABLE R2 url of an optional promo PDF (Framer link)
     rateOverride: text('rate_override'), // TEXT; NULL/'' → inherit site_settings.incentive_rate
