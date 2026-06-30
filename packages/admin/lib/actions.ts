@@ -422,6 +422,31 @@ export async function saveEntity(
     audits.push(...customAudits);
   }
 
+  // Promotion targeting: the scope picker mirrors its selection into THIS form as a
+  // hidden `__promo_targets` JSON field. Persist it through saveEntity (the proven save
+  // path) so the page's primary Save writes targets — the picker's standalone server
+  // action never landed targets in prod. Runs BEFORE the empty-patch early-return so a
+  // targeting-only edit (no column change) still saves. Empty "scoped" (nothing picked)
+  // is a no-op here; use the standalone button to deliberately clear via global.
+  if (def.key === 'promotions') {
+    const rawTargets = formData.get('__promo_targets');
+    if (typeof rawTargets === 'string' && rawTargets) {
+      let scope: PromoScope;
+      try {
+        scope = JSON.parse(rawTargets) as PromoScope;
+      } catch {
+        return { ok: false, error: 'Targeting: invalid scope payload' };
+      }
+      const isEmptyScoped =
+        scope.type === 'scoped' &&
+        !(scope.cities?.length || scope.communities?.length || scope.floorPlans?.length || scope.qmis?.length);
+      if (!isEmptyScoped) {
+        const tr = await savePromotionTargets(id, scope);
+        if (!tr.ok) return { ok: false, error: `Targeting: ${tr.error}` };
+      }
+    }
+  }
+
   if (Object.keys(patch).length === 0) {
     return { ok: true }; // nothing changed
   }

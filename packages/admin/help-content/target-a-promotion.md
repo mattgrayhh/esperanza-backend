@@ -22,6 +22,11 @@ Every promotion has a **Promotion Location** — where on the site it applies:
 Pick the targets on the promotion's page; a promotion can have several
 (e.g. two communities, or a plan plus a city).
 
+**Saving:** check off the communities, floor plans, or homes you want, then hit
+the page's main **Save** button at the top — your selections save with the rest
+of the promotion. (The small "Save targeting" button under the picker still works
+too.) Re-open the promotion and your checks will be there.
+
 ## Find a promotion by lot number
 
 The promotions list shows a **Lot #s** column — the lot numbers of every home a

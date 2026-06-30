@@ -187,5 +187,16 @@ compiles them into `lib/help-content.generated.ts`, rendered at `/help`.
 | Change audit/enqueue behavior | `lib/actions.ts` (`postWrite`), `lib/audit-chunk.ts` |
 | Add/edit help | `help-content/*.md` then `npm run gen:help` |
 
+### Promotion targeting saves with the page Save
+
+`PromoScopeTagPicker` (the "Targeting Scope" side-widget on a promotion) mirrors its
+live selection into the edit `<form>` as a hidden `__promo_targets` JSON field.
+`saveEntity` parses that field and calls `savePromotionTargets` server-side — so the
+**page's primary Save persists targeting** alongside the promo's columns. This runs
+before the empty-patch early-return, so a targeting-only edit still saves. (The
+picker's own "Save targeting" button remains as a secondary path; its standalone
+server action was unreliable in the deployed admin, which is why the main-Save path
+exists.) An empty "scoped" selection is a no-op on the main-Save path.
+
 ---
 **Next:** [04 — Module: framer-push (D1 → Framer)](./04-module-framer-push.md)
