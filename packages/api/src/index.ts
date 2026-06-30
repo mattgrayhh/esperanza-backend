@@ -528,7 +528,10 @@ export function serializePromotionRow(
 // =============================================================================
 // Generic passthrough serializers for the simpler admin-owned entities.
 // =============================================================================
-export function serializeFloorPlanRow(row: Row): Record<string, Json> {
+export function serializeFloorPlanRow(
+  row: Row,
+  resolved: ResolvedPromo | null = null
+): Record<string, Json> {
   return {
     id: String(row['id']),
     name: asStr(row['name']),
@@ -553,6 +556,12 @@ export function serializeFloorPlanRow(row: Row): Record<string, Json> {
     planViewerUrl: asStr(row['plan_viewer_url']),
     virtualTourUrl: asStr(row['virtual_tour_url']),
     brochurePdfUrl: asStr(row['brochure_pdf_url']),
+    // Resolved effective promo (floor-plan / global scope) — same shape QMI &
+    // community cards already carry. Badge shows when set; CTA gated by show_card_cta.
+    promoBannerText: resolved?.promoBannerText ?? '',
+    promoBadgeText: resolved?.promoBadgeText ?? '',
+    promoCtaLabel: resolved?.promoCtaLabel ?? '',
+    promoCtaLink: resolved?.promoCtaLink ?? '',
   };
 }
 
@@ -649,11 +658,17 @@ interface PromoContext {
 
 function toResolved(p: PromoRow | null): ResolvedPromo | null {
   if (!p) return null;
+  // Card surfaces: the badge (badge_text) shows whenever it's set; the CTA button is
+  // gated by the promo's `show_card_cta` toggle (the "two options" per card — corner
+  // badge vs CTA button). banner_text (incentive line) keeps flowing when a promo
+  // resolves. ponytail: incentive text not gated; flip here if marketing wants it tied
+  // to show_card_cta too.
+  const showCardCta = asBool(p.show_card_cta);
   return {
     promoBannerText: asStr(p.banner_text),
     promoBadgeText: asStr(p.badge_text),
-    promoCtaLabel: asStr(p.cta_label),
-    promoCtaLink: asStr(p.cta_url),
+    promoCtaLabel: showCardCta ? asStr(p.cta_label) : '',
+    promoCtaLink: showCardCta ? asStr(p.cta_url) : '',
   };
 }
 
@@ -784,9 +799,15 @@ async function buildPayload(
     }
 
     case 'floorplans': {
+      const ctx = await loadPromoContext(session);
       const res = await session.prepare('SELECT * FROM v_public_floor_plans').all();
       const rows = (res.results ?? []) as unknown as Row[];
-      return { floorplans: rows.map(serializeFloorPlanRow), ts };
+      const floorplans = rows.map((row) => {
+        // floor-plan page context: only floor_plan-targeted (or global) promos match.
+        const resolved = resolveFor(ctx, 'city', { floorPlanId: String(row['id']) }, now);
+        return serializeFloorPlanRow(row, resolved);
+      });
+      return { floorplans, ts };
     }
 
     case 'cities': {

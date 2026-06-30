@@ -24,6 +24,7 @@ import { dirname, join } from 'node:path';
 import {
   serializeQmiRow,
   serializeCommunityRow,
+  serializeFloorPlanRow,
   serializePromotionRow,
   normalizeLatLng,
   type ResolvedPromo,
@@ -345,6 +346,9 @@ function seedPromotions(db: Database.Database) {
   insT.run({ p: 'recPROMOcomm1', t: 'community', i: 'recX6JFH2NKKWSVpE' });
   insT.run({ p: 'recPROMOcomm2', t: 'community', i: 'recX6JFH2NKKWSVpE' });
   insT.run({ p: 'recPROMOglobal', t: 'global', i: null });
+  // The winning community promo enables its card CTA; the global one leaves it OFF
+  // (default 0) so the gating both-ways is exercised by the flatten tests.
+  db.prepare(`UPDATE promotions SET show_card_cta=1 WHERE id='recPROMOcomm1'`).run();
 }
 
 // Build promo context the way the Worker does (active promos + targets + name maps).
@@ -380,11 +384,13 @@ function resolvedFor(
 ): ResolvedPromo | null {
   const winner = resolveEffectivePromo(entity, ids, ctx.promos, ctx.targets, NOW);
   if (!winner) return null;
+  // Mirror the Worker's toResolved(): the card CTA is gated by show_card_cta.
+  const showCardCta = winner['show_card_cta'] === 1 || winner['show_card_cta'] === true;
   return {
     promoBannerText: String(winner['banner_text'] ?? ''),
     promoBadgeText: String(winner['badge_text'] ?? ''),
-    promoCtaLabel: String(winner['cta_label'] ?? ''),
-    promoCtaLink: String(winner['cta_url'] ?? ''),
+    promoCtaLabel: showCardCta ? String(winner['cta_label'] ?? '') : '',
+    promoCtaLink: showCardCta ? String(winner['cta_url'] ?? '') : '',
   };
 }
 
@@ -651,7 +657,32 @@ describe('/communities — mapped dense contract', () => {
     const c = serializeCommunityRow(r, resolved);
     expect(c.promoBannerText).toBe('Rogers Coves Banner WINNER');
     expect(c.promoBadgeText).toBe('Limited');
-    expect(c.promoCtaLabel).toBe('View Details');
+    expect(c.promoCtaLabel).toBe('View Details'); // show_card_cta=1 → CTA shown
+  });
+
+  it('CTA is gated by show_card_cta — a resolved promo with the toggle OFF drops the CTA', () => {
+    const ctx = buildPromoCtx(db);
+    // No community-specific promo for the draft community → the global promo resolves;
+    // it leaves show_card_cta=0, so the banner/badge flow but the CTA is suppressed.
+    const resolved = resolvedFor(ctx, 'community', { communityId: 'recDRAFT000000000' });
+    expect(resolved?.promoBannerText).toBe('Sitewide Banner');
+    expect(resolved?.promoCtaLabel).toBe('');
+    expect(resolved?.promoCtaLink).toBe('');
+  });
+
+  it('serializeFloorPlanRow carries the resolved promo (card badge + CTA) and blanks when none', () => {
+    const row = { id: 'recFPx', name: 'Magnolia', slug: 'magnolia' } as unknown as Row;
+    const withPromo = serializeFloorPlanRow(row, {
+      promoBannerText: 'Plan Banner',
+      promoBadgeText: 'Plan Badge',
+      promoCtaLabel: 'See Plan',
+      promoCtaLink: '/x',
+    });
+    expect(withPromo.promoBadgeText).toBe('Plan Badge');
+    expect(withPromo.promoCtaLabel).toBe('See Plan');
+    const noPromo = serializeFloorPlanRow(row);
+    expect(noPromo.promoBadgeText).toBe('');
+    expect(noPromo.promoCtaLabel).toBe('');
   });
 });
 
