@@ -263,7 +263,24 @@ LEFT JOIN ${FQ(env)}.FCT_HOUSESALES s
   ON h.HOUSE_ID = s.HOUSE_ID AND s.TRANSACTION_TYPE = 'Spec Home Inventory'
 WHERE (h.RHODES_SPEC_FLAG = 'Yes'${specFlagOverrideClause()})
   AND h.SETTLEMENT_COMPLETION_FLAG != 'Completed'
-  AND h.HOUSE_CITY IN (${cityList})`;
+  AND h.HOUSE_CITY IN (${cityList})
+  -- A spec home is "available" only while its CURRENT sale-lifecycle state is on-market.
+  -- SETTLEMENT_COMPLETION_FLAG alone is far too late: a home goes under contract
+  -- ('Pending Sale') / sells ('Sales from housemaster') WEEKS before settlement closes,
+  -- and the old gate kept showing those as available (32 of 135 live homes on 2026-06-30).
+  -- The home's latest FCT_HOUSESALES transaction is the truth — exclude those whose newest
+  -- transaction is an active sale. 'Spec Home Inventory' / cancellations stay (back on market).
+  AND h.HOUSE_ID NOT IN (
+    SELECT HOUSE_ID FROM (
+      SELECT HOUSE_ID, TRANSACTION_TYPE,
+             ROW_NUMBER() OVER (
+               PARTITION BY HOUSE_ID
+               ORDER BY TRANSACTION_DATE DESC, TRANSACTION_TYPE DESC
+             ) AS rn
+      FROM ${FQ(env)}.FCT_HOUSESALES
+    )
+    WHERE rn = 1 AND TRANSACTION_TYPE IN ('Sales from housemaster', 'Pending Sale')
+  )`;
 }
 
 /** OR-clause that admits the verified spec-flag-override ECIs (empty when none). */

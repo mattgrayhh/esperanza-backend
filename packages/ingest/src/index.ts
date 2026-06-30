@@ -182,9 +182,12 @@ export default {
       if (!expected || auth !== expected) {
         return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 403, headers: { 'content-type': 'application/json' } });
       }
+      // ?force=1 — operator override for an intentional bulk unpublish (bypasses the
+      // over-published FRACTION heuristic only; truncation protection still applies).
+      const force = url.searchParams.get('force') === '1';
       try {
-        await runIngest(env);
-        return new Response(JSON.stringify({ ok: true, ran: 'ingest' }), { headers: { 'content-type': 'application/json' } });
+        await runIngest(env, { forceUnpublish: force });
+        return new Response(JSON.stringify({ ok: true, ran: 'ingest', force }), { headers: { 'content-type': 'application/json' } });
       } catch (err) {
         return new Response(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) }), { status: 502, headers: { 'content-type': 'application/json' } });
       }
@@ -193,7 +196,10 @@ export default {
   },
 };
 
-export async function runIngest(env: Env): Promise<void> {
+export async function runIngest(
+  env: Env,
+  opts: { forceUnpublish?: boolean } = {}
+): Promise<void> {
   const startedAt = new Date().toISOString();
   const start = Date.now();
   try {
@@ -229,7 +235,8 @@ export async function runIngest(env: Env): Promise<void> {
       snowflakeFloorPlans,
       existingCommunities,
       existingFloorPlans,
-      communityPriceFrom
+      communityPriceFrom,
+      opts.forceUnpublish ?? false
     );
 
     if (messages.length > 0) await enqueue(env, messages);

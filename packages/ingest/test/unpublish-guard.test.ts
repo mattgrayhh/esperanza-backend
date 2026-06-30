@@ -175,6 +175,34 @@ describe('unpublish guard (diff layer)', () => {
     // healthy run → no trip
     expect(evaluateUnpublishGuard(6, 300, 320, 314).tripped).toBe(false);
   });
+
+  it('force bypasses ONLY the over-published fraction rule, never the truncation rule', () => {
+    // The 2026-06-30 sale-lifecycle fix shape: 32 of 135 published unpublish at
+    // once (24% > 20%), but the Snowflake result is HEALTHY (243 rows, not shrunk).
+    const fraction = () => evaluateUnpublishGuard(32, 135, 135, 243);
+    const fractionForced = () => evaluateUnpublishGuard(32, 135, 135, 243, true);
+    expect(fraction().tripped).toBe(true); // fraction rule fires without force
+    expect(fractionForced().tripped).toBe(false); // force lets the real bulk through
+
+    // Truncation (the actual incident) is NEVER bypassed, even with force.
+    expect(evaluateUnpublishGuard(240, 300, 300, 60).tripped).toBe(true);
+    expect(evaluateUnpublishGuard(240, 300, 300, 60, true).tripped).toBe(true);
+  });
+
+  it('diff(forceUnpublish=true) emits the unpublishes the fraction rule would have blocked', () => {
+    // 100 published; Snowflake returns 70 (70% — healthy, not shrunk) → 30 unpublishes.
+    const existing = range(100).map((i) => existingRow(i));
+    const snowflake = range(70).map((i) => sfRow(i));
+
+    const guarded = diff(snowflake, [], existing, emptyLookups());
+    expect(guarded.unpublishGuard.tripped).toBe(true);
+    expect(guarded.stats.qmisUnpublished).toBe(0);
+
+    const forced = diff(snowflake, [], existing, emptyLookups(), [], [], [], new Map(), true);
+    expect(forced.unpublishGuard.tripped).toBe(false);
+    expect(forced.stats.qmisUnpublished).toBe(30);
+    expect(forced.messages.filter((m) => m.kind === 'qmi.unpublish')).toHaveLength(30);
+  });
 });
 
 // =============================================================================
