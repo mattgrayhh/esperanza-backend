@@ -576,6 +576,16 @@ describe('/qmi — raw passthrough contract', () => {
     expect(rec.fields['promo_text']).toBe('Rogers Coves Banner WINNER');
   });
 
+  it('card_badge_text falls back to the home’s raw D1 incentive (live-site source of truth)', () => {
+    const r = selectQmi(db).find((x) => x['id'] === 'rec0425zwvFWu0r5v')!;
+    // Home with its own incentive → emitted as the card badge.
+    const withInc = serializeQmiRow({ ...r, incentive: 'UNLOCK YOUR 15K FLEX DISCOUNT NOW!' }, null);
+    expect(withInc.fields['card_badge_text']).toBe('UNLOCK YOUR 15K FLEX DISCOUNT NOW!');
+    // No incentive → no badge synthesized (nothing hardcoded).
+    const noInc = serializeQmiRow({ ...r, incentive: null }, null);
+    expect('card_badge_text' in noInc.fields).toBe(false);
+  });
+
   it('self-tour: nter_now surfaces + flags self_tour_available; absent => both omitted', () => {
     const r = selectQmi(db).find((x) => x['id'] === 'rec0425zwvFWu0r5v')!;
     // Seeded row carries no NterNow link and no explicit flag -> neither field emitted.

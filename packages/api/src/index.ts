@@ -332,6 +332,16 @@ export function serializeQmiRow(row: Row, resolved: ResolvedPromo | null): RawAi
     if (resolved.promoBannerText) fields['promo_text'] = resolved.promoBannerText;
   }
 
+  // Card incentive banner = the home's own D1 `incentive` (the live-site source of
+  // truth, e.g. "UNLOCK YOUR 15K FLEX DISCOUNT NOW!"). Emit it as card_badge_text so
+  // the QMI card prints the real per-home incentive instead of synthesizing a
+  // hardcoded rate. ponytail: raw column — the promotions engine doesn't populate
+  // per-home badges. Fallback (only if a resolved promo badge didn't already set it).
+  if (fields['card_badge_text'] === undefined) {
+    const inc = asStr(row['incentive']);
+    if (inc !== '') fields['card_badge_text'] = inc;
+  }
+
   return {
     id: String(row['id']),
     createdTime: asStr(row['created_time'] ?? row['createdTime'] ?? row['created_at']),
