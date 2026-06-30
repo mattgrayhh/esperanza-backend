@@ -194,6 +194,12 @@ const MAPPER_FRAMER_TYPE: Record<string, string> = {
   'communities.featured_video': 'string',
   'communities.schedule_visit': 'link',
   'communities.lending': 'link',
+  // {qmi,communities}.nter_now — the NterNow "Enter Now" self-tour link. Mapper emits
+  // the URL as a string (sIf); the live Framer field must be Link. Pinning 'link' makes
+  // applyTypeOverrides coerce the URL → link and DROP empties (same proven pattern as
+  // schedule_visit/lending/brochure_pdf_url). Re-type the Framer field via /push-schema.
+  'qmi.nter_now': 'link',
+  'communities.nter_now': 'link',
   // floor_plans.description: rich text — widget 'richtext' → formattedText. Mapper emits
   // ftIf (HTML/markdown→formattedText) so bullets render. No pin needed, matching
   // communities.description. (Was pinned 'string' when pushed via sIf.) The live Framer
