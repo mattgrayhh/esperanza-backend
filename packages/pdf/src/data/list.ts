@@ -260,7 +260,7 @@ export async function loadListData(
                 COALESCE(fp.override_starting_price, fp.synced_starting_price) AS price,
                 fp.car_garage_count AS garage
            FROM communities c
-           JOIN floor_plans fp ON (','||fp.community_ids||',') LIKE ('%,'||c.id||',%')
+           JOIN floor_plans fp ON (','||REPLACE(IFNULL(fp.community_ids,''),' ','')||',') LIKE ('%,'||c.id||',%')
           WHERE c.published = 1 AND fp.published = 1 ${isMaster ? '' : 'AND c.city_id = ?'}
          UNION
          SELECT COALESCE(q.override_community_id, q.synced_community_id) AS comm_id,
@@ -302,7 +302,9 @@ export async function loadListData(
     // Community "Plan List" = every published floor plan offered in this community.
     // floor_plans.community_ids is a CSV of community rec-ids (migration 0016) — the same
     // linkage the Framer community page filters on with `community_ids Contains {id}`.
-    rows = ((await db.prepare(`SELECT ${PLAN_COLS} AND (','||COALESCE(fp.community_ids,'')||',') LIKE '%,'||?||',%' ORDER BY fp.name`).bind(cityId).all<any>()).results) ?? [];
+    // The CSV is ", "-joined (comma-SPACE), so strip spaces before anchoring on ",id," —
+    // otherwise only the FIRST id in each plan's list ever matches (see line 236).
+    rows = ((await db.prepare(`SELECT ${PLAN_COLS} AND (','||REPLACE(COALESCE(fp.community_ids,''),' ','')||',') LIKE '%,'||?||',%' ORDER BY fp.name`).bind(cityId).all<any>()).results) ?? [];
   } else {
     rows = isMaster
       ? ((await db.prepare(`SELECT ${PLAN_COLS} ORDER BY fp.name`).all<any>()).results) ?? []

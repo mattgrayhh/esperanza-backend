@@ -80,11 +80,14 @@ describe('loadListData', () => {
     raw.exec(readFileSync(join(DB, 'views.sql'), 'utf8'));
     raw.exec(`INSERT INTO cities (id,slug,city_name) VALUES ('ci1','mcallen','McAllen')`);
     raw.exec(`INSERT INTO communities (id,name,slug,city_id,published) VALUES ('c1','Anaqua at Tres Lagos','anaqua-at-tres-lagos','ci1',1)`);
-    raw.exec(`INSERT INTO floor_plans (id,name,slug,published,community_ids) VALUES ('fp1','Hickory','hickory',1,'c1,c2'),('fp2','Oak','oak',1,'c2'),('fp3','Birch','birch',1,'c1')`);
+    // community_ids is stored ", "-joined (comma-SPACE), and the target id is usually NOT
+    // first in the CSV — Hickory has c1 second. The match must strip spaces, else only a
+    // first-position id ever hits (the bug that left these PDFs empty).
+    raw.exec(`INSERT INTO floor_plans (id,name,slug,published,community_ids) VALUES ('fp1','Hickory','hickory',1,'c2, c1'),('fp2','Oak','oak',1,'c2'),('fp3','Birch','birch',1,'c1')`);
     const data = await loadListData(d1FromSqlite(raw), 'anaqua-at-tres-lagos', 'plans', undefined, 'community');
     expect(data?.cityName).toBe('Anaqua at Tres Lagos');
     const names = data?.cards.map((c) => c.name) ?? [];
-    expect(names).toContain('Hickory');
+    expect(names).toContain('Hickory'); // c1 is second in "c2, c1" → only matches with space-strip
     expect(names).toContain('Birch');
     expect(names).not.toContain('Oak'); // not in c1
   });
