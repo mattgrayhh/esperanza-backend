@@ -43,9 +43,13 @@ interface FloorPlan {
     images: string[]
     virtualTourUrl?: string
     url?: string
+    communities?: string[] // community names this plan is offered in
+    homeType?: string
 }
 
 interface FilterState {
+    community: string
+    homeType: string
     collection: string
     bathrooms: string
     bedrooms: string
@@ -193,6 +197,7 @@ interface ApiFloorPlan {
     startingPrice?: number | null
     image?: string
     virtualTourUrl?: string
+    communities?: string // CSV of community names
 }
 
 // Collection values on the card/filter carry a " Collection" suffix (matches
@@ -202,6 +207,26 @@ function normalizeCollection(raw?: string): string {
     if (!c) return ""
     return /collection$/i.test(c) ? c : `${c} Collection`
 }
+
+// Split a ", "-joined CSV of community names → trimmed, de-duped (case-insensitive).
+function parseCommunityCsv(csv?: string): string[] {
+    if (!csv) return []
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const raw of csv.split(",")) {
+        const t = raw.trim()
+        if (!t) continue
+        const k = t.toLowerCase()
+        if (seen.has(k)) continue
+        seen.add(k)
+        out.push(t)
+    }
+    return out
+}
+
+// Esperanza floor plans are all single-family (mirrors the hardcoded value on the
+// Quick Move-Ins component). Surfaced as a Home Type filter for parity.
+const FP_HOME_TYPE = "Single Family"
 
 // Map a live API record onto the component's FloorPlan shape. starting price comes
 // from D1's COALESCE(override_starting_price, synced_starting_price), surfaced as
@@ -223,6 +248,8 @@ function mapApiFloorPlan(raw: ApiFloorPlan, idx: number): FloorPlan {
         priceFrom: typeof raw.startingPrice === "number" ? raw.startingPrice : 0,
         images: raw.image ? [raw.image] : [],
         virtualTourUrl: raw.virtualTourUrl?.trim() || undefined,
+        communities: parseCommunityCsv(raw.communities),
+        homeType: FP_HOME_TYPE,
     }
 }
 
@@ -1439,6 +1466,8 @@ export default function FloorPlansCatalog({
     const [loading, setLoading] = useState(true)
     const [showFilters, setShowFilters] = useState(true)
     const [filters, setFilters] = useState<FilterState>({
+        community: "",
+        homeType: "",
         collection: "",
         bathrooms: "",
         bedrooms: "",
@@ -1447,6 +1476,21 @@ export default function FloorPlansCatalog({
     })
     const [sortBy, setSortBy] = useState<SortOption>("price-asc")
     const [imageIndices, setImageIndices] = useState<Record<number, number>>({})
+
+    // Filter option lists derived from the loaded plans.
+    const uniqueCommunities = useMemo(
+        () =>
+            [
+                ...new Set(allPlans.flatMap((p) => p.communities ?? [])),
+            ].sort((a, b) => a.localeCompare(b)),
+        [allPlans]
+    )
+    const uniqueHomeTypes = useMemo(
+        () => [
+            ...new Set(allPlans.map((p) => p.homeType || FP_HOME_TYPE)),
+        ],
+        [allPlans]
+    )
 
     const isFramerThumbnail = useMemo(() => {
         try {
@@ -1547,6 +1591,18 @@ export default function FloorPlansCatalog({
     // Filter + sort
     useEffect(() => {
         let out = allPlans.filter((plan) => {
+            if (
+                filters.community &&
+                !(plan.communities ?? []).includes(filters.community)
+            )
+                return false
+
+            if (
+                filters.homeType &&
+                (plan.homeType || FP_HOME_TYPE) !== filters.homeType
+            )
+                return false
+
             if (filters.collection && plan.collection !== filters.collection)
                 return false
 
@@ -1675,7 +1731,9 @@ export default function FloorPlansCatalog({
     return (
         <div className="fp-wrap">
             {/* ── Filter Area (mirrors QuickMoveIns) ────────────────────── */}
-            <div className="fp-filter-area">
+            <div
+                className={`fp-filter-area ${showFilters ? "fp-filters-open" : "fp-filters-closed"}`}
+            >
                 <div className="fp-filter-top">
                     <nav className="fp-tabs" aria-label="Find a home">
                         <a href={communitiesUrl} className="fp-tab">
@@ -1690,6 +1748,50 @@ export default function FloorPlansCatalog({
                     </nav>
 
                     <div className="fp-primary-filters">
+                        {uniqueCommunities.length > 0 && (
+                            <div className="fp-dropdown">
+                                <select
+                                    className="fp-select-pill"
+                                    value={filters.community}
+                                    onChange={(e) =>
+                                        setFilters((p) => ({
+                                            ...p,
+                                            community: e.target.value,
+                                        }))
+                                    }
+                                >
+                                    <option value="">Community</option>
+                                    {uniqueCommunities.map((c) => (
+                                        <option key={c} value={c}>
+                                            {c}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        {uniqueHomeTypes.length > 0 && (
+                            <div className="fp-dropdown">
+                                <select
+                                    className="fp-select-pill"
+                                    value={filters.homeType}
+                                    onChange={(e) =>
+                                        setFilters((p) => ({
+                                            ...p,
+                                            homeType: e.target.value,
+                                        }))
+                                    }
+                                >
+                                    <option value="">Home Type</option>
+                                    {uniqueHomeTypes.map((t) => (
+                                        <option key={t} value={t}>
+                                            {t}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
                         <div className="fp-dropdown">
                             <select
                                 className="fp-select-pill"
@@ -1713,26 +1815,6 @@ export default function FloorPlansCatalog({
                         <div className="fp-dropdown">
                             <select
                                 className="fp-select-pill"
-                                value={filters.bedrooms}
-                                onChange={(e) =>
-                                    setFilters((p) => ({
-                                        ...p,
-                                        bedrooms: e.target.value,
-                                    }))
-                                }
-                            >
-                                <option value="">Bedrooms</option>
-                                <option value="1">1+</option>
-                                <option value="2">2+</option>
-                                <option value="3">3+</option>
-                                <option value="4">4+</option>
-                                <option value="5">5+</option>
-                            </select>
-                        </div>
-
-                        <div className="fp-dropdown">
-                            <select
-                                className="fp-select-pill"
                                 value={filters.bathrooms}
                                 onChange={(e) =>
                                     setFilters((p) => ({
@@ -1749,6 +1831,40 @@ export default function FloorPlansCatalog({
                             </select>
                         </div>
 
+                        <button
+                            className="fp-filter-toggle-block"
+                            onClick={() => setShowFilters(!showFilters)}
+                        >
+                            <span>{showFilters ? "Hide" : "Show"}</span>
+                            <span>Filters</span>
+                            <span className="fp-filter-chev">
+                                {showFilters ? "^" : "v"}
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                {showFilters && (
+                    <div className="fp-filter-bottom">
+                        <div className="fp-dropdown">
+                            <select
+                                className="fp-select-pill"
+                                value={filters.bedrooms}
+                                onChange={(e) =>
+                                    setFilters((p) => ({
+                                        ...p,
+                                        bedrooms: e.target.value,
+                                    }))
+                                }
+                            >
+                                <option value="">Bedrooms</option>
+                                <option value="1">1+</option>
+                                <option value="2">2+</option>
+                                <option value="3">3+</option>
+                                <option value="4">4+</option>
+                                <option value="5">5+</option>
+                            </select>
+                        </div>
                         <div className="fp-dropdown">
                             <select
                                 className="fp-select-pill"
@@ -1772,22 +1888,6 @@ export default function FloorPlansCatalog({
                                 <option value="4000-">Over 4,000</option>
                             </select>
                         </div>
-
-                        <button
-                            className="fp-filter-toggle-block"
-                            onClick={() => setShowFilters(!showFilters)}
-                        >
-                            <span>{showFilters ? "Hide" : "Show"}</span>
-                            <span>Filters</span>
-                            <span className="fp-filter-chev">
-                                {showFilters ? "^" : "v"}
-                            </span>
-                        </button>
-                    </div>
-                </div>
-
-                {showFilters && (
-                    <div className="fp-filter-bottom">
                         <div className="fp-dropdown">
                             <select
                                 className="fp-select-pill"
@@ -1851,6 +1951,20 @@ export default function FloorPlansCatalog({
                         <a href={ctaUrl}>Request Your Time</a>
                     </div>
                 </div>
+            </div>
+
+            {/* Mobile-only full-width filter toggle bar (desktop uses the
+                inline fp-filter-toggle-block instead) */}
+            <div className="fp-mobile-filter-toggle-wrap">
+                <button
+                    className="fp-mobile-filter-toggle"
+                    onClick={() => setShowFilters(!showFilters)}
+                >
+                    {showFilters ? "Hide Filters" : "Show Filters"}
+                    <span className="fp-mobile-filter-chev">
+                        {showFilters ? "^" : "v"}
+                    </span>
+                </button>
             </div>
 
             <p className="fp-disclaimer">
@@ -2138,6 +2252,38 @@ export default function FloorPlansCatalog({
 
                 /* ── Filter Area (1:1 with QuickMoveIns) ───────────────── */
                 .fp-filter-area { background: var(--fp-bg); }
+
+                /* Mobile-only filter toggle bar — hidden on desktop */
+                .fp-mobile-filter-toggle-wrap { display: none; }
+
+                .fp-mobile-filter-toggle {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 8px;
+                    width: 100%;
+                    padding: 14px 16px;
+                    background-color: var(--fp-green);
+                    color: var(--fp-white);
+                    border: none;
+                    font-family: var(--fp-font-overpass);
+                    font-weight: 700;
+                    font-size: 13px;
+                    letter-spacing: 0.5px;
+                    text-transform: uppercase;
+                    cursor: pointer;
+                    transition: background-color 0.3s;
+                }
+
+                .fp-mobile-filter-toggle:hover {
+                    background-color: var(--fp-dark-green);
+                }
+
+                .fp-mobile-filter-chev {
+                    font-family: Arial, sans-serif;
+                    font-size: 15px;
+                    line-height: 1;
+                }
 
                 .fp-filter-top {
                     display: grid;
@@ -2742,16 +2888,44 @@ export default function FloorPlansCatalog({
                         padding: 0 14px;
                     }
 
+                    /* Stack every filter full-width, one per row */
                     .fp-primary-filters {
-                        grid-template-columns: 1fr 1fr 56px;
-                        gap: 8px;
+                        grid-template-columns: 1fr;
+                        padding: 0 16px 12px;
+                        gap: 10px;
                     }
 
-                    /* Hide sqft picker (4th item) on mobile to keep one row */
-                    .fp-primary-filters > .fp-dropdown:nth-child(4) { display: none; }
+                    /* Desktop inline toggle replaced by the full-width bar */
+                    .fp-filter-toggle-block { display: none; }
+
+                    /* When collapsed, hide the filters entirely (the bar stays) */
+                    .fp-filters-closed .fp-primary-filters { display: none; }
+
+                    .fp-filter-bottom {
+                        flex-direction: column;
+                        align-items: stretch;
+                        gap: 10px;
+                        padding: 0 16px 12px;
+                        box-shadow: none;
+                        border-top: none;
+                        min-height: 0;
+                    }
 
                     .fp-filter-bottom .fp-dropdown {
                         flex: 1 1 100%;
+                        min-width: 0;
+                        max-width: none;
+                    }
+
+                    .fp-download {
+                        width: 100%;
+                        flex: 1 1 100%;
+                        text-align: center;
+                    }
+
+                    .fp-mobile-filter-toggle-wrap {
+                        display: block;
+                        padding: 0 16px 8px;
                     }
 
                     .fp-title-row {
