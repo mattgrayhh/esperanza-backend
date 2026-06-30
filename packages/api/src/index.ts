@@ -546,6 +546,8 @@ export function serializeFloorPlanRow(row: Row): Record<string, Json> {
     totalSquareFootage: asIntOrNull(row['total_square_footage']),
     masterBedLocation: asStr(row['master_bed_location']),
     hersScore: asIntOrNull(row['hers_score']),
+    communities: asStr(row['communities']), // CSV of community NAMES → Community filter
+
     image: asStr(row['image_url']) || asStr(row['synced_image_url']),
     description: asStr(row['description']),
     planViewerUrl: asStr(row['plan_viewer_url']),
