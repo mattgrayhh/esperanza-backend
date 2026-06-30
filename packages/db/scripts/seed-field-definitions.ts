@@ -219,7 +219,12 @@ const MAPPER_FRAMER_TYPE: Record<string, string> = {
   // (string); pin coerces string → formattedText (empties drop). Was 'string', which
   // a reseed re-applied and re-broke the communities push on 2026-06-14.
   'communities.security_details': 'formattedText',
-  'collections.content': 'string',
+  // collections.content ("About this Collection") is rich text: mapper emits
+  // formattedText (ftIf) from Framer-subset HTML, same as blogs.content. Pin must
+  // match the emitted type or applyTypeOverrides coerces it back to string (re-breaking
+  // the literal <p>…</p> render). Re-type the live Framer field via /push-schema before
+  // the next collections backfill, or the whole batch aborts. (Was 'string'.)
+  'collections.content': 'formattedText',
   'collections.incentive': 'string',
   'images.caption': 'string',
   'images.caption_clean': 'string',

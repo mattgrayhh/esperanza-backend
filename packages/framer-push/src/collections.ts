@@ -1001,7 +1001,11 @@ const collections: CollectionDef = {
     const fieldData = compactFields({
       title: sIf(row['title']),
       slug: str(slug),
-      content: sIf(row['content']),
+      // "About this Collection" rich text — stored as Framer-subset HTML (admin
+      // RichTextEditor). ftIf passes HTML through as formattedText, same as blogs.content;
+      // was sIf, which pushed it as a plain string so the literal <p>…</p> tags rendered
+      // on the site. field_definitions pins collections.content → formattedText to match.
+      content: ftIf(row['content']),
       header_image: imgIf(row['header_image']),
       header_image_alt: sIf(row['header_image_alt']),
       starting_at: nIf(row['starting_at']),
