@@ -26,6 +26,7 @@
 // =============================================================================
 
 import { deriveAvailabilityText, isAutoAvailabilityText } from './availability.js';
+import { ensurePdfRender } from '@esperanza/db/pdf-ensure';
 import {
   applySynced,
   assertQmiPatchAllowed,
@@ -90,6 +91,14 @@ export interface ConsumerEnv {
    * always binds it (wrangler.toml [[queues.producers]] FRAMER_QUEUE).
    */
   FRAMER_QUEUE?: FramerQueueProducer;
+  /**
+   * Public base of the esperanza-pdf worker (e.g.
+   * https://esperanza-pdf.<sub>.workers.dev). When set, a synced QMI create
+   * self-registers a pdf_renders row + backfills qmi.dynamic_pdf so the home's
+   * Dynamic PDF exists without a manual seed (renders on first fetch, same as
+   * seed-renders). Optional so unit tests can omit it.
+   */
+  PDF_PUBLIC_BASE_URL?: string;
 }
 
 /** kebab slug from an address (worker.js:503-505): lower, [^a-z0-9]+→'-', strip trailing '-'. */
@@ -207,8 +216,22 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
     // Event-driven push: the new (draft) home flows to Framer immediately and
     // surfaces as draft:true (hidden) until admin publishes — which is correct.
     result.framer.push({ collection: 'qmi', action: 'upsert', id });
-    // TODO(pdf): call ensurePdfRender(q, r, 'qmi', id, baseUrl) here on synced create.
-    // Wire at cutover: add PDF_PUBLIC_BASE_URL to ConsumerEnv + thread baseUrl from env.
+    // Self-register the Dynamic PDF: create a not_built pdf_renders row + backfill
+    // qmi.dynamic_pdf. The PDF renders on first fetch (serve.ts cold-render path),
+    // the same lazy mechanism seed-renders relies on — no render-queue binding here.
+    // Best-effort: a PDF hiccup must never fail the synced D1 write.
+    if (env.PDF_PUBLIC_BASE_URL) {
+      try {
+        const q = async (sql: string, binds: unknown[]) =>
+          (await env.DB.prepare(sql).bind(...binds).all()).results as any[];
+        const r = async (sql: string, binds: unknown[]) => {
+          await env.DB.prepare(sql).bind(...binds).run();
+        };
+        await ensurePdfRender(q, r, 'qmi', id, env.PDF_PUBLIC_BASE_URL);
+      } catch (e) {
+        console.error('[ingest:ensurePdfRender]', id, e);
+      }
+    }
     return result;
   }
 
