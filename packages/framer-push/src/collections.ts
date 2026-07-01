@@ -635,6 +635,11 @@ const qmi: CollectionDef = {
       // filter BOTH collections with `community_ids Contains {communityId}`. Auto-current:
       // re-emitted on every QMI push (Snowflake ingest + admin edits), honors the override.
       community_ids: sIf(row['community_id']),
+      // The QMI's OWN rec-ID as a string, mirroring floor_plans.floor_plan_id. Framer's
+      // filter value-picker binds CMS *fields* (not an item's internal id), so the QMI
+      // page needs this to bind as the needle when filtering Promotions:
+      // `Promotion where qmi_ids Contains {qmi_id}` (reciprocal of promotions.qmi_ids).
+      qmi_id: str(id),
       floor_plan: sIf(row['floor_plan']),
       floor_plan_slug: floorPlanSlug === undefined ? undefined : str(floorPlanSlug),
       collection: sIf(row['collection']),
