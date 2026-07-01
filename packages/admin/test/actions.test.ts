@@ -358,6 +358,19 @@ describe('savePromotionTargets — replace-all promotion_targets honoring the CH
     expect(targetsFor('p1')).toEqual([{ target_type: 'community', target_id: 'recCommA' }]);
   });
 
+  it('saveEntity persists QMI targeting from the hidden __promo_targets field', async () => {
+    const res = await saveEntity(
+      'promotions',
+      'p1',
+      form({ __promo_targets: JSON.stringify({ type: 'scoped', qmis: ['recQmiA', 'recQmiB'] }) })
+    );
+    expect(res).toEqual({ ok: true });
+    expect(targetsFor('p1')).toEqual([
+      { target_type: 'qmi', target_id: 'recQmiA' },
+      { target_type: 'qmi', target_id: 'recQmiB' },
+    ]);
+  });
+
   it('saveEntity ignores an empty scoped selection (no-op, does not error)', async () => {
     const res = await saveEntity(
       'promotions',
