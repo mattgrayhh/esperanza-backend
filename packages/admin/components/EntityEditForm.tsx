@@ -35,6 +35,7 @@ import { ElevationGalleryEditor } from './fields/ElevationGalleryEditor';
 import { JsonBlocksEditor } from './fields/JsonBlocksEditor';
 import { PromoScopeTagPicker } from './fields/PromoScopeTagPicker';
 import { CommunityFloorPlansPicker } from './fields/CommunityFloorPlansPicker';
+import { DeleteEntityButton } from './DeleteEntityButton';
 import type { SelectOption } from '../lib/select-options';
 import type { SelectOptionItem } from '../lib/field-config';
 import { cn } from '@/lib/utils';
@@ -252,6 +253,16 @@ export function EntityEditForm({
               initialPublished={publishGate.published}
               initialStatus={publishGate.status}
               statusOptions={publishGate.statusOptions}
+              onResult={setMsg}
+            />
+          ) : null}
+          {!preview && id !== 'new' ? (
+            <DeleteEntityButton
+              entityKey={entityKey}
+              id={id}
+              segment={segment}
+              displayName={displayName}
+              synced={entityKey === 'qmi' || entityKey === 'communities' || entityKey === 'floor_plans'}
               onResult={setMsg}
             />
           ) : null}

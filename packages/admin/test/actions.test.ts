@@ -97,6 +97,7 @@ import {
   togglePublished,
   savePromotionTargets,
   saveCommunityFloorPlans,
+  deleteEntity,
 } from '../lib/actions';
 
 beforeEach(() => {
@@ -379,6 +380,42 @@ describe('savePromotionTargets — replace-all promotion_targets honoring the CH
     );
     expect(res).toEqual({ ok: true });
     expect(targetsFor('p1')).toHaveLength(0);
+  });
+});
+
+// =============================================================================
+// deleteEntity — hard-delete a record + enqueue removal from Framer.
+// =============================================================================
+describe('deleteEntity', () => {
+  beforeEach(() => {
+    H.sqlite
+      .prepare(`INSERT INTO promotions (id, title, published) VALUES ('p1', 'Test', 1)`)
+      .run();
+    H.sqlite
+      .prepare(`INSERT INTO promotion_targets (promotion_id, target_type, target_id) VALUES ('p1','qmi','recQmiA')`)
+      .run();
+  });
+
+  it('removes the row, clears its targets, and enqueues a Framer push', async () => {
+    const res = await deleteEntity('promotions', 'p1');
+    expect(res).toEqual({ ok: true });
+    expect(H.sqlite.prepare('SELECT id FROM promotions WHERE id = ?').get('p1')).toBeUndefined();
+    expect(
+      H.sqlite.prepare('SELECT * FROM promotion_targets WHERE promotion_id = ?').all('p1')
+    ).toHaveLength(0);
+    // postWrite enqueues an upsert; the consumer removes the missing row from Framer.
+    expect(H.queue).toContainEqual({ collection: 'promotions', action: 'upsert', id: 'p1' });
+    expect(auditRows('promotions', 'p1').some((a) => a['action'] === 'delete')).toBe(true);
+  });
+
+  it('errors (no throw) when the record does not exist', async () => {
+    const res = await deleteEntity('promotions', 'nope');
+    expect(res.ok).toBe(false);
+  });
+
+  it('rejects an unknown entity', async () => {
+    const res = await deleteEntity('bogus', 'p1');
+    expect(res.ok).toBe(false);
   });
 });
 
