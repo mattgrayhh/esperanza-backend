@@ -385,3 +385,33 @@ describe('real-column field absent from static config round-trips through the co
     if (f.kind === 'generic') expect(f.value).toBe(URL); // THE BUG: was '' before the fix
   });
 });
+
+// =============================================================================
+// Promotion targeting loads back into the picker. Drizzle keys promotion_targets
+// rows CAMELCASE (targetType/targetId); reading snake_case made the picker load
+// empty (Scoped 0) even when targets existed. Guards that regression.
+// =============================================================================
+describe('buildEditView loads saved promotion targets into the scope picker', () => {
+  beforeEach(() => {
+    H.sqlite.prepare(`INSERT INTO promotions (id, title, published) VALUES ('p1', '15K Flex', 1)`).run();
+    H.sqlite.prepare(`INSERT INTO qmi (id, synced_lot_number, published) VALUES ('recQmiA', 'VT040', 1)`).run();
+    H.sqlite.prepare(`INSERT INTO qmi (id, synced_lot_number, published) VALUES ('recQmiB', 'VT041', 1)`).run();
+    H.sqlite
+      .prepare(`INSERT INTO promotion_targets (promotion_id, target_type, target_id) VALUES ('p1','qmi','recQmiA')`)
+      .run();
+    H.sqlite
+      .prepare(`INSERT INTO promotion_targets (promotion_id, target_type, target_id) VALUES ('p1','qmi','recQmiB')`)
+      .run();
+  });
+
+  it('returns the promoScope widget with the saved QMIs selected (not empty)', async () => {
+    const view = await buildEditView('promotions', 'p1');
+    expect(view).not.toBeNull();
+    const scope = view!.sideWidgets.find((w) => w.kind === 'promoScope');
+    expect(scope).toBeDefined();
+    if (scope && scope.kind === 'promoScope') {
+      expect(scope.global).toBe(false);
+      expect([...scope.selected.qmis].sort()).toEqual(['recQmiA', 'recQmiB']);
+    }
+  });
+});
