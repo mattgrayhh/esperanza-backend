@@ -35,6 +35,7 @@ import { ElevationGalleryEditor } from './fields/ElevationGalleryEditor';
 import { JsonBlocksEditor } from './fields/JsonBlocksEditor';
 import { PromoScopeTagPicker } from './fields/PromoScopeTagPicker';
 import { CommunityFloorPlansPicker } from './fields/CommunityFloorPlansPicker';
+import { DeleteEntityButton } from './DeleteEntityButton';
 import type { SelectOption } from '../lib/select-options';
 import type { SelectOptionItem } from '../lib/field-config';
 import { cn } from '@/lib/utils';
@@ -255,6 +256,16 @@ export function EntityEditForm({
               onResult={setMsg}
             />
           ) : null}
+          {!preview && id !== 'new' ? (
+            <DeleteEntityButton
+              entityKey={entityKey}
+              id={id}
+              segment={segment}
+              displayName={displayName}
+              synced={entityKey === 'qmi' || entityKey === 'communities' || entityKey === 'floor_plans'}
+              onResult={setMsg}
+            />
+          ) : null}
           {preview ? (
             <Badge variant="outline" className="h-5">
               Preview
@@ -387,13 +398,27 @@ export function EntityEditForm({
             </Card>
           ) : null}
         </div>
+
+        {/* promoScope MUST render inside the <form>: its hidden `__promo_targets`
+            input only rides along with the main Save (the proven saveEntity path)
+            if it's a form descendant. The other side-widgets use their own actions,
+            so they stay below the form. */}
+        {preview
+          ? null
+          : sideWidgets
+              .filter((w) => w.kind === 'promoScope')
+              .map((w, i) => (
+                <SideWidgetBlock key={`in-${i}`} entityKey={entityKey} id={id} widget={w} onResult={setMsg} />
+              ))}
       </form>
 
       {preview
         ? null
-        : sideWidgets.map((w, i) => (
-            <SideWidgetBlock key={i} entityKey={entityKey} id={id} widget={w} onResult={setMsg} />
-          ))}
+        : sideWidgets
+            .filter((w) => w.kind !== 'promoScope')
+            .map((w, i) => (
+              <SideWidgetBlock key={i} entityKey={entityKey} id={id} widget={w} onResult={setMsg} />
+            ))}
     </div>
   );
 }

@@ -79,6 +79,25 @@ export const HELP_ARTICLES: HelpArticle[] = [
     "html": "<p>Every home, community, floor plan, and city has a three-way status, set with<br>the <code>Status</code> control at the top of its page.</p><ul><li><code>Draft</code> — not on the website at all. New homes from Snowflake start here.</li><li><code>Coming Soon</code> — the page IS on the website with a \"coming soon\" banner and</li></ul><p>  lead-capture form, but without full details. Use it to build interest before<br>  a community or home is ready.</p><ul><li><code>Live</code> — fully published.</li></ul><h2>Notes</h2><ul><li>Blogs, promotions, testimonials, collections, and images use a simple</li></ul><p>  published/unpublished toggle instead of the three-way status.</p><ul><li>When a home <strong>sells</strong>, the system unpublishes it automatically (back to</li></ul><p>  <code>Draft</code>) on the next sync. You never need to chase sold homes.</p><ul><li>Setting a record back to <code>Draft</code> hides its page from the site within</li></ul><p>  moments. Search engines drop it on their own schedule.</p>"
   },
   {
+    "slug": "delete-a-record",
+    "title": "Delete a record (and Draft vs. Delete)",
+    "category": "Getting Started",
+    "categorySort": 10,
+    "sort": 40,
+    "summary": "How to permanently delete a record, and when to use Draft instead.",
+    "keywords": [
+      "delete",
+      "remove",
+      "trash",
+      "draft",
+      "hide",
+      "cleanup",
+      "test record"
+    ],
+    "entity": null,
+    "html": "<p>Every record's edit page has a red <strong>Delete</strong> button in the top-right header,<br>next to the Status control. Use it to permanently remove a record.</p><p>Clicking <strong>Delete</strong> opens a confirmation showing the record's name. Confirming<br>removes it from the database <strong>and</strong> from the live site (it's taken out of Framer<br>too). This can't be undone.</p><h2>Draft vs. Delete — pick the right one</h2><ul><li><strong>Draft</strong> hides the page from the live site, but the item <strong>stays in the CMS</strong></li></ul><p>  (hidden). Use Draft when you might bring it back, or for anything seasonal.</p><ul><li><strong>Delete</strong> removes the record entirely — from the database and the CMS. Use it</li></ul><p>  for test records and true junk you never want again.</p><h2>Homes, communities, and floor plans</h2><p>These come from Snowflake. If you <strong>Delete</strong> one, the next sync will simply<br>re-create it. For those, <strong>Draft is what you want</strong> to hide it — the Delete<br>dialog warns you about this. Delete is only useful there for stray junk rows that<br>won't come back from Snowflake.</p>"
+  },
+  {
     "slug": "roles-and-permissions",
     "title": "Roles and permissions",
     "category": "Getting Started",

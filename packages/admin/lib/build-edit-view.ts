@@ -220,9 +220,12 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
       .select()
       .from(promotionTargets)
       .where(eq(promotionTargets.promotionId, id))) as Row[];
-    const global = targets.some((t) => t['target_type'] === 'global');
+    // Read via col(): Drizzle keys these rows CAMELCASE (targetType/targetId), so a
+    // bare t['target_type'] was always undefined and the picker loaded empty even
+    // when targets existed. col() reads snake first, falls back to camelCase.
+    const global = targets.some((t) => col(t, 'target_type') === 'global');
     const pick = (type: string) =>
-      targets.filter((t) => t['target_type'] === type).map((t) => s(t['target_id']));
+      targets.filter((t) => col(t, 'target_type') === type).map((t) => s(col(t, 'target_id')));
     const options = await loadPromoScopeOptions();
     sideWidgets.push({
       kind: 'promoScope',

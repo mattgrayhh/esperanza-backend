@@ -469,6 +469,54 @@ export async function saveEntity(
 }
 
 // =============================================================================
+// deleteEntity — hard-delete one record (any entity) and remove it from Framer.
+//
+// Mirrors deleteImageAsset: delete the D1 row, then postWrite a `delete` audit.
+// postWrite enqueues an `upsert`; the consumer re-reads the (now-missing) row and
+// treats a missing row as a removeItems() — so the item leaves Framer too.
+//
+// NOTE (synced entities): qmi/communities/floor_plans are sourced from Snowflake.
+// Deleting the D1 row here does NOT stop the next sync from re-inserting it — the
+// UI warns about this and steers those to Draft instead. We still allow the delete
+// (it's occasionally useful for junk rows) rather than hard-blocking it.
+// =============================================================================
+export async function deleteEntity(
+  entity: string,
+  id: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const def = getEntity(entity);
+  if (!def) return { ok: false, error: `Unknown entity ${entity}` };
+  if (!id || id === 'new') return { ok: false, error: 'Missing record id' };
+
+  let actor: string;
+  try {
+    actor = await getCurrentUser();
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Not authenticated' };
+  }
+
+  const { db } = getDb();
+  const existing = await db.select().from(def.table).where(eq(idColumn(def.table), id)).limit(1);
+  if (existing.length === 0) return { ok: false, error: `${def.label} record not found` };
+
+  // Clear child targeting rows first (D1 FKs may be off, so ON DELETE CASCADE isn't
+  // guaranteed). Orphans are otherwise harmless but this keeps the table clean.
+  if (def.key === 'promotions') {
+    await db.delete(promotionTargets).where(eq(promotionTargets.promotionId, id));
+  }
+
+  await db.delete(def.table).where(eq(idColumn(def.table), id));
+
+  await postWrite(db, def.key, id, [
+    { entity: def.key, entityId: id, field: null, action: 'delete', oldValue: null, newValue: null, actor },
+  ]);
+
+  revalidatePath(`/${def.segment}`);
+  revalidatePath(`/${def.segment}/${id}`);
+  return { ok: true };
+}
+
+// =============================================================================
 // matchAndRenderQmi — assign a floor plan (+ optional synced-field overrides) to an
 // unmatched draft and kick off the brochure PDF render. Reuses saveEntity for the
 // write, so floor_plan_id routes through buildOverrideWrite, gets audited, enqueues
