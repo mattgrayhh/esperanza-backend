@@ -433,7 +433,11 @@ export async function loadFilteredListData(
   // plans
   const where: string[] = ['fp.published = 1'];
   const binds: unknown[] = [];
-  if (f.collection) { where.push('fp.collection = ?'); binds.push(f.collection); }
+  // The Floor Plans catalog sends the DISPLAY value ("Harbor Collection") — its
+  // normalizeCollection() suffixes " Collection" for the UI — but D1 stores the bare
+  // tier name ("Harbor"). Strip the suffix so the filtered download isn't always empty.
+  // ponytail: DB is authoritatively bare, so normalize the param only.
+  if (f.collection) { where.push('fp.collection = ?'); binds.push(f.collection.replace(/\s*Collection\s*$/i, '').trim()); }
   if (f.minBeds != null) { where.push('COALESCE(fp.override_bedroom_max, fp.synced_bedroom_max) >= ?'); binds.push(f.minBeds); }
   if (f.minBaths != null) { where.push('COALESCE(fp.override_bathroom_max, fp.synced_bathroom_max) >= ?'); binds.push(f.minBaths); }
   if (f.minPrice != null) { where.push('COALESCE(fp.override_starting_price, fp.synced_starting_price) >= ?'); binds.push(f.minPrice); }

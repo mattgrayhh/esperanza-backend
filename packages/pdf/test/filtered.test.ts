@@ -34,6 +34,17 @@ describe('loadFiltered', () => {
     expect(addrs).toContain('100 A St');  // 4bd
     expect(addrs).not.toContain('200 B St'); // 3bd filtered out
   });
+
+  it('matches the suffixed collection value the catalog sends against the bare D1 name', async () => {
+    const db = mkDb();
+    // D1 stores the bare tier name; the Floor Plans catalog appends " Collection" for display.
+    await db.prepare(`INSERT INTO floor_plans (id,name,published,collection) VALUES ('fp1','Bear',1,'Harbor')`).run();
+    const env = { DB: db, PDF_PUBLIC_BASE_URL: 'https://pdf.test' } as any;
+    const suffixed = await loadFiltered(env, 'plans', new URLSearchParams('collection=Harbor Collection'));
+    expect(suffixed.data.cards.map((c: any) => c.name)).toContain('Bear');
+    const bare = await loadFiltered(env, 'plans', new URLSearchParams('collection=Harbor'));
+    expect(bare.data.cards.map((c: any) => c.name)).toContain('Bear'); // bare still works too
+  });
 });
 
 describe('renderFilteredPrintPage', () => {
