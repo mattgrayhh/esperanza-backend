@@ -31,6 +31,7 @@ import type { QmiDetailView } from '@/lib/qmi-detail';
 import { SyncedOverrideField } from '@/components/fields/SyncedOverrideField';
 import { GenericField } from '@/components/fields/GenericField';
 import { ImageUploader } from '@/components/fields/ImageUploader';
+import { ImageGalleryEditor } from '@/components/fields/ImageGalleryEditor';
 import { PublishedToggle } from '@/components/fields/PublishedToggle';
 import { LOCATION_STATUS, statusTone } from '@/lib/status';
 import { QmiPhotoGallery } from './QmiPhotoGallery';
@@ -286,6 +287,7 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
                 <SyncedOverrideField {...view.syncedOverride.address} />
                 <SyncedOverrideField {...view.syncedOverride.bedroomCount} />
                 <SyncedOverrideField {...view.syncedOverride.bathroomCount} />
+                <SyncedOverrideField {...view.syncedOverride.livingSquareFootage} />
                 <SyncedOverrideField {...view.syncedOverride.totalSquareFootage} />
                 <SyncedOverrideField {...view.syncedOverride.elevation} />
                 <SyncedOverrideField {...view.syncedOverride.lotNumber} />
@@ -399,6 +401,14 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
                   field="floor_plan_image"
                   label="Floor Plan Image"
                   initialUrl={view.admin.floorPlanImage}
+                />
+                <ImageGalleryEditor
+                  entity="qmi"
+                  id={view.id}
+                  field="photo_gallery_json"
+                  label="Photo Gallery"
+                  initialValue={view.photoGalleryJson}
+                  help="Per-home photos shown on the listing detail page — e.g. upgraded-option photos. Upload in display order."
                 />
               </CardContent>
             </Card>

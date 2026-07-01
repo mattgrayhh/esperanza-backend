@@ -136,6 +136,10 @@ export interface QmiDetailView {
   moveInDate: string;
 
   gallery: GalleryImage[];
+  /** the home's OWN uploaded photo gallery (raw qmi.photo_gallery_json) — feeds the
+   *  editable ImageGalleryEditor. Distinct from `gallery` above, which is the merged
+   *  read-only display set (floor-plan renderings + home images). */
+  photoGalleryJson: string;
 
   /** synced/override field view models (Snowflake-fed, edited via SyncedOverrideField). */
   syncedOverride: {
@@ -143,6 +147,7 @@ export interface QmiDetailView {
     address: SyncedOverrideView;
     bedroomCount: SyncedOverrideView;
     bathroomCount: SyncedOverrideView;
+    livingSquareFootage: SyncedOverrideView;
     totalSquareFootage: SyncedOverrideView;
     elevation: SyncedOverrideView;
     // 0007 Snowflake sync expansion
@@ -414,12 +419,14 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
     moveInDate: s(effectiveValue(r.synced_move_in_date, r.override_move_in_date)),
 
     gallery: dedupedGallery,
+    photoGalleryJson: s(r.photo_gallery_json),
 
     syncedOverride: {
       price: buildSO('price', 'Price', 'number', 'synced_price', 'override_price', 'any', 'Blank = follow Snowflake.'),
       address: buildSO('address', 'Address', 'text', 'synced_address', 'override_address'),
       bedroomCount: buildSO('bedroom_count', 'Bedrooms', 'number', 'synced_bedroom_count', 'override_bedroom_count', '1'),
       bathroomCount: buildSO('bathroom_count', 'Bathrooms', 'number', 'synced_bathroom_count', 'override_bathroom_count', 'any'),
+      livingSquareFootage: buildSO('living_square_footage', 'Living SqFt', 'number', 'synced_living_square_footage', 'override_living_square_footage', '1'),
       totalSquareFootage: buildSO('total_square_footage', 'Total SqFt', 'number', 'synced_total_square_footage', 'override_total_square_footage', '1'),
       elevation: buildSO('elevation', 'Elevation', 'text', 'synced_elevation', 'override_elevation'),
       // 0007 Snowflake sync expansion

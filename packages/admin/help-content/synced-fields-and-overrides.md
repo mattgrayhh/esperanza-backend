@@ -15,9 +15,9 @@ these fields keep themselves up to date.
 
 ## Which fields are synced?
 
-- **Homes**: address, price, beds/baths, square footage, elevation and
-  material type, construction stage, lot number, move-in date, model-home
-  flag, and the city / community / floor-plan assignment.
+- **Homes**: address, price, beds/baths, living and total square footage,
+  elevation and material type, construction stage, lot number, move-in date,
+  model-home flag, and the city / community / floor-plan assignment.
 - **Communities**: square-footage range, bed and bath ranges, and
   `Price From` (the lowest base plan price in that community). See
   *Close-out communities* below for how `Price From` changes when a community
