@@ -1181,6 +1181,7 @@ const promotions: CollectionDef = {
       show_card_cta: bool(asBool(row['show_card_cta'])),
       community_ids: sIf(row['community_ids']),
       floor_plan_ids: sIf(row['floor_plan_ids']),
+      qmi_ids: sIf(row['qmi_ids']),
       collection_ids: sIf(row['collection_ids']),
       // "Available in N communities" count (see PROMO_COMMUNITY_COUNT_SQL). Always a
       // number (COUNT never null), 0 included; bind into the incentive-tile copy.

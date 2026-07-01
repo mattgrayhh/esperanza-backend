@@ -167,6 +167,37 @@ describe('Promotions mapper — targets, image fallback, gate', () => {
     expect(f['cta_link']?.type).toBe('link');
     expect(sval(f['cta_link'])).toBe('/blog/esperanza-homes-unveils-three-new-floor-plans/');
   });
+
+  it('emits qmi_ids as a CSV of the promo\'s qmi targets (majority target type in prod)', () => {
+    const db = freshDb();
+    insertRow(db, 'promotions', {
+      id: 'recPROMOQMI01',
+      title: 'QMI Flex Discount',
+      published: 1,
+      updated_at: '2026-06-30T12:00:00.000Z',
+    });
+    const t = db.prepare(
+      `INSERT INTO promotion_targets (promotion_id, target_type, target_id) VALUES (?, ?, ?)`
+    );
+    t.run('recPROMOQMI01', 'qmi', 'recQMIA0001');
+    t.run('recPROMOQMI01', 'qmi', 'recQMIB0002');
+    const row = db.prepare(def.selectByIdSql).get('recPROMOQMI01') as Record<string, unknown>;
+    const f = def.map(row).fieldData;
+    // group_concat order = insertion order for this fixture
+    expect(sval(f['qmi_ids'])).toBe('recQMIA0001,recQMIB0002');
+  });
+
+  it('emits an explicit empty qmi_ids when the promo has no qmi targets (clear propagates)', () => {
+    const db = freshDb();
+    insertRow(db, 'promotions', {
+      id: 'recPROMONOQMI',
+      title: 'No QMI',
+      published: 1,
+      updated_at: '2026-06-30T12:00:00.000Z',
+    });
+    const row = db.prepare(def.selectByIdSql).get('recPROMONOQMI') as Record<string, unknown>;
+    expect(def.map(row).fieldData['qmi_ids']).toEqual({ type: 'string', value: '' });
+  });
 });
 
 describe('Promotions mapper — pdf link + effective rate (migration 0020)', () => {
