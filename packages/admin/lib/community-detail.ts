@@ -8,10 +8,9 @@
 // to the generic editor.
 // =============================================================================
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getReadDb } from './db';
 import { communities } from '@esperanza/db';
-import { effectiveValue } from '@esperanza/db/override';
 import { resolveFieldConfig } from './field-config-source';
 import { loadOptionSets } from './select-options';
 import { buildFieldView, parseCustomFields } from './build-edit-view';
@@ -119,9 +118,16 @@ export async function buildCommunityDetailView(id: string): Promise<CommunityDet
   };
 
   // ── 5. Stats ─────────────────────────────────────────────────────────────────
-  const syncedPrice = n(col(row, 'synced_price_from') ?? col(row, 'syncedPriceFrom'));
-  const overridePrice = n(col(row, 'override_price_from') ?? col(row, 'overridePriceFrom'));
-  const effectivePrice = effectiveValue(syncedPrice, overridePrice);
+  // Read the close-out-aware price_from straight from v_public_communities — the SAME
+  // value the public site, API, and Framer push use — so the admin stats card AND the
+  // map pin (below) never show a different number than what's live. A plain
+  // COALESCE(override, synced) here would skip the close-out elevation/offered-min
+  // resolution and display the dev-wide synced_price_from for close-out communities.
+  // The view has no publish gate, so unpublished communities resolve too.
+  const [priceRow] = await db.all<{ price_from: number | null }>(
+    sql`SELECT price_from FROM v_public_communities WHERE id = ${id}`
+  );
+  const effectivePrice = n(priceRow?.price_from);
 
   const startingPrice = effectivePrice != null ? `$${effectivePrice.toLocaleString()}` : '';
 
