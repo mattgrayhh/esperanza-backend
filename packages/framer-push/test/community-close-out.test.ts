@@ -201,3 +201,21 @@ describe('Close-Out Community price_from', () => {
     expect(mapperPrice(db)).toBe(282990);
   });
 });
+
+// The close_out flag itself is pushed to Framer (a boolean field) so a City/community
+// page can badge close-out communities or branch layout on it — separate from its price
+// effect, which is already baked into price_from above.
+describe('Close-Out flag pass-through to Framer', () => {
+  const mapFlag = (db: ReturnType<typeof freshDb>) => {
+    const row = db.prepare(def.selectByIdSql).get(COM) as Record<string, unknown>;
+    return def.map(row).fieldData['close_out'];
+  };
+
+  it('emits close_out: true for a close-out community', () => {
+    expect(mapFlag(setup({ closeOut: true }))).toEqual({ type: 'boolean', value: true });
+  });
+
+  it('emits close_out: false for a normal community', () => {
+    expect(mapFlag(setup({ closeOut: false }))).toEqual({ type: 'boolean', value: false });
+  });
+});

@@ -83,6 +83,26 @@ The resolution is computed live (nothing derived is stored on `communities`) and
 `framer-push` `selectById` + `selectAll`, and the `pdf` list query. The elevation label
 is internal-only (never pushed to Framer).
 
+**Every surface that shows a price reads this one resolution — no plain `COALESCE(override,
+synced)` shortcuts** (those skip close-out and show a stale, lower number). Concretely:
+
+- **Community card / API / PDF** — `v_public_communities.price_from` (above).
+- **Admin community detail** (stats card *and* the map-pin preview) — reads
+  `price_from` straight from `v_public_communities` (`packages/admin/lib/community-detail.ts`),
+  so the admin never shows a different number than the live site.
+- **City "Homes from"** — the Framer *Cities* collection pushes `price_from` =
+  `MIN(v_public_communities.price_from)` across that city's **published** communities
+  (`CITY_COUNTS_SQL` in `framer-push`). Because it reads the view, the close-out logic is
+  applied exactly once and the city figure can never drift from the community cards.
+- **`close_out` flag** — the boolean itself is pushed to the Framer *Community* collection
+  (for badging / conditional layout); the price effect is already in `price_from`.
+
+> ⚠ The **city-page neighborhood map** (`cities.neighborhoods_map_json`, currently on the
+> unmerged `feat/city-neighborhoods-map` branch) builds each pin's `priceFrom` from
+> `COALESCE(override_price_from, synced_price_from)` — **not** close-out aware. When that
+> branch is merged it must read the close-out `price_from` (e.g. from `v_public_communities`)
+> or close-out communities will show a lower number on the map than on their cards.
+
 ---
 
 ## The `synced_*` vs `override_*` column pattern (★ critical)

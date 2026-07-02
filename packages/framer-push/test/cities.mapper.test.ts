@@ -170,6 +170,69 @@ describe('Cities mapper — community_ids (group_concat of linked communities)',
   });
 });
 
+describe('Cities mapper — price_from ("Homes from" = lowest community price in the city)', () => {
+  it('takes the MIN of the close-out-aware community price_from, not synced_price_from', () => {
+    const db = freshDb();
+    insertRow(db, 'cities', { id: 'recCITYpf01', city_name: 'Priceville', published: 1 });
+
+    // Community A is a CLOSE-OUT community: synced dev-wide MIN is 282990, but its only
+    // OFFERED published plan starts at 250000 → close-out price_from = 250000. If the
+    // city price used synced_price_from it would wrongly be 282990.
+    insertRow(db, 'communities', {
+      id: 'recCITYpf01comA',
+      city_id: 'recCITYpf01',
+      published: 1,
+      close_out: 1,
+      synced_price_from: 282990,
+    });
+    insertRow(db, 'floor_plans', {
+      id: 'recFPpfA',
+      published: 1,
+      community_ids: 'recCITYpf01comA',
+      synced_starting_price: 250000,
+    });
+
+    // Community B: normal, synced 300000.
+    insertRow(db, 'communities', {
+      id: 'recCITYpf01comB',
+      city_id: 'recCITYpf01',
+      published: 1,
+      synced_price_from: 300000,
+    });
+
+    // Excluded: unpublished community (would be the cheapest at 199000) and an
+    // other-city community.
+    insertRow(db, 'communities', {
+      id: 'recCITYpf01comU',
+      city_id: 'recCITYpf01',
+      published: 0,
+      synced_price_from: 199000,
+    });
+    insertRow(db, 'communities', {
+      id: 'recCITYpf01comX',
+      city_id: 'recCITYother',
+      published: 1,
+      synced_price_from: 150000,
+    });
+
+    const f = mapOne(db, 'recCITYpf01').fieldData;
+    expect(f['price_from']?.type).toBe('number');
+    // MIN(A close-out 250000, B 300000) = 250000. NOT 282990 (A's synced) → proves the
+    // close-out resolution flows through; NOT 199000 (unpublished) / 150000 (other city).
+    expect(sval(f['price_from'])).toBe(250000);
+  });
+
+  it('omits price_from when the city has no priced published communities', () => {
+    const db = freshDb();
+    insertRow(db, 'cities', { id: 'recCITYnp', city_name: 'Nopriceville', published: 1 });
+    // A published community with no resolvable price (NULL synced, no offered plans).
+    insertRow(db, 'communities', { id: 'recCITYnpcom', city_id: 'recCITYnp', published: 1 });
+    const f = mapOne(db, 'recCITYnp').fieldData;
+    // MIN over an empty set → NULL → nIf drops it (undefined), compacted away.
+    expect(f['price_from']).toBeUndefined();
+  });
+});
+
 describe('Cities mapper — neighborhoods_map_json (community pins for the map component)', () => {
   it('emits a JSON array of published, geo-located communities in this city', () => {
     const db = freshDb();

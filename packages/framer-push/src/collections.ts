@@ -942,6 +942,11 @@ const communities: CollectionDef = {
       community_logo_alt: sIf(row['community_logo_alt']),
       master_planned: bool(asBool(row['master_planned'])),
       coming_soon: bool(asBool(row['coming_soon'])),
+      // Close-out flag — surfaced so a City/community page can badge close-out communities
+      // or branch layout on it. The PRICE effect is already baked into price_from above;
+      // this is just the boolean. field_definitions already types communities.close_out as
+      // boolean; the live Framer field is created/typed via /push-schema before backfill.
+      close_out: bool(asBool(row['close_out'])),
       published: bool(asBool(row['published'])),
       // CSV of floor-plan rec-IDs offered in this community (group_concat in the SQL
       // above) — same string/passthrough posture as the other *_ids fields (no
@@ -1290,7 +1295,14 @@ const CITY_COUNTS_SQL = `
                 LIKE '%,' || cm.id || ',%')
      ), 0)
      FROM communities cm
-    WHERE cm.city_id = c.id AND cm.published = 1) AS floor_plans_count_live`;
+    WHERE cm.city_id = c.id AND cm.published = 1) AS floor_plans_count_live,
+  -- "Homes from" for the city = the lowest community price_from among this city's
+  -- PUBLISHED communities. Reads v_public_communities so the close-out elevation /
+  -- offered-min resolution is applied in exactly ONE place (single source of truth) and
+  -- the city figure can never drift from the community cards / map pins. price_from > 0
+  -- drops communities with no resolvable price (NULL / 0). NULL if the city has none.
+  (SELECT MIN(v.price_from) FROM v_public_communities v
+     WHERE v.city_id = c.id AND v.published = 1 AND v.price_from > 0) AS price_from_live`;
 
 const cities: CollectionDef = {
   key: 'cities',
@@ -1351,6 +1363,11 @@ const cities: CollectionDef = {
       community_count: nIf(row['community_count_live'] ?? row['community_count']),
       floor_plans_count: nIf(row['floor_plans_count_live'] ?? row['floor_plans_count']),
       move_in_homes_count: nIf(row['move_in_homes_count_live'] ?? row['move_in_homes_count']),
+      // "Homes from" = lowest close-out-aware community price in this city (CITY_COUNTS_SQL
+      // above). Same number/close-out semantics as the community price_from field. No
+      // field_definitions row (computed, not admin-editable) — the Framer Cities field is
+      // created via POST /schema (number), like community_ids / embed_image.
+      price_from: nIf(row['price_from_live']),
       incentive: sIf(row['incentive']),
       coming_soon: bool(asBool(row['coming_soon'])), // live Cities (Managed) has the field (added 2026-06)
       // CSV of community rec-IDs in this city (group_concat in the SQL above) — same
