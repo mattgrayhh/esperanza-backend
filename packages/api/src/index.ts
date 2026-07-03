@@ -47,6 +47,7 @@ import {
   type PromoTargetType,
 } from '@esperanza/db/promo';
 import { buildSiteSearchPayload } from './sitesearch.js';
+import * as Sentry from '@sentry/cloudflare';
 
 // -----------------------------------------------------------------------------
 // Env
@@ -56,6 +57,9 @@ export interface Env {
   IMAGES: R2Bucket;
   /** Optional CSV CORS allowlist. Mirrors the legacy ALLOWED_ORIGINS behaviour. */
   ALLOWED_ORIGINS?: string;
+  /** Sentry DSN for backend error monitoring. Set via `wrangler secret put SENTRY_DSN`.
+   *  Unset -> Sentry is disabled (no-op), so local/dev/test runs stay clean. */
+  SENTRY_DSN?: string;
 }
 
 // -----------------------------------------------------------------------------
@@ -956,7 +960,7 @@ function corsHeaders(env: Env, requestOrigin: string | null): Headers {
 // =============================================================================
 // Worker entry — routes /api/public/<entity>, Cache API wrap, D1 read session.
 // =============================================================================
-export default {
+const apiHandler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const origin = request.headers.get('Origin');
@@ -1019,6 +1023,9 @@ export default {
       for (const [k, v] of cors) out.headers.set(k, v);
       return out;
     } catch (err) {
+      // The handler swallows upstream/D1 failures into a 502, so Sentry's automatic
+      // uncaught-error capture never sees them — report explicitly. No-op if disabled.
+      Sentry.captureException(err);
       const detail = err instanceof Error ? err.message : String(err);
       const out = new Response(JSON.stringify({ error: 'upstream_failure', detail }), {
         status: 502,
@@ -1029,3 +1036,17 @@ export default {
     }
   },
 };
+
+// Wrap the handler so unhandled errors (and 502 upstream failures thrown below) are
+// reported to Sentry. `enabled: false` when SENTRY_DSN is unset -> a clean no-op for
+// local/dev/test. Errors-only for now (no tracing); flip tracesSampleRate up later for
+// performance/latency visibility on the public read path.
+export default Sentry.withSentry(
+  (env: Env) => ({
+    dsn: env.SENTRY_DSN,
+    enabled: Boolean(env.SENTRY_DSN),
+    tracesSampleRate: 0,
+    sendDefaultPii: false,
+  }),
+  apiHandler,
+);
