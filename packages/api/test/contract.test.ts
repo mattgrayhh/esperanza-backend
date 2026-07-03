@@ -605,7 +605,7 @@ describe('/qmi — raw passthrough contract', () => {
 
 // =============================================================================
 describe('/communities — mapped dense contract', () => {
-  it('has exactly the 20 contract keys, all present', () => {
+  it('has exactly the 23 contract keys, all present', () => {
     // v_public_communities now bakes the published gate (draft column dropped in 0005).
     const rows = db.prepare('SELECT * FROM v_public_communities').all() as Row[];
     const ctx = buildPromoCtx(db);

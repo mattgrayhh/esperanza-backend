@@ -141,6 +141,33 @@ function fpArray(raw: unknown): Json[] | undefined {
   return [inner as Json];
 }
 
+/**
+ * QMI photo gallery: v_public_qmi.photo_gallery_json is a JSON string array of
+ * {url, alt} (tolerates bare URL strings too). Emitted at fields.photo_gallery
+ * (same key framer-push uses); omitted when empty so galleryless homes fall back
+ * to image_url. The plain coercers can't carry a multi-element array, so emit here.
+ */
+function parseGallery(raw: unknown): Array<{ url: string; alt: string }> {
+  if (raw == null || raw === '') return [];
+  let arr: unknown;
+  try {
+    arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(arr)) return [];
+  const out: Array<{ url: string; alt: string }> = [];
+  for (const item of arr) {
+    if (item && typeof item === 'object') {
+      const url = asStr((item as Record<string, unknown>)['url']);
+      if (url) out.push({ url, alt: asStr((item as Record<string, unknown>)['alt']) });
+    } else if (typeof item === 'string' && item.trim()) {
+      out.push({ url: item.trim(), alt: '' });
+    }
+  }
+  return out;
+}
+
 // =============================================================================
 // Row shapes read out of the views (snake_case columns the views expose)
 // =============================================================================
@@ -301,6 +328,11 @@ export function serializeQmiRow(row: Row, resolved: ResolvedPromo | null): RawAi
     fields['self_tour_available'] = true;
   }
 
+  // Per-home photo gallery (v_public_qmi.photo_gallery_json). Emit explicitly so the
+  // detail page gets real model-home photos; galleryless homes fall back to image_url.
+  const gallery = parseGallery(row['photo_gallery_json']);
+  if (gallery.length) fields['photo_gallery'] = gallery;
+
   for (const [col, label] of QMI_FP) {
     const arr = fpArray(row[col]);
     if (arr !== undefined) fields[label] = arr;
@@ -381,6 +413,9 @@ export interface CommunityPublic {
   description: string;
   amenities: string;
   comingSoon: boolean;
+  officePhone: string;
+  officeHours: string;
+  scheduleVisit: string;
   promoBannerText: string;
   promoBadgeText: string;
   promoCtaLabel: string;
@@ -416,6 +451,9 @@ export function serializeCommunityRow(row: Row, resolved: ResolvedPromo | null):
     description: asStr(row['description']),
     amenities: asStr(row['amenities']),
     comingSoon: asBool(row['coming_soon']),
+    officePhone: asStr(row['office_phone']),
+    officeHours: asStr(row['office_hours']),
+    scheduleVisit: asStr(row['schedule_visit']),
     promoBannerText: resolved?.promoBannerText ?? '',
     promoBadgeText: resolved?.promoBadgeText ?? '',
     promoCtaLabel: resolved?.promoCtaLabel ?? '',
