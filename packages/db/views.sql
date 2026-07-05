@@ -49,7 +49,10 @@ SELECT
   -- legacy singleSelect name mirrors (raw-record contract — plain, no pair)
   q.synced_city_name        AS city,
   q.synced_community_name   AS community,
-  q.synced_floor_plan_name  AS floor_plan,
+  -- Resolve the display name through the SAME plan the FP:* lookups join on, so an
+  -- override_floor_plan_id changes the visible plan name too (synced name as the
+  -- no-link fallback; for normal rows fp.name == synced_floor_plan_name anyway).
+  COALESCE(fp.name, q.synced_floor_plan_name) AS floor_plan,
 
   -- ── ingest identity / join keys (plain) ──────────────────────────────────
   q.eci_key, q.mark_job_number, q.housenumber,
