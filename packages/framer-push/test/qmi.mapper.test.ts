@@ -43,7 +43,7 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
       synced_starting_price: 389000, // → FP: Starting Price
       fp_image: '[{"url":"https://media.esperanzahomes.com/fp/kestrel.jpg"}]',
       floor_plan_image:
-        'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFPkestrel0001/floor-plan.png', // → fp_floor_plan_image (top-down layout)
+        'https://img.hazardhouse.ai/floor_plans/recFPkestrel0001/floor-plan.png', // → fp_floor_plan_image (top-down layout)
     });
     insertRow(db, 'qmi', {
       id: 'recQMI0001ABCDEF',
@@ -111,7 +111,7 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
 
     // floor_plan_image: top-down layout resolved from the linked floor plan via JOIN
     expect(sval(f['floor_plan_image'])).toBe(
-      'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFPkestrel0001/floor-plan.png'
+      'https://img.hazardhouse.ai/floor_plans/recFPkestrel0001/floor-plan.png'
     );
     expect(f['floor_plan_image']?.type).toBe('image');
 

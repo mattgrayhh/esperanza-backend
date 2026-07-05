@@ -23,7 +23,7 @@ binding = "IMAGES"
 bucket_name = "esperanza-cms"
 
 [vars]
-IMAGES_PUBLIC_BASE_URL = "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev"
+IMAGES_PUBLIC_BASE_URL = "https://img.hazardhouse.ai"
 # PDF links resolve through the WORKER route (/pdf/<type>/<slug>), not the raw R2 bucket
 # (R2 objects live at pdf/<type>/<id>.pdf). At cutover, repoint to media./pdf.esperanzahomes.com.
 PDF_PUBLIC_BASE_URL = "https://esperanza-pdf.round-base-ed8c.workers.dev"

@@ -92,13 +92,15 @@ service = "rhodes-availability"
 # Non-secret vars.
 #   IMAGES_PUBLIC_BASE_URL — public base for the R2 bucket. uploadImage() builds the
 #                            STABLE url as `${IMAGES_PUBLIC_BASE_URL}/<entity>/<id>/<file>`.
-#                            Set to the bucket's resolving r2.dev URL so admin-uploaded
-#                            images load without a custom zone. NEVER a
-#                            v5.airtableusercontent.com url.
+#                            MUST be the custom domain bound to the esperanza-cms
+#                            bucket (img.hazardhouse.ai) — NEVER the pub-*.r2.dev
+#                            managed URL, which Cloudflare rate-limits / documents as
+#                            dev-only (caused intermittent broken images for some users;
+#                            2026-07). NEVER a v5.airtableusercontent.com url.
 # DO NOT set ADMIN_DEV_EMAIL here — it lives in .dev.vars (local only) so the login gate
 # can never be bypassed in a deployed environment.
 [vars]
-IMAGES_PUBLIC_BASE_URL = "https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev"
+IMAGES_PUBLIC_BASE_URL = "https://img.hazardhouse.ai"
 # PDF links resolve through the esperanza-pdf WORKER route, not the raw R2 bucket.
 PDF_PUBLIC_BASE_URL = "https://esperanza-pdf.round-base-ed8c.workers.dev"
 # Public fallback for framer-push POST /schema when the FRAMER_PUSH service binding is

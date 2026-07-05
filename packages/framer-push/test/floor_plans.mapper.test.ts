@@ -15,7 +15,7 @@ const sval = (v: FieldValue | ArrayFieldValue | undefined) =>
   v && v.type !== 'array' ? (v as FieldValue).value : undefined;
 
 const FP_URL =
-  'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFP1/floor-plan.png';
+  'https://img.hazardhouse.ai/floor_plans/recFP1/floor-plan.png';
 
 function mapOne(db: ReturnType<typeof freshDb>, id: string) {
   const row = db.prepare(def.selectByIdSql).get(id) as Record<string, unknown>;
@@ -132,8 +132,8 @@ describe('Floor Plans mapper — floor_plan_id self-id (needle for Available Loc
 });
 
 describe('Floor Plans mapper — interior_photos (migration 0011)', () => {
-  const G1 = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFP4/gallery-0-kitchen.jpg';
-  const G2 = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFP4/gallery-1-living.jpg';
+  const G1 = 'https://img.hazardhouse.ai/floor_plans/recFP4/gallery-0-kitchen.jpg';
+  const G2 = 'https://img.hazardhouse.ai/floor_plans/recFP4/gallery-1-living.jpg';
 
   it('emits interior_photos as an image array from interior_photos_json ({url,alt} shape)', () => {
     const db = freshDb();
@@ -168,8 +168,8 @@ describe('Floor Plans mapper — interior_photos (migration 0011)', () => {
 });
 
 describe('Floor Plans mapper — elevations_json (labeled elevation grid)', () => {
-  const E1 = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFP6/Agave_Tuscan_Brick.jpg';
-  const E2 = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFP6/Agave_Farmhouse.jpg';
+  const E1 = 'https://img.hazardhouse.ai/floor_plans/recFP6/Agave_Tuscan_Brick.jpg';
+  const E2 = 'https://img.hazardhouse.ai/floor_plans/recFP6/Agave_Farmhouse.jpg';
 
   it('emits elevations_json as a JSON string of {url,type} preserving the stored type', () => {
     const db = freshDb();
@@ -226,7 +226,7 @@ describe('Floor Plans mapper — elevations_json (labeled elevation grid)', () =
 
 describe('Floor Plans mapper — brochure_pdf (R2 designed brochure)', () => {
   const BR_URL =
-    'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFP9/brochure_pdf-Barbados_3072025.pdf';
+    'https://img.hazardhouse.ai/floor_plans/recFP9/brochure_pdf-Barbados_3072025.pdf';
 
   it('emits brochure_pdf as a string field from the floor_plans column', () => {
     const db = freshDb();
@@ -257,7 +257,7 @@ describe('Floor Plans mapper — brochure_pdf (R2 designed brochure)', () => {
 
 describe('Floor Plans mapper — brochure_pdf_url (Link field, prefer designed brochure)', () => {
   const DESIGNED =
-    'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/floor_plans/recFPa/brochure_pdf-Barbados_3072025.pdf';
+    'https://img.hazardhouse.ai/floor_plans/recFPa/brochure_pdf-Barbados_3072025.pdf';
   const DYNAMIC = 'https://esperanza-pdf.round-base-ed8c.workers.dev/pdf/floorplan/barbados';
 
   it('prefers the designed R2 brochure over the dynamic PDF for the Link field', () => {

@@ -62,7 +62,7 @@ const BUCKET = 'esperanza-cms';
 const DB = 'esperanza';
 // Public base for recorded urls — the r2.dev public bucket url (same one the
 // floor-plan-image loader + the qmi hero rehost recorded). Overridable.
-const PUBLIC_BASE = (process.env.CDN_BASE_URL ?? 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev').replace(/\/+$/, '');
+const PUBLIC_BASE = (process.env.CDN_BASE_URL ?? 'https://img.hazardhouse.ai').replace(/\/+$/, '');
 
 interface ScrapedHome {
   d1_id: string;

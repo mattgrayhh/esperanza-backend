@@ -7,7 +7,7 @@ import { money } from '../data/shared';
 // Provides: Esperanza logo, equal housing mark, and the overall page chrome.
 // Every dynamic-data area is covered by a matching-color CSS overlay so the original
 // data doesn't bleed through, then our data sits on top.
-const QMI_TEMPLATE_PNG = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/pdf-templates/qmi-spec-sheet.png';
+const QMI_TEMPLATE_PNG = 'https://img.hazardhouse.ai/pdf-templates/qmi-spec-sheet.png';
 
 // Colors extracted from the reference PNG via pixel sampling (300dpi).
 const GREEN  = '#295135'; // rgb(41,81,53)   — price box

@@ -27,7 +27,7 @@ const DEFAULT_MAILLAYER_URL = 'https://mailer.hazardhouse.ai/api/transactional/s
 
 // Esperanza Homes logo, hosted on the public R2 bucket (emails need an absolute URL;
 // SVG is unreliable across mail clients, so this is a 150x58 PNG).
-const LOGO_URL = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/brand/esperanza-logo.png';
+const LOGO_URL = 'https://img.hazardhouse.ai/brand/esperanza-logo.png';
 
 /**
  * Read MailLayer config. In the deployed Worker, wrangler [vars] + secrets live on
