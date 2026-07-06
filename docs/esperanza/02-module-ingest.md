@@ -16,8 +16,13 @@ Every run (`runIngest()`):
    - `qmisSql()` — spec homes (`DM_HOUSE` ⋈ `FCT_HOUSESALES`), filtered to spec homes that
      aren't completed, in the city whitelist.
    - `communitiesSql()` — community aggregates (counts, min/max ranges) from `DM_HOUSE`.
-   - `floorPlansSql()` — plan bed/bath/sqft/price from `DM_FLOOR_PLAN`.
-   - `communityPriceFromSql()` — each community's "price from."
+   - `floorPlansSql()` — plan bed/bath/sqft/price from `DM_FLOOR_PLAN`. Since 0025 the
+     "starting at" price prefers the `Traditional / Brick` elevation where offered,
+     falling back to the cheapest offered (MIN-any caught cheaper non-standard
+     elevations, e.g. Agave's Contemporary/Brick).
+   - `communityPriceFromSql()` — each community's "price from," Traditional/Brick-
+     preferred since 0025 (same rule as `floorPlansSql`). Community bath ranges in
+     `communitiesSql()` include half baths (`BASE_BATHROOMS + 0.5 * BASE_HALFBATHROOMS`).
 3. **Loads current D1 state** and **diffs** Snowflake against D1's existing `synced_*`
    values. Only genuine changes produce work — no churn.
 4. **Enqueues** one message per changed record onto `esperanza-sync-queue`.

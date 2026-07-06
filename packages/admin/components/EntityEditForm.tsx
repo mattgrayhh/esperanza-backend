@@ -132,6 +132,13 @@ export interface JsonBlocksView {
   copy: Record<string, string>;
   venue: Record<string, string>;
 }
+export interface PromoSurfaces {
+  siteBanner: boolean;
+  bannerButton: boolean;
+  cardBadge: boolean;
+  cardCta: boolean;
+  incentivePage: boolean;
+}
 export interface PromoScopeView {
   kind: 'promoScope';
   global: boolean;
@@ -142,6 +149,9 @@ export interface PromoScopeView {
     floorPlans: SelectOption[];
     qmis: SelectOption[];
   };
+  /** SAVED surface toggles + publish gate — feed the "Where will this show" summary. */
+  surfaces: PromoSurfaces;
+  published: boolean;
 }
 export interface CommunityFloorPlansView {
   kind: 'communityFloorPlans';
@@ -486,6 +496,8 @@ function SideWidgetBlock({
           initialGlobal={widget.global}
           initialSelected={widget.selected}
           options={widget.options}
+          surfaces={widget.surfaces}
+          published={widget.published}
           onResult={onResult}
         />
       </CardContent>

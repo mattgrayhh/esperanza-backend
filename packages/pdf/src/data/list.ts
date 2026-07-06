@@ -1,6 +1,7 @@
 import type { PlanCardData } from '../templates/components';
 import { renditionUrl, attachmentUrl } from './shared';
 import { loadPromoResolver, type ResolvedPromo } from './promotions';
+import { communityPriceFromExpr, communityPlanPriceExpr } from '@esperanza/db/elevation-price';
 
 export type ListKind = 'locations' | 'qmis' | 'plans';
 
@@ -211,32 +212,12 @@ export async function loadListData(
   // sellable community (a real price + a square-footage range; master-planned shells are skipped).
   // 1:1 with the legacy Communities.pdf. (Not used in community scope.)
   if (kind === 'locations') {
-    // price_from: override wins; else a close-out community uses its selected ELEVATION's
-    // price (MIN sales_price of close_out_elevation across its PUBLISHED development plans,
-    // from community_elevation_prices — cep is community-scoped via the development map, so
-    // it does NOT require the "Floor Plans Offered" picker, which close-out communities leave
-    // empty), else its lowest published OFFERED plan; else Snowflake dev-wide synced min
-    // (matches v_public_communities).
-    const priceFromExpr =
-      `COALESCE(
-         c.override_price_from,
-         CASE WHEN c.close_out = 1 THEN COALESCE(
-           (SELECT MIN(cep.sales_price)
-            FROM community_elevation_prices cep
-            JOIN floor_plans fpe ON fpe.id = cep.floor_plan_id
-            WHERE cep.community_id = c.id
-              AND c.close_out_elevation IS NOT NULL
-              AND cep.elevation_label = c.close_out_elevation
-              AND cep.sales_price > 0
-              AND fpe.published = 1),
-           (SELECT MIN(COALESCE(fp0.override_starting_price, fp0.synced_starting_price))
-            FROM floor_plans fp0
-            WHERE fp0.published = 1
-              AND COALESCE(fp0.override_starting_price, fp0.synced_starting_price) > 0
-              AND ',' || REPLACE(IFNULL(fp0.community_ids, ''), ' ', '') || ',' LIKE '%,' || c.id || ',%')
-         ) END,
-         c.synced_price_from
-       )`;
+    // price_from: override wins; else the community's elevation PRICE SOURCE (pinned
+    // elevation > Traditional / Brick where offered > cheapest offered — migration 0025,
+    // shared expr in @esperanza/db/elevation-price); else a close-out community's lowest
+    // published OFFERED plan; else Snowflake dev-wide synced min (matches
+    // v_public_communities).
+    const priceFromExpr = communityPriceFromExpr('c');
     const baseSql =
       `SELECT c.id, c.name, ci.city_name AS city, c.featured_image_url AS img,
               ${priceFromExpr} AS price_from,
@@ -304,7 +285,10 @@ export async function loadListData(
     // linkage the Framer community page filters on with `community_ids Contains {id}`.
     // The CSV is ", "-joined (comma-SPACE), so strip spaces before anchoring on ",id," —
     // otherwise only the FIRST id in each plan's list ever matches (see line 236).
-    rows = ((await db.prepare(`SELECT ${PLAN_COLS} AND (','||REPLACE(COALESCE(fp.community_ids,''),' ','')||',') LIKE '%,'||?||',%' ORDER BY fp.name`).bind(cityId).all<any>()).results) ?? [];
+    // Per-plan price = THIS community's elevation price source (pinned elevation >
+    // Traditional / Brick where offered > cheapest offered — migration 0025), falling
+    // back to the plan's dev-wide price when the community has no elevation rows for it.
+    rows = ((await db.prepare(`SELECT ${planCols(`COALESCE(${communityPlanPriceExpr('fp')}, COALESCE(fp.override_starting_price, fp.synced_starting_price))`)} AND (','||REPLACE(COALESCE(fp.community_ids,''),' ','')||',') LIKE '%,'||?||',%' ORDER BY fp.name`).bind(cityId, cityId).all<any>()).results) ?? [];
   } else {
     rows = isMaster
       ? ((await db.prepare(`SELECT ${PLAN_COLS} ORDER BY fp.name`).all<any>()).results) ?? []
@@ -333,9 +317,11 @@ export async function loadListData(
 
 // Shared SELECT list for every floor-plan query (master / per-city / per-community). The
 // trailing `WHERE fp.published=1` lets each caller append further AND-clauses.
-const PLAN_COLS =
-  `fp.id, fp.name, fp.image_url img, fp.collection collection,
-   COALESCE(fp.override_starting_price, fp.synced_starting_price) price,
+const PLAN_COLS = planCols();
+/** priceExpr override lets the community-scoped Plan List price per community. */
+function planCols(priceExpr = 'COALESCE(fp.override_starting_price, fp.synced_starting_price)'): string {
+  return `fp.id, fp.name, fp.image_url img, fp.collection collection,
+   ${priceExpr} price,
    COALESCE(fp.override_total_square_footage, fp.synced_total_square_footage) sqft,
    COALESCE(fp.override_bedroom_min, fp.synced_bedroom_min) bmin,
    COALESCE(fp.override_bedroom_max, fp.synced_bedroom_max) bmax,
@@ -343,6 +329,7 @@ const PLAN_COLS =
    COALESCE(fp.override_bathroom_max, fp.synced_bathroom_max) bamax,
    fp.car_garage_count garage, fp.stories_count stories
    FROM floor_plans fp WHERE fp.published=1`;
+}
 
 // ---------------------------------------------------------------------------
 // Filtered, on-demand lists — the "download the currently-filtered results"

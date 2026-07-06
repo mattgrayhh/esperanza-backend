@@ -58,30 +58,43 @@ warehouse `HAZARD_HOUSE_WH`, schema `ANALYTICS_ZONE`. The main source tables are
 homes in a hard-coded city whitelist (McAllen, Mission, Edinburg, Brownsville, Harlingen,
 Laredo, San Juan, Weslaco, Mercedes) are pulled. Details in [doc 02](./02-module-ingest.md).
 
-### Close-out community pricing (`price_from` precedence)
+### Community pricing (`price_from` precedence — the elevation price source, 0025)
 
-A **close-out community** has sold out of quick-move-in homes, so Snowflake's dev-wide
-`synced_price_from` (the lowest base plan price for the whole development) reads *lower*
-than reality — it still counts a cheap plan that's no longer buildable there. Marketing
-turns on the **Close-Out Community** toggle (`communities.close_out`) and optionally picks
-a **Close-Out Price Elevation** (`communities.close_out_elevation`, a "Type / Material"
-label like `Tuscan / Stucco`). `price_from` then resolves, highest priority first:
+The pricing rule (per the Rhodes team): **a base price comes from the Traditional /
+Brick elevation — the cheapest standard one; where brick isn't offered, from the
+cheapest elevation offered in that community**. The per-community selector is
+**Price Source Elevation** (`communities.close_out_elevation` — the column name is
+historical; since migration 0025 it's honored for **every** community, a "Type /
+Material" label like `Traditional / Stucco`). `price_from` resolves, highest
+priority first:
 
-1. `override_price_from` — a manual price override (always wins; used e.g. for Cascada,
-   whose real "homes from" is a remaining QMI price no floor-plan elevation reproduces).
-2. **close-out elevation** — `MIN(sales_price)` for the chosen elevation across the
-   community's **published development plans**, from the `community_elevation_prices`
-   table (synced from `DM_FLOOR_PLAN` — see [doc 02](./02-module-ingest.md)). This is
-   scoped by development, so it does **not** require the "Floor Plans Offered" picker
-   (close-out communities leave that empty).
-3. **close-out auto-MIN** — the lowest published plan in the "Floor Plans Offered" picker
-   (used when no elevation is chosen / it matches nothing).
-4. `synced_price_from` — the normal Snowflake value.
+1. `override_price_from` — a manual price override (always wins, but prefer the
+   selector: overrides go stale).
+2. **close-out QMI min** (`close_out = 1` only) — the cheapest **published QMI** in
+   the community. A close-out community sells what's standing (confirmed against
+   the legacy site: Wright Ranch 274,990 / Rogers Coves 239,990 / Cascada 437,990).
+3. **elevation price source** — from `community_elevation_prices` (synced from
+   `DM_FLOOR_PLAN`, scoped to the community's **published development plans**;
+   does **not** require the "Floor Plans Offered" picker): the pinned
+   Price Source Elevation → `Traditional / Brick` where offered → the cheapest
+   offered elevation. `NULL` when the community has no elevation rows.
+4. **close-out auto-MIN** — the lowest published plan in the "Floor Plans Offered"
+   picker (last resort for close-outs with no QMIs and no elevation rows).
+5. `synced_price_from` — the normal Snowflake value (itself Traditional/Brick-
+   preferred since 0025 — see `communityPriceFromSql` in ingest).
 
-The resolution is computed live (nothing derived is stored on `communities`) and is kept
-**identical** in four places: `packages/db/views.sql` (`v_public_communities`),
-`framer-push` `selectById` + `selectAll`, and the `pdf` list query. The elevation label
-is internal-only (never pushed to Framer).
+The resolution is computed live (nothing derived is stored on `communities`). The
+three code sites (`framer-push` `selectById` + `selectAll`, the `pdf` list query)
+share `communityPriceFromExpr()` from `@esperanza/db/elevation-price`;
+`packages/db/views.sql` (`v_public_communities`) keeps a literal copy — keep it
+identical. The elevation label is internal-only (never pushed to Framer).
+
+**Per-plan, per-community prices** follow the same rule: `GET
+/api/public/floorplans` serves `communityPrices` from `COMMUNITY_PLAN_PRICE_SQL`
+and the community "Plan List" PDF prices each plan with
+`communityPlanPriceExpr()` (both in `@esperanza/db/elevation-price`) — pinned
+elevation → Traditional / Brick → cheapest offered, falling back to the plan's
+dev-wide price when the community has no elevation rows for it.
 
 **Every surface that shows a price reads this one resolution — no plain `COALESCE(override,
 synced)` shortcuts** (those skip close-out and show a stale, lower number). Concretely:

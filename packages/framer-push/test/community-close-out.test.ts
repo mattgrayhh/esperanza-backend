@@ -1,10 +1,12 @@
 // =============================================================================
-// Close-Out Community price_from resolution. When communities.close_out = 1 the
-// public "homes from" price is, in precedence order:
+// Community price_from resolution (0025 — the elevation PRICE SOURCE, honored for
+// EVERY community). Precedence:
 //   override_price_from
-//     > close_out_elevation: MIN(sales_price) of that "Type / Material" elevation
-//       among the community's OFFERED, PUBLISHED plans (community_elevation_prices)
-//     > MIN starting price across those OFFERED, PUBLISHED plans (0018)
+//     > elevation-sourced price from community_elevation_prices across the
+//       community's PUBLISHED development plans: pinned close_out_elevation
+//       > 'Traditional / Brick' where offered (Viri's default) > cheapest offered
+//       elevation (NULL when the community has no cep rows)
+//     > close_out = 1: MIN starting price across OFFERED, PUBLISHED plans (0018)
 //     > synced_price_from
 // Verified against BOTH the public view (v_public_communities) and the
 // framer-push read query (selectByIdSql) so the API and Framer agree.
@@ -33,12 +35,21 @@ interface Elev {
   community?: string; // cep.community_id (defaults to COM); a different value = another dev
 }
 
+interface Qmi {
+  id: string;
+  published?: number;
+  synced_price?: number | null;
+  override_price?: number | null;
+  community?: string; // defaults to COM
+}
+
 function setup(opts: {
   closeOut?: boolean;
   override?: number | null;
   closeOutElevation?: string | null;
   plans?: Plan[];
   elevations?: Elev[];
+  qmis?: Qmi[];
 }) {
   const db = freshDb();
   insertRow(db, 'communities', {
@@ -72,6 +83,19 @@ function setup(opts: {
       material_type: material,
       elevation_label: e.label,
       sales_price: e.price,
+    });
+  }
+  // A second community for "belongs elsewhere" cases (qmi.synced_community_id is a real FK).
+  if ((opts.qmis ?? []).some((q) => q.community && q.community !== COM)) {
+    insertRow(db, 'communities', { id: OTHER, name: 'Other Dev', slug: 'other-dev', published: 1 });
+  }
+  for (const q of opts.qmis ?? []) {
+    insertRow(db, 'qmi', {
+      id: q.id,
+      published: q.published ?? 1,
+      synced_community_id: q.community ?? COM,
+      synced_price: q.synced_price ?? null,
+      override_price: q.override_price ?? null,
     });
   }
   return db;
@@ -171,22 +195,93 @@ describe('Close-Out Community price_from', () => {
     expect(mapperPrice(db)).toBe(448000);
   });
 
-  it('close_out=1 + elevation that matches no offered plan → falls back to auto-MIN', () => {
+  it('close_out=1 + elevation that matches nothing → falls back to the DEFAULT rule (TDB here)', () => {
+    // 0025: a pin that matches no row no longer skips straight to the offered-plan
+    // MIN — the default elevation rule still applies (Traditional / Brick on recFPa).
     const db = setup({ closeOut: true, closeOutElevation: 'Contemporary / Hardie', plans: OFFERED_HI, elevations: ELEVS });
-    expect(viewPrice(db)).toBe(437990);
-    expect(mapperPrice(db)).toBe(437990);
+    expect(viewPrice(db)).toBe(448000);
+    expect(mapperPrice(db)).toBe(448000);
   });
 
-  it('close_out=0 + elevation set → ignored, uses synced_price_from', () => {
+  it('close_out=0 + elevation set → HONORED since 0025 (wright-ranch regression)', () => {
+    // The legacy O'Neill site priced non-close-out communities from their pinned
+    // elevation too; before 0025 the pin was silently ignored unless close_out=1.
     const db = setup({ closeOut: false, closeOutElevation: 'Tuscan / Stucco', plans: OFFERED_HI, elevations: ELEVS });
-    expect(viewPrice(db)).toBe(282990);
-    expect(mapperPrice(db)).toBe(282990);
+    expect(viewPrice(db)).toBe(455000);
+    expect(mapperPrice(db)).toBe(455000);
+  });
+
+  it('close_out=0, no pin, cep rows exist → Traditional / Brick where offered (default)', () => {
+    const db = setup({ closeOut: false, plans: OFFERED_HI, elevations: ELEVS });
+    // TDB exists on recFPa at 448000 → beats synced_price_from 282990 (dev-wide min).
+    expect(viewPrice(db)).toBe(448000);
+    expect(mapperPrice(db)).toBe(448000);
+  });
+
+  it('close_out=0, no pin, no TDB offered → cheapest offered elevation', () => {
+    const db = setup({
+      closeOut: false,
+      plans: OFFERED_HI,
+      elevations: ELEVS.filter((e) => e.label !== 'Traditional / Brick'),
+    });
+    // min(455000 recFPa, 470000 recFPb); other-community + unpublished rows excluded.
+    expect(viewPrice(db)).toBe(455000);
+    expect(mapperPrice(db)).toBe(455000);
   });
 
   it('close_out=1 + override_price_from AND elevation both set → override wins', () => {
     const db = setup({ closeOut: true, override: 450000, closeOutElevation: 'Tuscan / Stucco', plans: OFFERED_HI, elevations: ELEVS });
     expect(viewPrice(db)).toBe(450000);
     expect(mapperPrice(db)).toBe(450000);
+  });
+
+  // --- close_out QMI-min layer (0025): a close-out community sells what's standing ---
+
+  it('close_out=1 with published QMIs → cheapest published QMI wins (Wright Ranch rule)', () => {
+    const db = setup({
+      closeOut: true,
+      closeOutElevation: 'Tuscan / Stucco',
+      plans: OFFERED_HI,
+      elevations: ELEVS,
+      qmis: [
+        { id: 'recQMIa', synced_price: 274990 },
+        { id: 'recQMIb', synced_price: 305000 },
+        { id: 'recQMIunpub', published: 0, synced_price: 199000 },       // excluded
+        { id: 'recQMIother', community: OTHER, synced_price: 150000 },   // other community
+      ],
+    });
+    expect(viewPrice(db)).toBe(274990);
+    expect(mapperPrice(db)).toBe(274990);
+  });
+
+  it('close_out=1 QMI min honors per-home override_price', () => {
+    const db = setup({
+      closeOut: true,
+      qmis: [{ id: 'recQMIa', synced_price: 280000, override_price: 260000 }],
+    });
+    expect(viewPrice(db)).toBe(260000);
+    expect(mapperPrice(db)).toBe(260000);
+  });
+
+  it('close_out=1 with NO published QMIs → falls back to the elevation rule', () => {
+    const db = setup({
+      closeOut: true,
+      closeOutElevation: 'Tuscan / Stucco',
+      plans: OFFERED_HI,
+      elevations: ELEVS,
+      qmis: [{ id: 'recQMIunpub', published: 0, synced_price: 199000 }],
+    });
+    expect(viewPrice(db)).toBe(455000);
+    expect(mapperPrice(db)).toBe(455000);
+  });
+
+  it('close_out=0 → QMI prices do NOT drive price_from', () => {
+    const db = setup({
+      closeOut: false,
+      qmis: [{ id: 'recQMIa', synced_price: 100000 }],
+    });
+    expect(viewPrice(db)).toBe(282990); // synced (no cep rows)
+    expect(mapperPrice(db)).toBe(282990);
   });
 
   it('close_out=1 with no qualifying offered plan → falls through to synced_price_from', () => {

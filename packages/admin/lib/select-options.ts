@@ -14,6 +14,8 @@ import type { SelectSource } from './field-config';
 export interface SelectOption {
   id: string;
   label: string;
+  /** Optional grouping key (e.g. a QMI's community name in the promo scope picker). */
+  group?: string;
 }
 
 const LIMIT = 1000;
@@ -100,9 +102,12 @@ export async function loadPromoScopeOptions(): Promise<{
         id: qmi.id,
         addr: qmi.overrideAddress,
         synced: qmi.syncedAddress,
+        community: qmi.syncedCommunityName,
       })
       .from(qmi)
-      .limit(LIMIT) as Promise<Array<{ id: string; addr: string | null; synced: string | null }>>,
+      .limit(LIMIT) as Promise<
+      Array<{ id: string; addr: string | null; synced: string | null; community: string | null }>
+    >,
   ]);
 
   const sortByLabel = (a: SelectOption, b: SelectOption) => a.label.localeCompare(b.label);
@@ -114,8 +119,14 @@ export async function loadPromoScopeOptions(): Promise<{
     floorPlans: floorPlanRows
       .map((r) => ({ id: r.id, label: r.name?.trim() || r.id }))
       .sort(sortByLabel),
+    // QMIs carry their community name so the scope picker can GROUP homes by
+    // community (and the "where will this show" summary can count homes per community).
     qmis: qmiRows
-      .map((r) => ({ id: r.id, label: (r.addr || r.synced || '').trim() || r.id }))
+      .map((r) => ({
+        id: r.id,
+        label: (r.addr || r.synced || '').trim() || r.id,
+        group: r.community?.trim() || 'No community',
+      }))
       .sort(sortByLabel),
   };
 }

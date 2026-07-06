@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import {
+  toResolved,
   serializeQmiRow,
   serializeCommunityRow,
   serializeFloorPlanRow,
@@ -348,7 +349,10 @@ function seedPromotions(db: Database.Database) {
   insT.run({ p: 'recPROMOglobal', t: 'global', i: null });
   // The winning community promo enables its card CTA; the global one leaves it OFF
   // (default 0) so the gating both-ways is exercised by the flatten tests.
-  db.prepare(`UPDATE promotions SET show_card_cta=1 WHERE id='recPROMOcomm1'`).run();
+  db.prepare(`UPDATE promotions SET show_card_cta=1, show_card_badge=1 WHERE id='recPROMOcomm1'`).run();
+  // The 0024 backfill turns show_card_badge ON for non-global-targeted promos; the
+  // seeded GLOBAL promo stays OFF — exactly the phantom-flatten case the gate fixes.
+  db.prepare(`UPDATE promotions SET show_card_badge=1 WHERE id='recPROMOcomm2'`).run();
 }
 
 // Build promo context the way the Worker does (active promos + targets + name maps).
@@ -383,15 +387,8 @@ function resolvedFor(
   ids: { qmiId?: string | null; communityId?: string | null; cityId?: string | null }
 ): ResolvedPromo | null {
   const winner = resolveEffectivePromo(entity, ids, ctx.promos, ctx.targets, NOW);
-  if (!winner) return null;
-  // Mirror the Worker's toResolved(): the card CTA is gated by show_card_cta.
-  const showCardCta = winner['show_card_cta'] === 1 || winner['show_card_cta'] === true;
-  return {
-    promoBannerText: String(winner['banner_text'] ?? ''),
-    promoBadgeText: String(winner['badge_text'] ?? ''),
-    promoCtaLabel: showCardCta ? String(winner['cta_label'] ?? '') : '',
-    promoCtaLink: showCardCta ? String(winner['cta_url'] ?? '') : '',
-  };
+  // The Worker's REAL flatten gate (show_card_badge / show_card_cta), not a mirror.
+  return toResolved(winner as Parameters<typeof toResolved>[0]);
 }
 
 // ── shape helpers ────────────────────────────────────────────────────────────
@@ -670,14 +667,24 @@ describe('/communities — mapped dense contract', () => {
     expect(c.promoCtaLabel).toBe('View Details'); // show_card_cta=1 → CTA shown
   });
 
-  it('CTA is gated by show_card_cta — a resolved promo with the toggle OFF drops the CTA', () => {
-    const ctx = buildPromoCtx(db);
-    // No community-specific promo for the draft community → the global promo resolves;
-    // it leaves show_card_cta=0, so the banner/badge flow but the CTA is suppressed.
-    const resolved = resolvedFor(ctx, 'community', { communityId: 'recDRAFT000000000' });
-    expect(resolved?.promoBannerText).toBe('Sitewide Banner');
-    expect(resolved?.promoCtaLabel).toBe('');
-    expect(resolved?.promoCtaLink).toBe('');
+  it('card surfaces are gated by show_card_badge / show_card_cta (0024)', () => {
+    // No community-specific promo for the draft community → the global promo resolves.
+    // It leaves BOTH card toggles OFF, so nothing flows onto cards — this is the
+    // phantom-flatten fix (the global banner headline used to stamp badge-less homes).
+    const off = resolvedFor(buildPromoCtx(db), 'community', { communityId: 'recDRAFT000000000' });
+    expect(off?.promoBannerText).toBe('');
+    expect(off?.promoBadgeText).toBe('');
+    expect(off?.promoCtaLabel).toBe('');
+    expect(off?.promoCtaLink).toBe('');
+    // Flip the card badge ON → the banner/badge flow again (CTA still gated separately).
+    db.prepare(`UPDATE promotions SET show_card_badge=1 WHERE id='recPROMOglobal'`).run();
+    try {
+      const on = resolvedFor(buildPromoCtx(db), 'community', { communityId: 'recDRAFT000000000' });
+      expect(on?.promoBannerText).toBe('Sitewide Banner');
+      expect(on?.promoCtaLabel).toBe('');
+    } finally {
+      db.prepare(`UPDATE promotions SET show_card_badge=0 WHERE id='recPROMOglobal'`).run();
+    }
   });
 
   it('serializeFloorPlanRow carries the resolved promo (card badge + CTA) and blanks when none', () => {

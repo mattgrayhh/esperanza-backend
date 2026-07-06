@@ -47,6 +47,7 @@ import {
   galleryArray,
 } from './framer-types.js';
 import { markdownToHtml } from './markdown.js';
+import { communityPriceFromExpr } from '@esperanza/db/elevation-price';
 import type { CollectionKey } from './types.js';
 import { qmiPublicSlug } from '@esperanza/db/slug';
 
@@ -759,25 +760,7 @@ const communities: CollectionDef = {
     COALESCE(override_square_footage_range, synced_square_footage_range) AS square_footage_range,
     COALESCE(override_bed_count,  synced_bed_count)  AS bed_count,
     COALESCE(override_bath_count, synced_bath_count) AS bath_count,
-    COALESCE(
-      override_price_from,
-      CASE WHEN close_out = 1 THEN COALESCE(
-        (SELECT MIN(cep.sales_price)
-         FROM community_elevation_prices cep
-         JOIN floor_plans fpe ON fpe.id = cep.floor_plan_id
-         WHERE cep.community_id = communities.id
-           AND close_out_elevation IS NOT NULL
-           AND cep.elevation_label = close_out_elevation
-           AND cep.sales_price > 0
-           AND fpe.published = 1),
-        (SELECT MIN(COALESCE(fp3.override_starting_price, fp3.synced_starting_price))
-         FROM floor_plans fp3
-         WHERE fp3.published = 1
-           AND COALESCE(fp3.override_starting_price, fp3.synced_starting_price) > 0
-           AND ',' || REPLACE(IFNULL(fp3.community_ids, ''), ' ', '') || ',' LIKE '%,' || communities.id || ',%')
-      ) END,
-      synced_price_from
-    ) AS price_from,
+    ${communityPriceFromExpr('communities')} AS price_from,
     (SELECT group_concat(fp.id) FROM floor_plans fp
       WHERE ',' || REPLACE(IFNULL(fp.community_ids, ''), ' ', '') || ','
             LIKE '%,' || communities.id || ',%') AS floor_plan_ids,
@@ -795,25 +778,7 @@ const communities: CollectionDef = {
     COALESCE(override_square_footage_range, synced_square_footage_range) AS square_footage_range,
     COALESCE(override_bed_count,  synced_bed_count)  AS bed_count,
     COALESCE(override_bath_count, synced_bath_count) AS bath_count,
-    COALESCE(
-      override_price_from,
-      CASE WHEN close_out = 1 THEN COALESCE(
-        (SELECT MIN(cep.sales_price)
-         FROM community_elevation_prices cep
-         JOIN floor_plans fpe ON fpe.id = cep.floor_plan_id
-         WHERE cep.community_id = communities.id
-           AND close_out_elevation IS NOT NULL
-           AND cep.elevation_label = close_out_elevation
-           AND cep.sales_price > 0
-           AND fpe.published = 1),
-        (SELECT MIN(COALESCE(fp3.override_starting_price, fp3.synced_starting_price))
-         FROM floor_plans fp3
-         WHERE fp3.published = 1
-           AND COALESCE(fp3.override_starting_price, fp3.synced_starting_price) > 0
-           AND ',' || REPLACE(IFNULL(fp3.community_ids, ''), ' ', '') || ',' LIKE '%,' || communities.id || ',%')
-      ) END,
-      synced_price_from
-    ) AS price_from,
+    ${communityPriceFromExpr('communities')} AS price_from,
     (SELECT group_concat(fp.id) FROM floor_plans fp
       WHERE ',' || REPLACE(IFNULL(fp.community_ids, ''), ' ', '') || ','
             LIKE '%,' || communities.id || ',%') AS floor_plan_ids,
@@ -1189,6 +1154,8 @@ const promotions: CollectionDef = {
       show_incentive_page: bool(asBool(row['show_incentive_page'])),
       show_banner_button: bool(asBool(row['show_banner_button'])),
       show_card_cta: bool(asBool(row['show_card_cta'])),
+      // 0024: card corner badge + card incentive line surface.
+      show_card_badge: bool(asBool(row['show_card_badge'])),
       community_ids: sIf(row['community_ids']),
       floor_plan_ids: sIf(row['floor_plan_ids']),
       qmi_ids: sIf(row['qmi_ids']),

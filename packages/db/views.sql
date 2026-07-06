@@ -116,29 +116,48 @@ SELECT
   c.name, c.slug, c.town, c.published, c.address,
   c.map_coordinates, c.latitude, c.longitude, c.lat_long,
   c.master_planned, c.coming_soon,
-  -- price_from: override wins; else for a close-out community the selected ELEVATION's
-  -- price (MIN sales_price of close_out_elevation across this community's PUBLISHED
-  -- development plans, from community_elevation_prices — cep is already community-scoped
-  -- via the development→community map, so it does NOT depend on the "Floor Plans Offered"
-  -- picker, which close-out communities leave empty), else the lowest PUBLISHED floor plan
-  -- OFFERED here (community_ids CSV); else Snowflake dev-wide synced min.
+  -- price_from (0025 — the elevation PRICE SOURCE): override wins; else a close-out
+  -- community prices from its cheapest PUBLISHED QMI (it sells what's standing);
+  -- else the price comes from community_elevation_prices across this community's
+  -- PUBLISHED development plans (cep is already community-scoped via the
+  -- development→community map, so it does NOT depend on the "Floor Plans Offered"
+  -- picker):
+  --     pinned elevation (close_out_elevation — honored for EVERY community since
+  --     0025, not just close-outs) > 'Traditional / Brick' where offered (Viri's
+  --     default) > cheapest offered elevation;
+  -- else for a close-out community the lowest PUBLISHED plan OFFERED here
+  -- (community_ids CSV, last resort); else Snowflake dev-wide synced min. The three
+  -- code mirrors (framer-push collections.ts ×2, pdf list.ts) share
+  -- communityPriceFromExpr() in @esperanza/db/elevation-price — keep this block
+  -- identical to it.
   COALESCE(
     c.override_price_from,
-    CASE WHEN c.close_out = 1 THEN COALESCE(
-      (SELECT MIN(cep.sales_price)
-         FROM community_elevation_prices cep
-         JOIN floor_plans fp ON fp.id = cep.floor_plan_id
-        WHERE cep.community_id = c.id
-          AND c.close_out_elevation IS NOT NULL
-          AND cep.elevation_label = c.close_out_elevation
-          AND cep.sales_price > 0
-          AND fp.published = 1),
+    CASE WHEN c.close_out = 1 THEN
+      (SELECT MIN(COALESCE(qco.override_price, qco.synced_price))
+         FROM qmi qco
+        WHERE qco.published = 1
+          AND COALESCE(qco.override_community_id, qco.synced_community_id) = c.id
+          AND COALESCE(qco.override_price, qco.synced_price) > 0)
+    END,
+    (SELECT COALESCE(
+        MIN(CASE WHEN COALESCE(c.close_out_elevation, '') <> ''
+                  AND cep.elevation_label = c.close_out_elevation
+                 THEN cep.sales_price END),
+        MIN(CASE WHEN cep.elevation_label = 'Traditional / Brick'
+                 THEN cep.sales_price END),
+        MIN(cep.sales_price))
+       FROM community_elevation_prices cep
+       JOIN floor_plans fp ON fp.id = cep.floor_plan_id
+      WHERE cep.community_id = c.id
+        AND cep.sales_price > 0
+        AND fp.published = 1),
+    CASE WHEN c.close_out = 1 THEN
       (SELECT MIN(COALESCE(fp.override_starting_price, fp.synced_starting_price))
          FROM floor_plans fp
         WHERE fp.published = 1
           AND COALESCE(fp.override_starting_price, fp.synced_starting_price) > 0
           AND ',' || REPLACE(IFNULL(fp.community_ids, ''), ' ', '') || ',' LIKE '%,' || c.id || ',%')
-    ) END,
+    END,
     c.synced_price_from
   ) AS price_from,
   COALESCE(c.override_bed_count,  c.synced_bed_count)  AS bed_count,
@@ -224,6 +243,7 @@ WHERE fp.published = 1;
 -- pdf_url + rate_override columns added in migration 0020.
 -- show_site_banner / show_incentive_page / show_banner_button / show_card_cta added
 -- in migration 0021 (independent of the published gate AND of promotion_targets).
+-- show_card_badge (card corner badge + card incentive line) added in migration 0024.
 -- RESOLUTION (which promo applies to a given QMI/community/city) is NOT baked here
 -- — see below.
 -- =============================================================================
@@ -236,6 +256,7 @@ SELECT
   COALESCE(NULLIF(p.rate_override, ''),
     (SELECT value FROM site_settings WHERE key = 'incentive_rate')) AS effective_rate,
   p.show_site_banner, p.show_incentive_page, p.show_banner_button, p.show_card_cta,
+  p.show_card_badge,
   p.sort_order, p.start_date, p.end_date, p.published
 FROM promotions p
 WHERE p.published = 1;

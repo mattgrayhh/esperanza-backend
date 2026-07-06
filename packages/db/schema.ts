@@ -231,11 +231,13 @@ export const communities = sqliteTable(
     // close-out: no QMIs left → price_from uses the lowest published OFFERED plan
     // (see v_public_communities / migration 0018). Admin-owned, not pushed to Framer.
     closeOut: integer('close_out', { mode: 'boolean' }).notNull().default(false),
-    // 0019: close-out elevation price override. When close_out=1 and close_out_elevation
-    // (a "Type / Material" label, e.g. "Tuscan / Stucco") is set, "homes from" = MIN sales
-    // price of that elevation among this community's offered published plans, pulled live
-    // from community_elevation_prices (synced from Snowflake DM_FLOOR_PLAN). Falls back to
-    // the auto-MIN if the label matches nothing. Admin-owned label; price is NOT manual.
+    // 0019 (generalized in 0025): the PRICE SOURCE elevation selector. When set (a
+    // "Type / Material" label, e.g. "Traditional / Brick"), "homes from" AND each
+    // plan's per-community price read that elevation's sales_price from
+    // community_elevation_prices (synced from Snowflake DM_FLOOR_PLAN), falling back
+    // to the auto value when the label matches nothing. Honored for EVERY community
+    // since 0025 (originally close-out only — the column name is historical).
+    // Admin-owned label; price is NOT manual.
     closeOutElevation: text('close_out_elevation'),
 
     syncedPriceFrom: real('synced_price_from'), // MIN(base price) per development
@@ -456,6 +458,10 @@ export const promotions = sqliteTable(
     showIncentivePage: integer('show_incentive_page', { mode: 'boolean' }).notNull().default(false),
     showBannerButton: integer('show_banner_button', { mode: 'boolean' }).notNull().default(false),
     showCardCta: integer('show_card_cta', { mode: 'boolean' }).notNull().default(false),
+    // 0024: the card surfaces — corner badge (badge_text) + card incentive line
+    // (banner_text flattened as promo_text / promoBannerText). Backfilled ON for promos
+    // with a badge or non-global targets; the api Worker's toResolved() gates on it.
+    showCardBadge: integer('show_card_badge', { mode: 'boolean' }).notNull().default(false),
     sortOrder: integer('sort_order').notNull().default(0),
     startDate: text('start_date'),
     endDate: text('end_date'),

@@ -311,7 +311,11 @@ const communities: EntityFieldConfig = {
     { field: 'longitude', label: 'Longitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
     { field: 'master_planned', label: 'Master Planned', widget: 'boolean', bucket: 'admin', halfWidth: true },
     { field: 'close_out', label: 'Close-Out Community', widget: 'boolean', bucket: 'admin', halfWidth: true, help: 'No quick move-in homes available. "Homes from" uses the lowest published floor plan offered in this community.' },
-    { field: 'close_out_elevation', label: 'Close-Out Price Elevation', widget: 'select', bucket: 'admin', halfWidth: true, options: ['', 'Tuscan / Stucco', 'Traditional / Stucco', 'Contemporary / Stucco', 'Transitional / Stucco', 'Tuscan / Brick', 'Traditional / Brick', 'Contemporary / Brick', 'Transitional / Brick', 'Tuscan / Hardie', 'Farmhouse / Hardie', 'Fresno / FarmhouseHardie'], help: 'Only used when Close-Out Community is on. "Homes from" becomes the lowest price of this elevation (Type / Material) among the plans offered here — pulled live from Snowflake. Falls back to the lowest offered plan if this community has no plan in that elevation.' },
+    // 0025: the PRICE SOURCE elevation, honored for EVERY community (column name is
+    // historical — it started as the close-out pin in 0019). Rendered as a
+    // synced/override-style control (buildFieldView special-case) so editors see the
+    // auto rule vs a pinned elevation the same way as every other synced field.
+    { field: 'close_out_elevation', label: 'Price Source Elevation', widget: 'select', bucket: 'admin', halfWidth: true, options: ['', 'Tuscan / Stucco', 'Traditional / Stucco', 'Contemporary / Stucco', 'Transitional / Stucco', 'Tuscan / Brick', 'Traditional / Brick', 'Contemporary / Brick', 'Transitional / Brick', 'Tuscan / Hardie', 'Farmhouse / Hardie', 'Fresno / FarmhouseHardie'], help: 'Which elevation (Type / Material) prices this community. Auto = Traditional / Brick where offered, else the cheapest elevation offered here. Pin one to price "Homes from" and every plan\'s per-community price from that elevation — pulled live from Snowflake.' },
     { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin', halfWidth: true, visibleInForm: false }, // [P1] hidden from form — header Status control owns it
     // richtext (markdown)
     { field: 'description', label: 'Description', widget: 'richtext', bucket: 'admin' },
@@ -517,6 +521,11 @@ const promotions: EntityFieldConfig = {
     // qmi lot numbers); no field_definitions row — searchable via the list filter
     // since Sean's sheets are organized by lot number.
     { field: 'lot_numbers', label: 'Lot #s' },
+    // Derived display column (build-list-view projects it from the show_* surface
+    // toggles): a compact "where this promo renders" summary, always visible in the
+    // list so editors can tell surfaces apart WITHOUT opening each promo. No
+    // field_definitions row (same pattern as lot_numbers).
+    { field: 'surfaces', label: 'Shows On' },
     { field: 'published', label: 'Published', kind: 'publish' },
     { field: 'sort_order', label: 'Sort', kind: 'number' },
     { field: 'start_date', label: 'Start' },
@@ -537,8 +546,9 @@ const promotions: EntityFieldConfig = {
     // Per-surface visibility toggles (migration 0021). Independent of Published AND of
     // Associated Locations — they compose: these say WHERE a promo may appear; the
     // locations narrow WHICH pages. All default OFF; turn on a surface per promo.
-    { field: 'show_site_banner', label: 'Show on Site Banner', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Site-wide top banner (uses the Headline).' },
-    { field: 'show_incentive_page', label: 'Show on Incentive Page', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'The dedicated incentives page card.' },
+    { field: 'show_site_banner', label: 'Show on Site Banner', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Site-wide header ticker banner (uses the Headline).' },
+    { field: 'show_incentive_page', label: 'Show on Incentives Page', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Featured card on the dedicated /incentives page.' },
+    { field: 'show_card_badge', label: 'Show Card Badge', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Corner badge (Banner Overlay Promo) + incentive line (Headline) on community / home / floor-plan cards and detail pages, for the locations this promo targets.' },
     { field: 'show_banner_button', label: 'Show Banner Button', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Render the CTA button inside the site banner.' },
     { field: 'show_card_cta', label: 'Show Card CTA Button', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Render the CTA button on promo cards / location pages.' },
     { field: 'sort_order', label: 'Sort Order', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },

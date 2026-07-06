@@ -186,6 +186,20 @@ compiles them into `lib/help-content.generated.ts`, rendered at `/help`.
 | Change image upload | `lib/actions.ts` (`uploadImage`/`uploadGalleryImage`), `components/fields/ImageUploader.tsx` |
 | Change audit/enqueue behavior | `lib/actions.ts` (`postWrite`), `lib/audit-chunk.ts` |
 | Add/edit help | `help-content/*.md` then `npm run gen:help` |
+| Change the community price-source selector UI | `lib/field-config.ts` (communities `close_out_elevation`) + the `buildFieldView` special-case in `lib/build-edit-view.ts` (renders it as the synced/override control) |
+
+### Promotion surfaces ("Where it shows" + the preview)
+
+A promotion renders on up to five independent surfaces, each an explicit boolean on
+`promotions` (migrations 0021 + 0024): `show_site_banner`, `show_incentive_page`,
+`show_card_badge` (corner badge + card incentive line — gates the api's
+banner/badge flatten in `toResolved()`, so a global-surface-only promo no longer
+stamps badge-less home cards), `show_banner_button`, `show_card_cta`. They compose
+with `promotion_targets` (surface = WHERE, targets = WHICH). The promotions list
+shows a derived **Shows On** column (`build-list-view.ts`), and the promo editor
+renders a **"Where will this show"** summary inside `PromoScopeTagPicker`
+(saved surfaces + live target selection, with per-community home counts — the QMI
+picker column is grouped by community via `SelectOption.group`).
 
 ### Promotion targeting saves with the page Save
 
