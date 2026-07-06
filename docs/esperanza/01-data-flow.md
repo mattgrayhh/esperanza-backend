@@ -70,17 +70,18 @@ priority first:
 
 1. `override_price_from` — a manual price override (always wins, but prefer the
    selector: overrides go stale).
-2. **close-out QMI min** (`close_out = 1` only) — the cheapest **published QMI** in
-   the community. A close-out community sells what's standing (confirmed against
-   the legacy site: Wright Ranch 274,990 / Rogers Coves 239,990 / Cascada 437,990).
-3. **elevation price source** — from `community_elevation_prices` (synced from
-   `DM_FLOOR_PLAN`, scoped to the community's **published development plans**;
-   does **not** require the "Floor Plans Offered" picker): the pinned
+2. **close-out = QMI min, and nothing else** (`close_out = 1`) — the cheapest
+   **published QMI** in the community (it sells what's standing: Wright Ranch
+   274,990 / Rogers Coves 239,990 / Cascada 437,990 confirmed vs O'Neill). With
+   **zero published QMIs the price is `NULL`** — nothing is purchasable, the site
+   shows no price (Silos at La Sienna). Close-outs never fall through to plan or
+   synced pricing.
+3. **elevation price source** (non-close-out) — from `community_elevation_prices`
+   (synced from `DM_FLOOR_PLAN`, scoped to the community's **published development
+   plans**; does **not** require the "Floor Plans Offered" picker): the pinned
    Price Source Elevation → `Traditional / Brick` where offered → the cheapest
    offered elevation. `NULL` when the community has no elevation rows.
-4. **close-out auto-MIN** — the lowest published plan in the "Floor Plans Offered"
-   picker (last resort for close-outs with no QMIs and no elevation rows).
-5. `synced_price_from` — the normal Snowflake value (itself Traditional/Brick-
+4. `synced_price_from` — the normal Snowflake value (itself Traditional/Brick-
    preferred since 0025 — see `communityPriceFromSql` in ingest).
 
 The resolution is computed live (nothing derived is stored on `communities`). The

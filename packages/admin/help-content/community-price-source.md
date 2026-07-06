@@ -40,8 +40,9 @@ the automatic rule — nothing ever goes blank.
 ## Close-out communities
 
 A **Close-Out Community** (the toggle) sells what's standing, so its
-"Homes from" price is the **cheapest published Quick Move-In** in the community.
-When the last home unpublishes, it falls back to the elevation rule above.
+"Homes from" price is the **cheapest published Quick Move-In** in the community —
+and nothing else. When the last home unpublishes there is nothing left to buy,
+so the community shows **no price at all** (this is correct, not a bug).
 
 ## Manual overrides
 

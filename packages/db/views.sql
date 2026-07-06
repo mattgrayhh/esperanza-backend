@@ -116,20 +116,19 @@ SELECT
   c.name, c.slug, c.town, c.published, c.address,
   c.map_coordinates, c.latitude, c.longitude, c.lat_long,
   c.master_planned, c.coming_soon,
-  -- price_from (0025 — the elevation PRICE SOURCE): override wins; else a close-out
-  -- community prices from its cheapest PUBLISHED QMI (it sells what's standing);
-  -- else the price comes from community_elevation_prices across this community's
-  -- PUBLISHED development plans (cep is already community-scoped via the
-  -- development→community map, so it does NOT depend on the "Floor Plans Offered"
-  -- picker):
+  -- price_from (0025 — the elevation PRICE SOURCE): override wins. A CLOSE-OUT
+  -- community prices from its cheapest PUBLISHED QMI and NOTHING else — it sells
+  -- what's standing, so zero published homes = NULL = no price on the site
+  -- (Silos at La Sienna). Every other community prices from
+  -- community_elevation_prices across its PUBLISHED development plans (cep is
+  -- already community-scoped via the development→community map, so it does NOT
+  -- depend on the "Floor Plans Offered" picker):
   --     pinned elevation (close_out_elevation — honored for EVERY community since
   --     0025, not just close-outs) > 'Traditional / Brick' where offered (Viri's
   --     default) > cheapest offered elevation;
-  -- else for a close-out community the lowest PUBLISHED plan OFFERED here
-  -- (community_ids CSV, last resort); else Snowflake dev-wide synced min. The three
-  -- code mirrors (framer-push collections.ts ×2, pdf list.ts) share
-  -- communityPriceFromExpr() in @esperanza/db/elevation-price — keep this block
-  -- identical to it.
+  -- else Snowflake dev-wide synced min. The three code mirrors (framer-push
+  -- collections.ts ×2, pdf list.ts) share communityPriceFromExpr() in
+  -- @esperanza/db/elevation-price — keep this block identical to it.
   COALESCE(
     c.override_price_from,
     CASE WHEN c.close_out = 1 THEN
@@ -138,27 +137,21 @@ SELECT
         WHERE qco.published = 1
           AND COALESCE(qco.override_community_id, qco.synced_community_id) = c.id
           AND COALESCE(qco.override_price, qco.synced_price) > 0)
-    END,
-    (SELECT COALESCE(
-        MIN(CASE WHEN COALESCE(c.close_out_elevation, '') <> ''
-                  AND cep.elevation_label = c.close_out_elevation
-                 THEN cep.sales_price END),
-        MIN(CASE WHEN cep.elevation_label = 'Traditional / Brick'
-                 THEN cep.sales_price END),
-        MIN(cep.sales_price))
-       FROM community_elevation_prices cep
-       JOIN floor_plans fp ON fp.id = cep.floor_plan_id
-      WHERE cep.community_id = c.id
-        AND cep.sales_price > 0
-        AND fp.published = 1),
-    CASE WHEN c.close_out = 1 THEN
-      (SELECT MIN(COALESCE(fp.override_starting_price, fp.synced_starting_price))
-         FROM floor_plans fp
-        WHERE fp.published = 1
-          AND COALESCE(fp.override_starting_price, fp.synced_starting_price) > 0
-          AND ',' || REPLACE(IFNULL(fp.community_ids, ''), ' ', '') || ',' LIKE '%,' || c.id || ',%')
-    END,
-    c.synced_price_from
+    ELSE COALESCE(
+      (SELECT COALESCE(
+          MIN(CASE WHEN COALESCE(c.close_out_elevation, '') <> ''
+                    AND cep.elevation_label = c.close_out_elevation
+                   THEN cep.sales_price END),
+          MIN(CASE WHEN cep.elevation_label = 'Traditional / Brick'
+                   THEN cep.sales_price END),
+          MIN(cep.sales_price))
+         FROM community_elevation_prices cep
+         JOIN floor_plans fp ON fp.id = cep.floor_plan_id
+        WHERE cep.community_id = c.id
+          AND cep.sales_price > 0
+          AND fp.published = 1),
+      c.synced_price_from
+    ) END
   ) AS price_from,
   COALESCE(c.override_bed_count,  c.synced_bed_count)  AS bed_count,
   COALESCE(c.override_bath_count, c.synced_bath_count) AS bath_count,

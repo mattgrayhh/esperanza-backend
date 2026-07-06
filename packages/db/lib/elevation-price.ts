@@ -48,10 +48,11 @@ export function elevationPriceSubquery(c: string): string {
 /**
  * Full community "homes from" precedence (matches v_public_communities since 0025):
  *   override_price_from
- *     > close_out=1: MIN price of the community's PUBLISHED QMIs (a close-out
- *       community sells what's standing, so the from-price is its cheapest home)
+ *     > close_out=1: MIN price of the community's PUBLISHED QMIs — and NOTHING
+ *       else. A close-out community sells what's standing; with zero published
+ *       homes there is nothing purchasable, so price_from is NULL (no price on
+ *       the site — confirmed on Silos at La Sienna against the live O'Neill site).
  *     > elevation-sourced price (pinned > TDB > cheapest offered)
- *     > close_out=1: MIN published OFFERED plan (0018 last resort)
  *     > synced_price_from.
  */
 export function communityPriceFromExpr(c: string): string {
@@ -63,16 +64,10 @@ export function communityPriceFromExpr(c: string): string {
         WHERE qco.published = 1
           AND COALESCE(qco.override_community_id, qco.synced_community_id) = ${c}.id
           AND COALESCE(qco.override_price, qco.synced_price) > 0)
-    END,
-    ${elevationPriceSubquery(c)},
-    CASE WHEN ${c}.close_out = 1 THEN
-      (SELECT MIN(COALESCE(fpco.override_starting_price, fpco.synced_starting_price))
-         FROM floor_plans fpco
-        WHERE fpco.published = 1
-          AND COALESCE(fpco.override_starting_price, fpco.synced_starting_price) > 0
-          AND ',' || REPLACE(IFNULL(fpco.community_ids, ''), ' ', '') || ',' LIKE '%,' || ${c}.id || ',%')
-    END,
-    ${c}.synced_price_from
+    ELSE COALESCE(
+      ${elevationPriceSubquery(c)},
+      ${c}.synced_price_from
+    ) END
   )`;
 }
 

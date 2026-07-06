@@ -335,6 +335,20 @@ WHERE d.COMPANY_NAME ILIKE '%esperanza%' AND d.DEVELOPMENT_NAME IS NOT NULL
 GROUP BY d.DEVELOPMENT_NAME`;
 }
 
+/**
+ * Marketing price rounding (0025): Snowflake's RATIFIED_SALES_PRICE is the raw
+ * base+options figure (218,127 / 225,222 / 369,989.50); the site advertises the
+ * next price ending in 990 (218,990 / 225,990 / 369,990 — confirmed against the
+ * live O'Neill site on those three homes). Round UP to the next …990; a price
+ * already ending in 990 is unchanged. Applied at PARSE time so the diff's
+ * priceWillChange() compares like-for-like against the stored synced_price and
+ * doesn't re-enqueue every home every run.
+ */
+export function roundUpTo990(price: number | null): number | null {
+  if (price == null || !(price > 0)) return price;
+  return Math.ceil((price - 990) / 1000) * 1000 + 990;
+}
+
 /** QUERY 5 — per-elevation prices (0019). One row per development × model ×
  *  elevation (type+material), price = MIN positive salesprice (collapses the
  *  several FLOORPLAN_ELEVATIONCODEs that share a type+material). Feeds the
@@ -439,7 +453,7 @@ export function parseQmiRows(rowset: unknown[][]): SnowflakeQmiRow[] {
       bathroomCount: bathRaw != null ? parseFloat(bathRaw.toFixed(1)) : null,
       halfBathroomCount: halfRaw != null ? Math.round(halfRaw) : null,
       constructionStage: String(r[14] ?? '').trim(),
-      ratifiedSalesPrice: num(r[15]),
+      ratifiedSalesPrice: roundUpTo990(num(r[15])),
       // 0007 expansion — r[16..23]
       elevationType: knownOrNull(r[16]),
       materialType: knownOrNull(r[17]),

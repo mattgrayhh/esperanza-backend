@@ -2,11 +2,13 @@
 // Community price_from resolution (0025 — the elevation PRICE SOURCE, honored for
 // EVERY community). Precedence:
 //   override_price_from
+//     > close_out = 1: MIN price of the community's PUBLISHED QMIs — and NOTHING
+//       else (zero published homes → NULL → no price on the site; Silos at La
+//       Sienna)
 //     > elevation-sourced price from community_elevation_prices across the
 //       community's PUBLISHED development plans: pinned close_out_elevation
 //       > 'Traditional / Brick' where offered (Viri's default) > cheapest offered
 //       elevation (NULL when the community has no cep rows)
-//     > close_out = 1: MIN starting price across OFFERED, PUBLISHED plans (0018)
 //     > synced_price_from
 // Verified against BOTH the public view (v_public_communities) and the
 // framer-push read query (selectByIdSql) so the API and Framer agree.
@@ -142,22 +144,10 @@ describe('Close-Out Community price_from', () => {
     expect(mapperPrice(db)).toBe(282990);
   });
 
-  it('close_out=1, no elevation → MIN of published OFFERED plans, excluding non-offered + unpublished', () => {
+  it('close_out=1 never reads plan prices — no published QMIs → NULL, whatever the plans say', () => {
     const db = setup({ closeOut: true, plans: OFFERED_HI });
-    expect(viewPrice(db)).toBe(437990); // not 250000 (not offered) and not 199000 (unpublished)
-    expect(mapperPrice(db)).toBe(437990);
-  });
-
-  it('close_out=1, no elevation → per-plan override_starting_price wins inside the MIN', () => {
-    const db = setup({
-      closeOut: true,
-      plans: [
-        { id: 'recFPa', community_ids: COM, synced_starting_price: 437990, override_starting_price: 420000 },
-        { id: 'recFPb', community_ids: COM, synced_starting_price: 468000 },
-      ],
-    });
-    expect(viewPrice(db)).toBe(420000);
-    expect(mapperPrice(db)).toBe(420000);
+    expect(viewPrice(db)).toBeNull();
+    expect(mapperPrice(db)).toBeNull();
   });
 
   it('close_out=1 but override_price_from set → manual override wins', () => {
@@ -166,21 +156,20 @@ describe('Close-Out Community price_from', () => {
     expect(mapperPrice(db)).toBe(450000);
   });
 
-  // --- close_out_elevation (auto-pulled per-elevation price) layer ---------------
+  // --- elevation price source layer (close_out=0 — the general rule) --------------
 
-  it('close_out=1 + elevation → MIN price of that elevation across this community’s PUBLISHED plans', () => {
-    const db = setup({ closeOut: true, closeOutElevation: 'Tuscan / Stucco', plans: OFFERED_HI, elevations: ELEVS });
+  it('pinned elevation → MIN price of that elevation across this community’s PUBLISHED plans', () => {
+    const db = setup({ closeOut: false, closeOutElevation: 'Tuscan / Stucco', plans: OFFERED_HI, elevations: ELEVS });
     // min(455000 recFPa, 470000 recFPb); 240000 (another community) + 190000 (unpublished) excluded.
     expect(viewPrice(db)).toBe(455000);
     expect(mapperPrice(db)).toBe(455000);
   });
 
-  it('close_out=1 + elevation resolves from dev plans even when Floor Plans Offered is EMPTY (0021)', () => {
-    // The real close-out case: no offered plans (community_ids empty), so the auto-MIN
-    // fallback is null — but the elevation price still resolves from the cep rows, which
-    // are community-scoped via the development map.
+  it('pinned elevation resolves from dev plans even when Floor Plans Offered is EMPTY (0021)', () => {
+    // cep rows are community-scoped via the development map — the "Floor Plans
+    // Offered" picker (community_ids) is not consulted.
     const db = setup({
-      closeOut: true,
+      closeOut: false,
       closeOutElevation: 'Traditional / Brick',
       plans: [{ id: 'recFPx', community_ids: '', synced_starting_price: 300000 }], // published, NOT offered
       elevations: [{ planId: 'recFPx', label: 'Traditional / Brick', price: 312000 }],
@@ -189,16 +178,14 @@ describe('Close-Out Community price_from', () => {
     expect(mapperPrice(db)).toBe(312000);
   });
 
-  it('close_out=1 + elevation present on only one offered plan → that plan’s price', () => {
-    const db = setup({ closeOut: true, closeOutElevation: 'Traditional / Brick', plans: OFFERED_HI, elevations: ELEVS });
+  it('pinned elevation present on only one plan → that plan’s price', () => {
+    const db = setup({ closeOut: false, closeOutElevation: 'Traditional / Brick', plans: OFFERED_HI, elevations: ELEVS });
     expect(viewPrice(db)).toBe(448000);
     expect(mapperPrice(db)).toBe(448000);
   });
 
-  it('close_out=1 + elevation that matches nothing → falls back to the DEFAULT rule (TDB here)', () => {
-    // 0025: a pin that matches no row no longer skips straight to the offered-plan
-    // MIN — the default elevation rule still applies (Traditional / Brick on recFPa).
-    const db = setup({ closeOut: true, closeOutElevation: 'Contemporary / Hardie', plans: OFFERED_HI, elevations: ELEVS });
+  it('a pin that matches nothing → falls back to the DEFAULT rule (TDB here)', () => {
+    const db = setup({ closeOut: false, closeOutElevation: 'Contemporary / Hardie', plans: OFFERED_HI, elevations: ELEVS });
     expect(viewPrice(db)).toBe(448000);
     expect(mapperPrice(db)).toBe(448000);
   });
@@ -263,7 +250,9 @@ describe('Close-Out Community price_from', () => {
     expect(mapperPrice(db)).toBe(260000);
   });
 
-  it('close_out=1 with NO published QMIs → falls back to the elevation rule', () => {
+  it('close_out=1 with ZERO published QMIs → NULL, even with a pinned elevation (Silos at La Sienna)', () => {
+    // Nothing is purchasable in a sold-out close-out — the site must show NO price,
+    // not an elevation/synced fallback.
     const db = setup({
       closeOut: true,
       closeOutElevation: 'Tuscan / Stucco',
@@ -271,8 +260,11 @@ describe('Close-Out Community price_from', () => {
       elevations: ELEVS,
       qmis: [{ id: 'recQMIunpub', published: 0, synced_price: 199000 }],
     });
-    expect(viewPrice(db)).toBe(455000);
-    expect(mapperPrice(db)).toBe(455000);
+    expect(viewPrice(db)).toBeNull();
+    expect(mapperPrice(db)).toBeNull();
+    // override_price_from still wins over the NULL.
+    const db2 = setup({ closeOut: true, override: 450000, elevations: ELEVS, plans: OFFERED_HI });
+    expect(viewPrice(db2)).toBe(450000);
   });
 
   it('close_out=0 → QMI prices do NOT drive price_from', () => {
@@ -284,7 +276,7 @@ describe('Close-Out Community price_from', () => {
     expect(mapperPrice(db)).toBe(282990);
   });
 
-  it('close_out=1 with no qualifying offered plan → falls through to synced_price_from', () => {
+  it('close_out=1 never falls through to synced_price_from → NULL', () => {
     const db = setup({
       closeOut: true,
       plans: [
@@ -292,8 +284,8 @@ describe('Close-Out Community price_from', () => {
         { id: 'recFPcheapUnpublished', community_ids: COM, published: 0, synced_starting_price: 199000 },
       ],
     });
-    expect(viewPrice(db)).toBe(282990);
-    expect(mapperPrice(db)).toBe(282990);
+    expect(viewPrice(db)).toBeNull();
+    expect(mapperPrice(db)).toBeNull();
   });
 });
 
