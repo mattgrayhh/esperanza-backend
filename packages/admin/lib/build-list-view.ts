@@ -67,11 +67,20 @@ function selectSqlFor(key: EntityKey): string {
     // COALESCE(override, synced), comma-joined) so the list shows them and the
     // client-side filter can search by lot number. Display-only — promotions has
     // no lot_numbers column; the relationship lives in promotion_targets.
+    // `surfaces` is a derived display column: a compact list of every surface this
+    // promo is toggled ON for (the show_* columns; 0021 + 0024), so the list view
+    // answers "where will this show" without opening the record. '—' = no surface on.
     return `SELECT p.*,
         (SELECT group_concat(COALESCE(NULLIF(q.override_lot_number, ''), q.synced_lot_number), ', ')
            FROM promotion_targets t
            JOIN qmi q ON q.id = t.target_id
-          WHERE t.promotion_id = p.id AND t.target_type = 'qmi') AS lot_numbers
+          WHERE t.promotion_id = p.id AND t.target_type = 'qmi') AS lot_numbers,
+        COALESCE(NULLIF(RTRIM(
+          CASE WHEN p.show_site_banner   = 1 THEN 'Site banner, '    ELSE '' END ||
+          CASE WHEN p.show_card_badge    = 1 THEN 'Card badge, '     ELSE '' END ||
+          CASE WHEN p.show_card_cta      = 1 THEN 'Card CTA, '       ELSE '' END ||
+          CASE WHEN p.show_incentive_page = 1 THEN 'Incentives page, ' ELSE '' END,
+        ', '), ''), '—') AS surfaces
       FROM promotions p
       LIMIT ${LIMIT}`;
   }

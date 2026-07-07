@@ -237,6 +237,17 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
         qmis: pick('qmi'),
       },
       options,
+      // Saved surface toggles + publish gate feed the "Where will this show" summary
+      // inside the picker (surfaces read the SAVED row — the toggles above the picker
+      // save through the main form).
+      surfaces: {
+        siteBanner: Boolean(col(row, 'show_site_banner')),
+        bannerButton: Boolean(col(row, 'show_banner_button')),
+        cardBadge: Boolean(col(row, 'show_card_badge')),
+        cardCta: Boolean(col(row, 'show_card_cta')),
+        incentivePage: Boolean(col(row, 'show_incentive_page')),
+      },
+      published: Boolean(col(row, 'published')),
     });
   }
 
@@ -291,6 +302,27 @@ export function buildFieldView(
   // Resolve the value: a custom field reads from custom_fields[key]; everything else
   // reads its real column off the row.
   const fieldValue = f.custom ? s(customValues[f.field]) : s(col(row, f.field));
+
+  // 0025: communities.close_out_elevation is the PRICE SOURCE elevation selector
+  // (honored for every community, not just close-outs). Render it with the panel's
+  // existing synced/override control so the auto rule reads as "synced" and a pinned
+  // elevation as an amber "override" — the same visual language as every
+  // Snowflake-backed field. The write path is unchanged: the control submits the
+  // plain `close_out_elevation` column ('' = auto).
+  if (key === 'communities' && f.field === 'close_out_elevation') {
+    return {
+      kind: 'syncedOverride',
+      field: f.field,
+      label: f.label,
+      variant: 'select',
+      syncedDisplay: 'Auto — Traditional / Brick where offered, else cheapest offered',
+      overrideValue: fieldValue,
+      options: (f.options ?? []).filter((o) => o !== '').map((o) => ({ id: o, label: o })),
+      help: f.help,
+      halfWidth: f.halfWidth,
+      group: f.group,
+    };
+  }
 
   // synced (read-only display) — never submitted. Rendered via the read-only 'synced'
   // GenericField variant regardless of the configured widget (text/number/image).

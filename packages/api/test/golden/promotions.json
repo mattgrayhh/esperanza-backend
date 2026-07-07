@@ -25,7 +25,8 @@
       "communityNames": [
         "Los Prados"
       ],
-      "floorPlanNames": []
+      "floorPlanNames": [],
+      "showCardBadge": false
     },
     {
       "id": "reclPpq6T09oipTGB",
@@ -52,7 +53,8 @@
       "communityNames": [
         "Tres Lagos Master Planned Community"
       ],
-      "floorPlanNames": []
+      "floorPlanNames": [],
+      "showCardBadge": false
     },
     {
       "id": "recRLG147EJgKpidi",
@@ -79,7 +81,8 @@
       "communityNames": [
         "Los Prados"
       ],
-      "floorPlanNames": []
+      "floorPlanNames": [],
+      "showCardBadge": false
     },
     {
       "id": "recwRBRS2tbGCZdIA",
@@ -106,7 +109,8 @@
       "communityNames": [
         "Anaqua at Tres Lagos"
       ],
-      "floorPlanNames": []
+      "floorPlanNames": [],
+      "showCardBadge": false
     },
     {
       "id": "recM23CtJOYcl11ig",
@@ -129,7 +133,8 @@
       "floorPlanIds": [],
       "collectionIds": [],
       "communityNames": [],
-      "floorPlanNames": []
+      "floorPlanNames": [],
+      "showCardBadge": false
     },
     {
       "id": "rec97jTJnfJUbOxeG",
@@ -152,7 +157,8 @@
       "floorPlanIds": [],
       "collectionIds": [],
       "communityNames": [],
-      "floorPlanNames": []
+      "floorPlanNames": [],
+      "showCardBadge": false
     },
     {
       "id": "recYFRqVFGNnfGq9Y",
@@ -193,7 +199,8 @@
         "Tanglewood at Bentsen Palm",
         "Palo Alto Groves"
       ],
-      "floorPlanNames": []
+      "floorPlanNames": [],
+      "showCardBadge": false
     },
     {
       "id": "recN9T7jtYvwVzawQ",
@@ -230,7 +237,8 @@
         "Cascada at Tres Lagos",
         "Villas On Freddy"
       ],
-      "floorPlanNames": []
+      "floorPlanNames": [],
+      "showCardBadge": false
     },
     {
       "id": "recsSaSVrrbG7Gz5k",
@@ -283,7 +291,8 @@
         "Stewart Coves",
         "Texas Heights"
       ],
-      "floorPlanNames": []
+      "floorPlanNames": [],
+      "showCardBadge": false
     },
     {
       "id": "rec0FKoazg6PLNlxq",
@@ -314,7 +323,8 @@
         "Villas at Tres Lagos",
         "Anaqua at Tres Lagos"
       ],
-      "floorPlanNames": []
+      "floorPlanNames": [],
+      "showCardBadge": false
     },
     {
       "id": "recyBSi11zNL5CLFi",
@@ -341,7 +351,8 @@
       "communityNames": [
         "Aqualina at Tres Lagos"
       ],
-      "floorPlanNames": []
+      "floorPlanNames": [],
+      "showCardBadge": false
     },
     {
       "id": "recLS31iR3INg5THb",
@@ -368,7 +379,8 @@
       "communityNames": [
         "Cielo Vista"
       ],
-      "floorPlanNames": []
+      "floorPlanNames": [],
+      "showCardBadge": false
     },
     {
       "id": "recmtRtLUzqztlR6v",
@@ -395,7 +407,8 @@
       "communityNames": [
         "Palo Alto Groves"
       ],
-      "floorPlanNames": []
+      "floorPlanNames": [],
+      "showCardBadge": false
     },
     {
       "id": "recPB3vLbSccQtv1R",
@@ -444,7 +457,8 @@
         "Harvest Coves",
         "Sendero at Bentsen Palm"
       ],
-      "floorPlanNames": []
+      "floorPlanNames": [],
+      "showCardBadge": false
     },
     {
       "id": "recDuVUM3qRnXSycT",
@@ -491,7 +505,8 @@
         "Stewart Coves",
         "Texas Heights"
       ],
-      "floorPlanNames": []
+      "floorPlanNames": [],
+      "showCardBadge": false
     }
   ],
   "ts": 0

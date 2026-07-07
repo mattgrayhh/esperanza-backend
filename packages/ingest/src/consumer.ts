@@ -175,6 +175,17 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
   // Defense-in-depth: no forbidden column may be present.
   assertQmiPatchAllowed(patch);
 
+  // Dup guard (0025; real incident: 4122 Westway Court inserted twice with the same
+  // eci_key 003HC00000046 when the diff missed the existing row). eci_key is the
+  // DM_HOUSE natural key — if a row already carries this one, route the message to
+  // the UPDATE path against that row instead of inserting a duplicate.
+  if (msg.isNew && patch['eci_key'] != null) {
+    const dup = await env.DB.prepare('SELECT id FROM qmi WHERE eci_key = ?')
+      .bind(patch['eci_key'])
+      .first<{ id: string }>();
+    if (dup) msg = { ...msg, isNew: false, qmiId: dup.id };
+  }
+
   if (msg.isNew) {
     // INSERT new spec: published=0, seed slug from address, plus the synced patch.
     // availability_text (derived, NOT part of the synced allow-list — see header)

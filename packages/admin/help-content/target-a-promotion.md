@@ -20,7 +20,10 @@ Every promotion has a **Promotion Location** — where on the site it applies:
 - `Home` — one specific Quick Move-In.
 
 Pick the targets on the promotion's page; a promotion can have several
-(e.g. two communities, or a plan plus a city).
+(e.g. two communities, or a plan plus a city). The **QMIs column is grouped by
+community** — each community shows a header with a `selected/total` count, so
+you can apply an offer to specific homes without hunting through one long list
+(the filter box matches community names too).
 
 **Saving:** check off the communities, floor plans, or homes you want, then hit
 the page's main **Save** button at the top — your selections save with the rest
@@ -33,6 +36,13 @@ The promotions list shows a **Lot #s** column — the lot numbers of every home 
 promotion targets. Type a lot number into the list's search box to jump straight
 to the promotions that apply to that lot (handy when your sheet is organized by
 lot number).
+
+## The "Where will this show" preview
+
+Below the picker, a summary box combines your current selection with the saved
+**"Where it shows"** surface toggles and spells the result out — which surfaces
+render, and on how many homes in which communities. Surface toggles reflect the
+last save; the reach updates live as you check targets.
 
 ## Which promotion shows when several apply?
 

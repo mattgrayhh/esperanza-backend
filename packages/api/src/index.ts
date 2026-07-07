@@ -46,6 +46,7 @@ import {
   resolveEffectivePromo,
   type PromoTargetType,
 } from '@esperanza/db/promo';
+import { COMMUNITY_PLAN_PRICE_SQL } from '@esperanza/db/elevation-price';
 import { buildSiteSearchPayload } from './sitesearch.js';
 
 // -----------------------------------------------------------------------------
@@ -360,6 +361,9 @@ export function serializeQmiRow(row: Row, resolved: ResolvedPromo | null): RawAi
   }
 
   // Flatten the resolved effective promo (replacing the legacy best-promo flatten).
+  // promoBannerText is already gated by the promo's show_card_badge toggle in
+  // toResolved(), so a global-surface-only promo no longer stamps its banner
+  // headline onto badge-less homes.
   if (resolved) {
     if (resolved.promoBannerText) fields['promo_text'] = resolved.promoBannerText;
   }
@@ -481,6 +485,7 @@ export interface PromotionPublic {
   showIncentivePage: boolean;
   showBannerButton: boolean;
   showCardCta: boolean;
+  showCardBadge: boolean;
   expirationDate: string;
   communityIds: string[];
   floorPlanIds: string[];
@@ -564,6 +569,7 @@ export function serializePromotionRow(
     showIncentivePage: asBool(promo.show_incentive_page),
     showBannerButton: asBool(promo.show_banner_button),
     showCardCta: asBool(promo.show_card_cta),
+    showCardBadge: asBool(promo.show_card_badge),
     expirationDate: asStr(promo.end_date),
     communityIds,
     floorPlanIds,
@@ -611,7 +617,8 @@ export function serializeFloorPlanRow(
     virtualTourUrl: asStr(row['virtual_tour_url']),
     brochurePdfUrl: asStr(row['brochure_pdf_url']),
     // Resolved effective promo (floor-plan / global scope) — same shape QMI &
-    // community cards already carry. Badge shows when set; CTA gated by show_card_cta.
+    // community cards already carry. Badge/banner gated by show_card_badge; CTA by
+    // show_card_cta (both in toResolved).
     promoBannerText: resolved?.promoBannerText ?? '',
     promoBadgeText: resolved?.promoBadgeText ?? '',
     promoCtaLabel: resolved?.promoCtaLabel ?? '',
@@ -710,17 +717,19 @@ interface PromoContext {
   maps: PromoResolveMaps;
 }
 
-function toResolved(p: PromoRow | null): ResolvedPromo | null {
+export function toResolved(p: PromoRow | null): ResolvedPromo | null {
   if (!p) return null;
-  // Card surfaces: the badge (badge_text) shows whenever it's set; the CTA button is
-  // gated by the promo's `show_card_cta` toggle (the "two options" per card — corner
-  // badge vs CTA button). banner_text (incentive line) keeps flowing when a promo
-  // resolves. ponytail: incentive text not gated; flip here if marketing wants it tied
-  // to show_card_cta too.
+  // Card surfaces are EXPLICIT toggles (migration 0021 + 0024):
+  //   show_card_badge — corner badge (badge_text) AND the card incentive line
+  //     (banner_text → promo_text / promoBannerText). Previously implicit ("badge
+  //     shows whenever set; banner always flows"), which flattened the GLOBAL
+  //     banner headline onto badge-less homes the live site shows bare.
+  //   show_card_cta   — the CTA button on cards ("two options" per card).
+  const showCardBadge = asBool(p.show_card_badge);
   const showCardCta = asBool(p.show_card_cta);
   return {
-    promoBannerText: asStr(p.banner_text),
-    promoBadgeText: asStr(p.badge_text),
+    promoBannerText: showCardBadge ? asStr(p.banner_text) : '',
+    promoBadgeText: showCardBadge ? asStr(p.badge_text) : '',
     promoCtaLabel: showCardCta ? asStr(p.cta_label) : '',
     promoCtaLink: showCardCta ? asStr(p.cta_url) : '',
   };
@@ -856,17 +865,11 @@ async function buildPayload(
       const ctx = await loadPromoContext(session);
       const res = await session.prepare('SELECT * FROM v_public_floor_plans').all();
       const rows = (res.results ?? []) as unknown as Row[];
-      // Per-community lowest price per plan, from community_elevation_prices (Snowflake-derived,
-      // per community × plan × elevation). Keyed by floor_plan_id → { communityName: minPrice }.
-      const cepRes = await session
-        .prepare(
-          `SELECT cep.floor_plan_id AS fp_id, c.name AS community, MIN(cep.sales_price) AS price
-             FROM community_elevation_prices cep
-             JOIN communities c ON c.id = cep.community_id
-            WHERE cep.sales_price > 0
-            GROUP BY cep.floor_plan_id, c.name`
-        )
-        .all();
+      // Per-community price per plan, from community_elevation_prices (Snowflake-derived,
+      // per community × plan × elevation): the community's pinned elevation >
+      // Traditional / Brick where offered > cheapest offered (migration 0025 — shared
+      // SQL in @esperanza/db/elevation-price). Keyed by floor_plan_id → { communityName: price }.
+      const cepRes = await session.prepare(COMMUNITY_PLAN_PRICE_SQL).all();
       const cepByPlan = new Map<string, Record<string, number>>();
       for (const r of (cepRes.results ?? []) as unknown as Row[]) {
         const fpId = asStr(r['fp_id']);

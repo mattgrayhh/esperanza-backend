@@ -37,13 +37,17 @@ the pages you target.
 
 ## "Where it shows" — the surface toggles
 
-A promotion can appear in up to four different places, each switched on/off
-independently. **All four start OFF** — a brand-new promo shows nowhere until you
-turn a surface on:
+A promotion can appear in up to five different places, each switched on/off
+independently. **All toggles start OFF** — a brand-new promo shows nowhere until
+you turn a surface on:
 
-- **Show on Site Banner** — the site-wide top banner (uses the `Headline`).
-- **Show on Incentive Page** — the dedicated incentives page card (uses
+- **Show on Site Banner** — the site-wide top header ticker (uses the `Headline`).
+- **Show on Incentives Page** — the dedicated `/incentives` page card (uses
   `Description`, `Image`, `PDF`, and the rate).
+- **Show Card Badge** — the corner badge (`Banner Overlay Promo`) **and** the
+  incentive line (`Headline`) on community / home / floor-plan **cards and detail
+  pages**, for the locations this promo targets. If this is OFF, nothing from
+  this promo appears on cards — even a global promo.
 - **Show Banner Button** — render the CTA button *inside* the site banner.
 - **Show Card CTA Button** — render the CTA button on promo cards / location pages.
 
@@ -51,6 +55,16 @@ These compose with `Associated Locations`: the surface toggle says **where** a
 promo may appear; the locations narrow **which pages** within that surface.
 Both must pass. (A promo set to "Site Banner" but targeted to one community
 shows in the banner only on that community's pages.)
+
+## "Where will this show" — the preview
+
+Under the targeting picker, a **Where will this show** box spells out the
+promotion in plain language — e.g. *"Card badge + incentive line — on 12 homes
+in Villas on Freddy"* — combining the saved surface toggles with your current
+location selection. If no surface is on (or the promo is unpublished) it warns
+you before you leave the page. The promotions **list** also has a `Shows On`
+column with the same summary, so you can scan every promo's surfaces at a
+glance.
 
 ## Promotion vs. the Incentive text fields
 

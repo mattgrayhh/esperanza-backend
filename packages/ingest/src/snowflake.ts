@@ -238,8 +238,8 @@ export function communitiesSql(env: SnowflakeEnv): string {
        MAX(LIVING_SQUAREFOOTAGE) as MAX_SQFT,
        MIN(CASE WHEN BASE_BEDROOMS > 0 THEN BASE_BEDROOMS END) as MIN_BEDS,
        MAX(BASE_BEDROOMS) as MAX_BEDS,
-       MIN(CASE WHEN BASE_BATHROOMS > 0 THEN BASE_BATHROOMS END) as MIN_BATHS,
-       MAX(BASE_BATHROOMS) as MAX_BATHS
+       MIN(CASE WHEN BASE_BATHROOMS > 0 THEN BASE_BATHROOMS + 0.5 * COALESCE(BASE_HALFBATHROOMS, 0) END) as MIN_BATHS,
+       MAX(BASE_BATHROOMS + 0.5 * COALESCE(BASE_HALFBATHROOMS, 0)) as MAX_BATHS
 FROM ${FQ(env)}.DM_HOUSE
 WHERE HOUSE_CITY IN (${cityList}) AND DEVELOPMENT_NAME IS NOT NULL
 GROUP BY DEVELOPMENT_NAME, HOUSE_CITY`;
@@ -292,7 +292,11 @@ function specFlagOverrideClause(): string {
 
 /** QUERY 3 — Floor Plans aggregate from DM_FLOOR_PLAN (0007). One row per model
  *  across all Esperanza developments: bed/bath min-max across elevation variants,
- *  base-configuration sqft (MIN), and "starting at" price (MIN of positive prices). */
+ *  base-configuration sqft (MIN), and "starting at" price. Since 0025 the price
+ *  follows Viri's rule: the Traditional / Brick elevation where offered (the
+ *  cheapest STANDARD one), else the cheapest offered elevation — MIN-any caught a
+ *  cheaper non-standard elevation (Agave: Contemporary/Brick 420,990 vs the
+ *  correct Traditional/Brick 421,990). */
 export function floorPlansSql(env: SnowflakeEnv): string {
   return `SELECT f.FLOORPLAN_MODEL_NAME,
        MIN(CASE WHEN f.FLOORPLAN_BASE_BEDROOMS > 0 THEN f.FLOORPLAN_BASE_BEDROOMS END),
@@ -301,7 +305,12 @@ export function floorPlansSql(env: SnowflakeEnv): string {
        MAX(f.FLOORPLAN_BASE_BATHROOMS),
        MIN(CASE WHEN f.FLOORPLAN_LIVING_SQUAREFOOTAGE > 0 THEN f.FLOORPLAN_LIVING_SQUAREFOOTAGE END),
        MIN(CASE WHEN f.FLOORPLAN_TOTAL_SQUAREFOOTAGE > 0 THEN f.FLOORPLAN_TOTAL_SQUAREFOOTAGE END),
-       MIN(CASE WHEN f.FLOORPLAN_SALESPRICE > 0 THEN f.FLOORPLAN_SALESPRICE END)
+       COALESCE(
+         MIN(CASE WHEN f.FLOORPLAN_SALESPRICE > 0
+                   AND f.FLOORPLAN_ELEVATION_TYPE = 'Traditional'
+                   AND f.FLOORPLAN_MATERIAL_TYPE = 'Brick'
+                  THEN f.FLOORPLAN_SALESPRICE END),
+         MIN(CASE WHEN f.FLOORPLAN_SALESPRICE > 0 THEN f.FLOORPLAN_SALESPRICE END))
 FROM ${FQ(env)}.DM_FLOOR_PLAN f
 JOIN ${FQ(env)}.DM_COMPANY_DEVELOPMENT d ON f.DEVELOPMENT_ID = d.DEVELOPMENT_ID
 WHERE d.COMPANY_NAME ILIKE '%esperanza%'
@@ -309,14 +318,35 @@ WHERE d.COMPANY_NAME ILIKE '%esperanza%'
 GROUP BY f.FLOORPLAN_MODEL_NAME`;
 }
 
-/** QUERY 4 — Communities "price from" = MIN base price per development (0007). */
+/** QUERY 4 — Communities "price from" per development (0007). Since 0025 it
+ *  follows Viri's rule like QUERY 3: Traditional / Brick where offered, else the
+ *  cheapest offered elevation (was MIN-any). */
 export function communityPriceFromSql(env: SnowflakeEnv): string {
   return `SELECT d.DEVELOPMENT_NAME,
-       MIN(CASE WHEN f.FLOORPLAN_SALESPRICE > 0 THEN f.FLOORPLAN_SALESPRICE END)
+       COALESCE(
+         MIN(CASE WHEN f.FLOORPLAN_SALESPRICE > 0
+                   AND f.FLOORPLAN_ELEVATION_TYPE = 'Traditional'
+                   AND f.FLOORPLAN_MATERIAL_TYPE = 'Brick'
+                  THEN f.FLOORPLAN_SALESPRICE END),
+         MIN(CASE WHEN f.FLOORPLAN_SALESPRICE > 0 THEN f.FLOORPLAN_SALESPRICE END))
 FROM ${FQ(env)}.DM_FLOOR_PLAN f
 JOIN ${FQ(env)}.DM_COMPANY_DEVELOPMENT d ON f.DEVELOPMENT_ID = d.DEVELOPMENT_ID
 WHERE d.COMPANY_NAME ILIKE '%esperanza%' AND d.DEVELOPMENT_NAME IS NOT NULL
 GROUP BY d.DEVELOPMENT_NAME`;
+}
+
+/**
+ * Marketing price rounding (0025): Snowflake's RATIFIED_SALES_PRICE is the raw
+ * base+options figure (218,127 / 225,222 / 369,989.50); the site advertises the
+ * next price ending in 990 (218,990 / 225,990 / 369,990 — confirmed against the
+ * live O'Neill site on those three homes). Round UP to the next …990; a price
+ * already ending in 990 is unchanged. Applied at PARSE time so the diff's
+ * priceWillChange() compares like-for-like against the stored synced_price and
+ * doesn't re-enqueue every home every run.
+ */
+export function roundUpTo990(price: number | null): number | null {
+  if (price == null || !(price > 0)) return price;
+  return Math.ceil((price - 990) / 1000) * 1000 + 990;
 }
 
 /** QUERY 5 — per-elevation prices (0019). One row per development × model ×
@@ -423,7 +453,7 @@ export function parseQmiRows(rowset: unknown[][]): SnowflakeQmiRow[] {
       bathroomCount: bathRaw != null ? parseFloat(bathRaw.toFixed(1)) : null,
       halfBathroomCount: halfRaw != null ? Math.round(halfRaw) : null,
       constructionStage: String(r[14] ?? '').trim(),
-      ratifiedSalesPrice: num(r[15]),
+      ratifiedSalesPrice: roundUpTo990(num(r[15])),
       // 0007 expansion — r[16..23]
       elevationType: knownOrNull(r[16]),
       materialType: knownOrNull(r[17]),
