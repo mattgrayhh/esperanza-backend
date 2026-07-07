@@ -803,15 +803,19 @@ describe('serializeFloorPlanRow communityPrices', () => {
       'Palo Alto Groves': 251990,
       'Vista Verde': 219990,
     });
-    expect(out.startingPrice).toBe(215990); // dev-wide cheapest unchanged
+    // startingPrice = MIN over the buildable (non-close-out) communityPrices — the
+    // stored dev-wide starting_price comes from Snowflake, which can't see the D1
+    // close_out flag, so a close-out community's price could leak in (Agave/Silos case).
+    expect(out.startingPrice).toBe(219990);
     expect(out.communityPrices).toEqual({
       'Palo Alto Groves': 251990,
       'Vista Verde': 219990,
     });
   });
 
-  it('defaults to an empty object when a plan has no community prices', () => {
+  it('falls back to stored starting_price when a plan has no community prices', () => {
     const out = serializeFloorPlanRow(baseRow as any);
+    expect(out.startingPrice).toBe(215990);
     expect(out.communityPrices).toEqual({});
   });
 });

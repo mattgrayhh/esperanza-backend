@@ -74,6 +74,9 @@ export function communityPriceFromExpr(c: string): string {
 /**
  * Per-plan × per-community price map: one row per (floor_plan_id, community name),
  * price = pinned elevation > Traditional / Brick where offered > cheapest offered.
+ * Close-out communities are excluded — no new builds start there, so a plan can't
+ * be bought at that community's base price (live parity: Agave "from" is Sapphire's
+ * 421,990, never close-out Silos' 396,990).
  * Feeds GET /api/public/floorplans `communityPrices` (keyed by community NAME to
  * match the `communities` CSV / Community filter on the Floor Plans browse).
  */
@@ -88,6 +91,7 @@ export const COMMUNITY_PLAN_PRICE_SQL = `SELECT cep.floor_plan_id AS fp_id, c.na
   FROM community_elevation_prices cep
   JOIN communities c ON c.id = cep.community_id
  WHERE cep.sales_price > 0
+   AND c.close_out = 0
  GROUP BY cep.floor_plan_id, c.name`;
 
 /**
