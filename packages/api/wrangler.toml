@@ -44,3 +44,9 @@ binding = "IMAGES"
 bucket_name = "esperanza-cms"
 
 # No secrets required for the read path.
+#
+# === Sentry (backend error monitoring) ===
+# Optional. Set once against the deployed Worker to enable Sentry:
+#   wrangler secret put SENTRY_DSN --name esperanza-api   # paste the esperanza-backend DSN
+# Unset -> Sentry is a no-op (see withSentry `enabled` in src/index.ts). The DSN belongs
+# to the `esperanza-backend` project in the hazard-house Sentry org.

@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@esperanza/db": "*"
+    "@esperanza/db": "*",
+    "@sentry/cloudflare": "^10.63.0"
   }
 }
