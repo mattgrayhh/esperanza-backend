@@ -593,11 +593,18 @@ export function serializeFloorPlanRow(
     slug: asStr(row['slug']),
     comingSoon: asBool(row['coming_soon']),
     collection: asStr(row['collection']),
-    startingPrice: asNumOrNull(row['starting_price']),
-    // Per-community lowest price (MIN community_elevation_prices.sales_price), keyed by
-    // community NAME to match the `communities` CSV / Community filter. A plan is offered in
-    // many communities at different prices; startingPrice above is the dev-wide cheapest, so
-    // the Floor Plans browse shows that community's own price once a community is selected.
+    // Dev-wide "from" = cheapest across communities the plan can still be BUILT in.
+    // communityPrices already excludes close-outs (COMMUNITY_PLAN_PRICE_SQL), so its MIN
+    // is that number; the stored starting_price (Snowflake dev-wide MIN) can't see the
+    // D1 close_out flag and is only the fallback when no elevation rows exist.
+    startingPrice:
+      communityPrices && Object.keys(communityPrices).length > 0
+        ? Math.min(...Object.values(communityPrices))
+        : asNumOrNull(row['starting_price']),
+    // Per-community lowest price, keyed by community NAME to match the `communities`
+    // CSV / Community filter. A plan is offered in many communities at different prices;
+    // startingPrice above is the buildable dev-wide cheapest, so the Floor Plans browse
+    // shows that community's own price once a community is selected.
     communityPrices: communityPrices ?? {},
     bedroomMin: asIntOrNull(row['bedroom_min']),
     bedroomMax: asIntOrNull(row['bedroom_max']),
