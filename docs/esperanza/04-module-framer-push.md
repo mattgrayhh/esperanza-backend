@@ -80,7 +80,14 @@ curl -X POST "https://<worker>/schema" \
   -d '{"collection":"qmi","fields":[{"key":"move_in_date","framer_type":"string","label":"Move-In Date"}]}'
 ```
 
-### `POST /cron`  — run the nightly lookback now.
+**Promotion target-id fields.** A promo's targeting lives in `promotion_targets`
+(`target_type` ∈ community | qmi | global; qmi is the majority in prod). The framer-push
+mapper group-concats these into `community_ids` / `floor_plan_ids` / `qmi_ids` CSVs so a
+location page can filter promos by `<x>_ids Contains {id}`. These are engine-derived
+`string` fields (hidden in the admin via `visibleInForm:false`; the "Associated Locations"
+promoScopeTag widget owns editing). They carry `field_definitions` rows (framer_type=`string`)
+so `push_schema promotions` creates/keeps them — without those rows the mapper's `*_ids` were
+silently dropped by Framer's `addItems`. `qmi_ids` was added 2026-07-01 (deploy 1a5b92604).
 ### `POST /<collection>`  — webhook receiver / targeted enqueue (e.g. `/qmi`); add `?sync=true` to push synchronously instead of enqueueing.
 
 ---

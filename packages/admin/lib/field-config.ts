@@ -556,6 +556,16 @@ const promotions: EntityFieldConfig = {
     { field: 'end_date', label: 'End Date', widget: 'date', bucket: 'admin', halfWidth: true },
     { field: 'applies_to', label: 'Applies-To Label (legacy)', widget: 'text', bucket: 'admin', help: 'Informational only; does NOT drive targeting.', visibleInForm: false },
     { field: 'promotion_targets', label: 'Associated Locations', widget: 'promoScopeTag', bucket: 'target' },
+    // Engine-derived target-id CSVs pushed to Framer so a location page can filter
+    // promos by `<x>_ids Contains {id}`. The promoScopeTag widget above OWNS editing;
+    // these are read-only projections of promotion_targets (group_concat by type in
+    // the framer-push mapper). Hidden from the form; text widget → framer_type 'string'
+    // so /push-schema CREATES the matching Framer string field (a promoScopeTag field
+    // resolves to NULL and pushes no schema, so without these the mapper's *_ids were
+    // silently dropped by addItems). qmi is the majority target type in prod.
+    { field: 'community_ids', label: 'Community IDs (derived)', widget: 'text', bucket: 'target', visibleInForm: false },
+    { field: 'floor_plan_ids', label: 'Floor Plan IDs (derived)', widget: 'text', bucket: 'target', visibleInForm: false },
+    { field: 'qmi_ids', label: 'QMI IDs (derived)', widget: 'text', bucket: 'target', visibleInForm: false },
   ],
 };
 
