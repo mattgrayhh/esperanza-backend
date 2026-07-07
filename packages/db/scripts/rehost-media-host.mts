@@ -47,7 +47,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_DB_DIR = join(__dirname, '..');
 
 // --- config -----------------------------------------------------------------
-const R2_BASE = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev';
+const R2_BASE = 'https://img.hazardhouse.ai';
 const DEAD_HOST = 'media.esperanzahomes.com';
 const DB = 'esperanza';
 const BUCKET = DEFAULT_BUCKET;

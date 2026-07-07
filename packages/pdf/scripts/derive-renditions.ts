@@ -44,7 +44,7 @@ const PKG_DB_DIR = join(__dirname, '..', '..', 'db');
 const DEFAULT_BUCKET = 'esperanza-cms';
 const DEFAULT_PUBLIC_BASE =
   process.env['IMAGES_PUBLIC_BASE_URL'] ??
-  'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev';
+  'https://img.hazardhouse.ai';
 
 const WIDTHS = [600, 1200, 2000] as const;
 type RenditionVariant = `w${(typeof WIDTHS)[number]}`;

@@ -27,7 +27,7 @@ export const DEFAULT_BUCKET = 'esperanza-cms';
 // media.esperanzahomes.com (the legacy web host), which was decommissioned
 // 2026-06-15 — so that host must NEVER be the CDN base or be treated as "stable",
 // or scripts re-mint dead URLs. See scripts/rehost-media-host.mts.
-export const DEFAULT_CDN_BASE = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev';
+export const DEFAULT_CDN_BASE = 'https://img.hazardhouse.ai';
 
 export function cdnBase(): string {
   return (process.env.CDN_BASE_URL ?? DEFAULT_CDN_BASE).replace(/\/+$/, '');

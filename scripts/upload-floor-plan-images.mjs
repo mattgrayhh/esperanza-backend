@@ -30,7 +30,7 @@ const REPO = join(__dirname, '..');
 
 const SVG_ROOT =
   '/Users/mgd/Library/CloudStorage/Dropbox/Family Room/3. Client Files/Rhodes Enterprises/Client Assets/Esperanza Homes - Selections/api_data/svg_files';
-const PUBLIC_BASE = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev';
+const PUBLIC_BASE = 'https://img.hazardhouse.ai';
 const BUCKET = 'esperanza-cms';
 const DB_NAME = 'esperanza';
 const DB_DIR = join(REPO, 'packages', 'db'); // run wrangler from here (resolves the D1 binding)

@@ -23,7 +23,7 @@
 // the (correctly) migrated city images.
 //
 // USAGE (from packages/db, AIRTABLE_PAT exported):
-//   CDN_BASE_URL=https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev \
+//   CDN_BASE_URL=https://img.hazardhouse.ai \
 //     npx tsx scripts/fix-city-block-images.ts [--dry-run]
 // =============================================================================
 

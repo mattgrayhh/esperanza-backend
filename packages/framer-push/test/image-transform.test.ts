@@ -17,7 +17,7 @@ import {
 import { image, galleryArray } from '../src/framer-types.js';
 
 const BASE = 'https://ehi.hazardhouse.ai';
-const R2 = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev';
+const R2 = 'https://img.hazardhouse.ai';
 
 afterEach(() => resetImageTransform());
 

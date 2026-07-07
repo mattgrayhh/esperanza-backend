@@ -17,4 +17,4 @@ ADMIN_DEV_EMAIL=you@esperanzahomes.com
 
 # --- Public image base (also in wrangler.toml [vars]; .dev.vars overrides locally) ---
 # uploadImage() builds the stable url as `${IMAGES_PUBLIC_BASE_URL}/<entity>/<id>/<file>`.
-IMAGES_PUBLIC_BASE_URL=https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev
+IMAGES_PUBLIC_BASE_URL=https://img.hazardhouse.ai

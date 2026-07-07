@@ -31,7 +31,7 @@ const PKG_DB_DIR = join(__dirname, '..');
 
 // Pin the public image base so migrated images get RESOLVING r2.dev urls (the zone
 // esperanzahomes.com is not on this CF account) and existing r2.dev urls count as stable.
-const R2_DEV_BASE = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev';
+const R2_DEV_BASE = 'https://img.hazardhouse.ai';
 if (!process.env.CDN_BASE_URL) process.env.CDN_BASE_URL = R2_DEV_BASE;
 
 // Confirmed gap columns (source has data, D1 empty). Split by handling.

@@ -17,7 +17,7 @@
 // (treats it as already-migrated) — here those ARE the sources we must pull from.
 //
 // USAGE (from packages/db):
-//   CDN_BASE_URL=https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev \
+//   CDN_BASE_URL=https://img.hazardhouse.ai \
 //   AIRTABLE_PAT=... npx tsx scripts/rehost-qmi-images.mts [--remote|--local] [--dry-run]
 // =============================================================================
 

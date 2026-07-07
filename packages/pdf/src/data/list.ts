@@ -75,7 +75,7 @@ function garageText(minG: number | null, maxG: number | null): string {
 
 // The Quick Move-In Homes one-pager artwork (logo + contact + green band header, website +
 // disclaimer + equal-housing footer). Cards are laid over the empty middle region.
-const QMI_TEMPLATE_PNG = 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev/pdf-templates/quick-move-in-homes.png';
+const QMI_TEMPLATE_PNG = 'https://img.hazardhouse.ai/pdf-templates/quick-move-in-homes.png';
 
 // QMI-grid card image width (px) fed to the /img resizer. Chrome re-encodes embedded
 // images, so source pixel size is the lever on total PDF bytes. The full all-city QMI

@@ -58,7 +58,7 @@ const PKG_DB_DIR = join(__dirname, '../../db');
 // Public URL helper (no Env object available in Node; read from env var)
 // ---------------------------------------------------------------------------
 const PDF_PUBLIC_BASE =
-  (process.env['PDF_PUBLIC_BASE_URL'] ?? 'https://pub-9c9bfee574a54b62b2623e361b3ad305.r2.dev').replace(/\/+$/, '');
+  (process.env['PDF_PUBLIC_BASE_URL'] ?? 'https://img.hazardhouse.ai').replace(/\/+$/, '');
 
 function publicPdfUrl(type: PdfType, slug: string): string {
   return `${PDF_PUBLIC_BASE}/pdf/${type}/${slug}`;
