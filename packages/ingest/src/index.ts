@@ -34,6 +34,7 @@ import {
   type SnowflakeEnv,
 } from './snowflake.js';
 import { buildElevationPriceRows, writeElevationPrices } from './elevation-prices.js';
+import { syncCommunityMembership } from './community-membership.js';
 import {
   diff,
   type ExistingQmi,
@@ -250,6 +251,25 @@ export async function runIngest(
     );
     await writeElevationPrices(env.DB, elevationRows);
 
+    // Derive floor-plan community membership from the elevation prices just written:
+    // a plan is "offered" in every community that prices it (a cep row), so union that
+    // into floor_plans.communities / community_ids / community_count. Additive — never
+    // drops a manual pick — so community pages + the plan-list PDF list every priced
+    // plan without waiting on the admin picker. Push each changed plan to Framer.
+    let membershipChanged: string[] = [];
+    try {
+      membershipChanged = await syncCommunityMembership(env.DB, elevationRows, new Date().toISOString());
+      for (let i = 0; i < membershipChanged.length; i += 100) {
+        await env.FRAMER_QUEUE.sendBatch(
+          membershipChanged.slice(i, i + 100).map((id) => ({ body: { collection: 'floor_plans', action: 'upsert', id } }))
+        );
+      }
+    } catch (e) {
+      // Non-fatal: a membership-derivation failure must not fail the whole sync
+      // (prices are already written; next run retries). Surface it in the logs.
+      console.error('community membership derivation failed:', e);
+    }
+
     // Mass-unpublish guard (2026-06-11 truncated-rowset incident): when tripped
     // the diff emitted NO qmi.unpublish messages — surface it loudly so the
     // skipped run is visible in sync_log (and in the Worker logs).
@@ -273,8 +293,8 @@ export async function runIngest(
       floorPlansUpdated: stats.floorPlansUpdated,
       unresolvedLinks: stats.unresolvedLinks,
       notes: unpublishGuard.tripped
-        ? `producer enqueued ${messages.length} message(s); wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${unpublishGuard.reason}`
-        : `producer enqueued ${messages.length} message(s); wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved)`,
+        ? `producer enqueued ${messages.length} message(s); wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated; ${unpublishGuard.reason}`
+        : `producer enqueued ${messages.length} message(s); wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated`,
     });
   } catch (err) {
     await writeSyncLog(env, {
