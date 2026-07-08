@@ -18,6 +18,7 @@ import {
   CITY_VENUE_BLOCK_KEYS,
   type FieldConfig,
   type SelectSource,
+  HIDDEN_COMMUNITY_FORM_FIELDS,
 } from './field-config';
 import { statusGate, deriveStatus, statusOptions } from './status';
 import { isImageField } from './image-fields';
@@ -30,6 +31,7 @@ import type {
   PublishGateView,
   SideWidget,
 } from '../components/EntityEditForm';
+import { buildLiveSitePlacement, type LiveSitePlacement } from './live-site';
 
 type Row = Record<string, unknown>;
 
@@ -84,6 +86,7 @@ export interface EditView {
   fields: FieldView[];
   publishGate: PublishGateView | null;
   sideWidgets: SideWidget[];
+  liveSite: LiveSitePlacement;
 }
 
 /** [4][35][36] Sub-line under the detail H1. The raw `rec…` id is gone; communities show
@@ -110,6 +113,27 @@ function snakeToCamel(k: string): string {
 function col(row: Row, key: string): unknown {
   const v = row[key];
   return v !== undefined ? v : row[snakeToCamel(key)];
+}
+
+/** HOA links + floor plans offered — shared by generic and bespoke community editors. */
+export async function loadCommunitySideWidgets(row: Row, _id: string): Promise<SideWidget[]> {
+  const db = getReadDb();
+  const sideWidgets: SideWidget[] = [];
+
+  sideWidgets.push({ kind: 'hoaLinks', initial: parseLinks(col(row, 'hoa_links_json')) });
+
+  const communityName = s(col(row, 'name')).trim();
+  const options = await loadFloorPlanOptions();
+  const planRows = (await db
+    .select({ id: floorPlans.id, communities: floorPlans.communities })
+    .from(floorPlans)) as Array<{ id: string; communities: string | null }>;
+  const lc = communityName.toLowerCase();
+  const selected = planRows
+    .filter((p) => parseCommunityNames(p.communities).some((n) => n.toLowerCase() === lc))
+    .map((p) => p.id);
+  sideWidgets.push({ kind: 'communityFloorPlans', communityName, selected, options });
+
+  return sideWidgets;
 }
 
 function firstNonEmpty(row: Row, cols: string[]): string {
@@ -186,6 +210,7 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
     if (f.bucket === 'publish') continue;
     // Operator hid this field from the form (Field Builder / feedback [7]-[11]).
     if (f.visibleInForm === false) continue;
+    if (key === 'communities' && HIDDEN_COMMUNITY_FORM_FIELDS.has(f.field)) continue;
 
     // Custom side widgets (own actions, rendered below the form).
     if (f.widget === 'hoaLinks') {
@@ -251,20 +276,17 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
     });
   }
 
-  // Community → Floor Plans (which plans are offered here). The relationship lives on
-  // floor_plans.communities (CSV of community names); selected = plans whose CSV
-  // includes THIS community's name (case-insensitive).
+  // Community → Floor Plans (which plans are offered here).
   if (cfg.fields.some((f) => f.widget === 'communityFloorPlans')) {
-    const communityName = s(col(row, 'name')).trim();
-    const options = await loadFloorPlanOptions();
-    const planRows = (await db
-      .select({ id: floorPlans.id, communities: floorPlans.communities })
-      .from(floorPlans)) as Array<{ id: string; communities: string | null }>;
-    const lc = communityName.toLowerCase();
-    const selected = planRows
-      .filter((p) => parseCommunityNames(p.communities).some((n) => n.toLowerCase() === lc))
-      .map((p) => p.id);
-    sideWidgets.push({ kind: 'communityFloorPlans', communityName, selected, options });
+    const widgets = await loadCommunitySideWidgets(row, id);
+    for (const w of widgets) {
+      if (w.kind === 'communityFloorPlans') sideWidgets.push(w);
+    }
+  }
+
+  // HOA links widget (when configured).
+  if (cfg.fields.some((f) => f.widget === 'hoaLinks') && !sideWidgets.some((w) => w.kind === 'hoaLinks')) {
+    sideWidgets.push({ kind: 'hoaLinks', initial: parseLinks(col(row, 'hoa_links_json')) });
   }
 
   // Publish gate view model — tri-state status derived from the existing columns
@@ -286,7 +308,13 @@ export async function buildEditView(key: EntityKey, id: string): Promise<EditVie
   const displayName = resolveDisplayName(key, row, id);
   const subtitle = resolveSubtitle(key, row);
 
-  return { def, id, displayName, subtitle, fields, publishGate, sideWidgets };
+  const liveSite = buildLiveSitePlacement(key, row, {
+    published: Boolean(col(row, 'published')),
+    status: publishGate?.status,
+    active: key === 'promotions' ? Boolean(col(row, 'active')) : undefined,
+  });
+
+  return { def, id, displayName, subtitle, fields, publishGate, sideWidgets, liveSite };
 }
 
 /** Resolve a single config field into a FieldView, reading the row + option sets.

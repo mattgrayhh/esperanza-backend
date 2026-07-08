@@ -58,6 +58,7 @@ export function PromoScopeTagPicker({
   surfaces,
   published,
   onResult,
+  showStandaloneSave = false,
 }: {
   promoId: string;
   initialGlobal: boolean;
@@ -67,6 +68,7 @@ export function PromoScopeTagPicker({
   surfaces?: PromoSurfaces;
   published?: boolean;
   onResult?: (msg: string) => void;
+  showStandaloneSave?: boolean;
 }) {
   const [mode, setMode] = useState<'global' | 'scoped'>(initialGlobal ? 'global' : 'scoped');
   const [sel, setSel] = useState<Selected>(initialSelected);
@@ -148,9 +150,11 @@ export function PromoScopeTagPicker({
         />
       ) : null}
 
-      <Button type="button" onClick={onSave} disabled={pending} className="justify-self-start">
-        {pending ? 'Saving…' : 'Save targeting'}
-      </Button>
+      {showStandaloneSave ? (
+        <Button type="button" onClick={onSave} disabled={pending} className="justify-self-start">
+          {pending ? 'Saving…' : 'Save targeting'}
+        </Button>
+      ) : null}
     </div>
   );
 }

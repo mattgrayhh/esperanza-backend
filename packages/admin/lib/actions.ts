@@ -447,6 +447,38 @@ export async function saveEntity(
     }
   }
 
+  // Community side widgets: HOA links + floor-plan membership mirror into the main
+  // <form> as hidden JSON fields (same pattern as __promo_targets).
+  if (def.key === 'communities') {
+    const rawHoa = formData.get('__hoa_links');
+    if (typeof rawHoa === 'string' && rawHoa) {
+      let links: Array<{ title: string; link: string }>;
+      try {
+        const parsed = JSON.parse(rawHoa);
+        if (!Array.isArray(parsed)) throw new Error('not array');
+        links = parsed as Array<{ title: string; link: string }>;
+      } catch {
+        return { ok: false, error: 'HOA links: invalid payload' };
+      }
+      const hr = await saveCommunityHoaLinks(id, links);
+      if (!hr.ok) return { ok: false, error: `HOA links: ${hr.error}` };
+    }
+
+    const rawPlans = formData.get('__community_floor_plans');
+    if (typeof rawPlans === 'string' && rawPlans) {
+      let planIds: string[];
+      try {
+        const parsed = JSON.parse(rawPlans);
+        if (!Array.isArray(parsed)) throw new Error('not array');
+        planIds = parsed.map((x) => String(x));
+      } catch {
+        return { ok: false, error: 'Floor plans: invalid payload' };
+      }
+      const pr = await saveCommunityFloorPlans(id, planIds);
+      if (!pr.ok) return { ok: false, error: `Floor plans: ${pr.error}` };
+    }
+  }
+
   if (Object.keys(patch).length === 0) {
     return { ok: true }; // nothing changed
   }
