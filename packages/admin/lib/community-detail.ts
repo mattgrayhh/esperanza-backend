@@ -12,14 +12,16 @@ import { eq, sql } from 'drizzle-orm';
 import { getReadDb } from './db';
 import { communities } from '@esperanza/db';
 import { resolveFieldConfig } from './field-config-source';
+import { HIDDEN_COMMUNITY_FORM_FIELDS } from './field-config';
 import { loadOptionSets } from './select-options';
-import { buildFieldView, parseCustomFields } from './build-edit-view';
+import { buildFieldView, parseCustomFields, loadCommunitySideWidgets } from './build-edit-view';
 import { communityStatCounts } from './community-counts';
 import { loadCommunityActivity } from './community-activity';
 import { statusGate, deriveStatus, statusOptions } from './status';
-import type { FieldView } from '../components/EntityEditForm';
+import type { FieldView, SideWidget } from '../components/EntityEditForm';
 import type { MapCommunity } from '@esperanza/community-map';
 import type { ActivityGroup } from './activity-format';
+import { buildLiveSitePlacement, type LiveSitePlacement } from './live-site';
 
 type Row = Record<string, unknown>;
 
@@ -42,6 +44,15 @@ function col(row: Row, key: string): unknown {
   return row[camel];
 }
 
+/** Ordered gallery JSON for ImageGalleryEditor — reads photo_gallery_json; falls back to the primary gallery image. */
+function resolveCommunityGalleryJson(row: Row): string {
+  const raw = s(col(row, 'photo_gallery_json'));
+  if (raw && raw !== '[]') return raw;
+  const primary = s(col(row, 'photo_gallery_image_url'));
+  if (primary) return JSON.stringify([primary]);
+  return raw;
+}
+
 export interface CommunityDetailView {
   id: string;
   displayName: string;          // name
@@ -50,28 +61,48 @@ export interface CommunityDetailView {
   statusOptions: string[];
   hero: { featuredImageUrl: string; description: string };
   stats: { city: string; startingPrice: string; qmiCount: number; floorPlanCount: number };
-  basicInfo: FieldView[];       // price_from, square_footage_range, bed_count, bath_count (override) + name/slug/town/master_planned (admin)
+  basicInfo: FieldView[];       // price_from, square_footage_range, bed_count, bath_count (override) + name/slug/town/master_planned/close_out (admin)
   map: { community: MapCommunity | null }; // null when geo missing
-  media: { featured: FieldView; featuredAlt: FieldView; secondary: FieldView; logo: FieldView; descriptionImage: FieldView; gallery: FieldView };
+  media: {
+    featured: FieldView;
+    featuredVideo: FieldView;
+    secondary: FieldView;
+    photoGalleryImage: FieldView;
+    logo: FieldView;
+    gallery: FieldView;
+    /** Raw `photo_gallery_json` column — passed straight to ImageGalleryEditor (QMI pattern). */
+    galleryJson: string;
+  };
   activity: ActivityGroup[];
-  remaining: { group: string; fields: FieldView[] }[]; // grouped leftover admin fields
+  remaining: { group: string; fields: FieldView[] }[];
+  liveSite: LiveSitePlacement;
+  sideWidgets: SideWidget[];
 }
 
 // Fields placed in basicInfo (override bucket)
 const BASIC_INFO_OVERRIDE_FIELDS = ['price_from', 'square_footage_range', 'bed_count', 'bath_count'] as const;
 // Fields placed in basicInfo (admin bucket — identity)
-const BASIC_INFO_ADMIN_FIELDS = ['name', 'slug', 'town', 'master_planned'] as const;
+const BASIC_INFO_ADMIN_FIELDS = ['name', 'slug', 'town', 'master_planned', 'close_out'] as const;
 // All basicInfo field names
 const BASIC_INFO_FIELDS = new Set<string>([...BASIC_INFO_OVERRIDE_FIELDS, ...BASIC_INFO_ADMIN_FIELDS]);
 
 // Fields placed in media
 const MEDIA_FIELDS = new Set<string>([
   'featured_image_url',
-  'featured_image_alt',
   'secondary_image_url',
+  'photo_gallery_image_url',
   'community_logo_url',
-  'description_image_url',
   'photo_gallery_json',
+  'featured_video',
+]);
+
+// Dead alt-text columns — hidden from the bespoke community editor (D1 defs may still list them).
+const HIDDEN_COMMUNITY_DETAIL_FIELDS = new Set([
+  ...HIDDEN_COMMUNITY_FORM_FIELDS,
+  'featured_image_alt',
+  'secondary_image_alt',
+  'photo_gallery_image_alt',
+  'community_logo_alt',
 ]);
 
 /**
@@ -187,13 +218,16 @@ export async function buildCommunityDetailView(id: string): Promise<CommunityDet
     return buildFieldView('communities', fc, row, optionSets, customValues);
   }
 
+  const galleryJson = resolveCommunityGalleryJson(row);
+
   const media = {
     featured: mediaFieldView('featured_image_url'),
-    featuredAlt: mediaFieldView('featured_image_alt'),
+    featuredVideo: mediaFieldView('featured_video'),
     secondary: mediaFieldView('secondary_image_url'),
+    photoGalleryImage: mediaFieldView('photo_gallery_image_url'),
     logo: mediaFieldView('community_logo_url'),
-    descriptionImage: mediaFieldView('description_image_url'),
     gallery: mediaFieldView('photo_gallery_json'),
+    galleryJson,
   };
 
   // ── 9. Activity ──────────────────────────────────────────────────────────────
@@ -207,20 +241,33 @@ export async function buildCommunityDetailView(id: string): Promise<CommunityDet
     if (f.bucket === 'publish') return false;
     if (PLACED_FIELDS.has(f.field)) return false;
     if (f.visibleInForm === false) return false;
+    if (HIDDEN_COMMUNITY_DETAIL_FIELDS.has(f.field)) return false;
     // Skip bespoke side-widget fields (they need their own actions)
     if (f.widget === 'hoaLinks' || f.widget === 'communityFloorPlans' || f.widget === 'promoScopeTag' || f.widget === 'jsonBlocks') return false;
     return true;
   });
 
-  // Group by f.group (undefined → 'Details')
+  // Group by f.group (undefined → 'Community Details')
   const groupMap = new Map<string, FieldView[]>();
   for (const f of remainingFields) {
-    const group = f.group ?? 'Details';
+    const group = f.group ?? 'Community Details';
     if (!groupMap.has(group)) groupMap.set(group, []);
     groupMap.get(group)!.push(buildFieldView('communities', f, row, optionSets, customValues));
   }
 
-  const remaining = [...groupMap.entries()].map(([group, fields]) => ({ group, fields }));
+  const remaining = [...groupMap.entries()].map(([group, fields]) => {
+    if (group !== 'Community Details') return { group, fields };
+    const descIdx = fields.findIndex((f) => f.field === 'description');
+    const imgIdx = fields.findIndex((f) => f.field === 'description_image_url');
+    if (descIdx === -1 || imgIdx === -1 || imgIdx === descIdx + 1) return { group, fields };
+    const ordered = [...fields];
+    const [img] = ordered.splice(imgIdx, 1);
+    ordered.splice(descIdx + 1, 0, img!);
+    return { group, fields: ordered };
+  });
+
+  const liveSite = buildLiveSitePlacement('communities', row, { published: Boolean(col(row, 'published')), status });
+  const sideWidgets = await loadCommunitySideWidgets(row, id);
 
   return {
     id,
@@ -235,5 +282,7 @@ export async function buildCommunityDetailView(id: string): Promise<CommunityDet
     media,
     activity,
     remaining,
+    liveSite,
+    sideWidgets,
   };
 }

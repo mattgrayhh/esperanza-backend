@@ -1,87 +1,128 @@
 'use client';
 
-// =============================================================================
-// CommunityDetail — the bespoke community detail screen (client shell).
-//
-// A single <form action={onSubmit}> wraps the editable sections so that
-// saveEntity('communities', id, formData) picks up every field in one pass.
-// Image uploaders (CommunityMediaBar / CommunityRemainingFields) carry their own
-// hidden inputs and live inside this form — exactly like QmiDetail.
-//
-// PublishedToggle uses its own dedicated action (setStatus) and lives outside the
-// form, in the CommunityHero children slot.
-// =============================================================================
-
-import { useState, useTransition } from 'react';
 import { saveEntity } from '../../../lib/actions';
 import { PublishedToggle } from '../../fields/PublishedToggle';
-import { CommunityHero } from './CommunityHero';
+import { CommunitySiteHeader } from './CommunitySiteHeader';
 import { CommunityStatCards } from './CommunityStatCards';
 import { CommunityBasicInfo } from './CommunityBasicInfo';
 import { CommunityMap } from './CommunityMap';
 import { RecentActivity } from './RecentActivity';
 import { CommunityMediaBar } from './CommunityMediaBar';
-import { CommunityRemainingFields } from './CommunityRemainingFields';
+import {
+  CommunityRemainingFields,
+} from './CommunityRemainingFields';
 import type { CommunityDetailView } from '../../../lib/community-detail';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import {
+  EditToast,
+  PlacementRail,
+  RecordEditBreadcrumb,
+  RecordEditLayout,
+  StickyActionBar,
+  UnsavedLeaveToast,
+  sectionId,
+} from '@/components/record-edit/RecordEditShell';
+import { MAIN_SAVE_SIDE_WIDGETS, SideWidgetBlock } from '@/components/record-edit/SideWidgetBlock';
+import { useEditSaveFeedback } from '@/components/record-edit/useEditSaveFeedback';
 
 export function CommunityDetail({ view }: { view: CommunityDetailView }) {
-  const [msg, setMsg] = useState('');
-  const [isPending, startTransition] = useTransition();
-  const isError = msg.startsWith('Error:');
+  const formId = `community-edit-${view.id}`;
+  const {
+    pending,
+    startTransition,
+    reportResult,
+    barStatusText,
+    barTone,
+    toast,
+    dismissToast,
+    leavePrompt,
+    saveBeforeLeave,
+    discardLeave,
+    stayOnPage,
+  } = useEditSaveFeedback(formId);
 
   function onSubmit(formData: FormData) {
     startTransition(async () => {
       const res = await saveEntity('communities', view.id, formData);
-      setMsg(res.ok ? 'Saved' : `Error: ${res.error}`);
+      reportResult(res.ok ? 'Saved' : `Error: ${res.error}`);
     });
   }
 
+  const floorPlansWidget = view.sideWidgets.find((w) => w.kind === 'communityFloorPlans');
+  const inFormWidgets = view.sideWidgets.filter(
+    (w) => MAIN_SAVE_SIDE_WIDGETS.has(w.kind) && w.kind !== 'communityFloorPlans',
+  );
+
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6">
-      {/* ── Hero banner with status toggle as children ── */}
-      <CommunityHero view={view}>
-        <PublishedToggle
-          entityKey="communities"
-          id={view.id}
-          gate="status"
-          initialStatus={view.status}
-          statusOptions={view.statusOptions}
-          onResult={setMsg}
+    <div className="w-full">
+      <div className="mx-auto w-full max-w-screen-2xl px-2 md:px-4">
+        <RecordEditBreadcrumb
+          collectionLabel="Communities"
+          collectionHref="/communities"
+          recordName={view.displayName}
         />
-      </CommunityHero>
+        <div className="mt-3">
+          <StickyActionBar
+            formId={formId}
+            pending={pending}
+            statusText={barStatusText}
+            statusTone={barTone}
+            title={view.displayName}
+          />
+        </div>
+      </div>
+      <EditToast message={toast?.message ?? null} tone={toast?.tone ?? 'success'} onDismiss={dismissToast} />
+      <UnsavedLeaveToast
+        open={leavePrompt != null}
+        pending={pending}
+        onSave={saveBeforeLeave}
+        onDiscard={discardLeave}
+        onStay={stayOnPage}
+      />
 
-      {/* ── Read-only stat cards ── */}
-      <CommunityStatCards stats={view.stats} />
+      <form id={formId} action={onSubmit} className="mt-5">
+        <CommunitySiteHeader id={view.id} displayName={view.displayName} media={view.media} />
 
-      {/* ── Editable form ── */}
-      <form action={onSubmit} className="space-y-6">
-        {/* Two-column: basic info (left) + map + activity (right) */}
-        <section className="grid gap-6 lg:grid-cols-[1fr_360px]">
-          <CommunityBasicInfo fields={view.basicInfo} />
-          <div className="space-y-6">
-            <CommunityMap community={view.map.community} />
-            <RecentActivity groups={view.activity} />
-          </div>
-        </section>
-
-        {/* Compact media bar — all image fields + gallery */}
-        <CommunityMediaBar id={view.id} media={view.media} />
-
-        {/* Grouped remaining admin/synced fields in accordions */}
-        <CommunityRemainingFields groups={view.remaining} id={view.id} />
-
-        {/* ── Save button + status message ── */}
-        <div className="flex items-center gap-3">
-          <Button type="submit" disabled={isPending}>
-            {isPending ? 'Saving…' : 'Save changes'}
-          </Button>
-          {msg ? (
-            <span className={cn('text-sm', isError ? 'text-destructive' : 'text-muted-foreground')}>
-              {msg}
-            </span>
-          ) : null}
+        <div className="mx-auto w-full max-w-screen-2xl space-y-6 px-2 md:px-4">
+          <RecordEditLayout
+            main={
+              <div className="space-y-6">
+                <CommunityStatCards stats={view.stats} />
+                <section className="grid gap-6 lg:grid-cols-[1fr_360px]">
+                  <CommunityBasicInfo fields={view.basicInfo} />
+                  <div id={sectionId('Map')}>
+                    <CommunityMap community={view.map.community} />
+                  </div>
+                </section>
+                <CommunityRemainingFields
+                  groups={view.remaining}
+                  id={view.id}
+                  floorPlans={floorPlansWidget ?? null}
+                />
+                {inFormWidgets.map((w, i) => (
+                  <div key={i} id={sectionId(w.kind === 'hoaLinks' ? 'HOA Links' : 'Floor Plans Offered')}>
+                    <SideWidgetBlock id={view.id} widget={w} onResult={reportResult} />
+                  </div>
+                ))}
+              </div>
+            }
+            rail={
+              <PlacementRail
+                placement={view.liveSite}
+                publishControl={
+                  <PublishedToggle
+                    entityKey="communities"
+                    id={view.id}
+                    gate="status"
+                    initialStatus={view.status}
+                    statusOptions={view.statusOptions}
+                    onResult={reportResult}
+                  />
+                }
+                media={<CommunityMediaBar id={view.id} media={view.media} />}
+                trailing={<RecentActivity groups={view.activity} compact />}
+              />
+            }
+          />
         </div>
       </form>
     </div>

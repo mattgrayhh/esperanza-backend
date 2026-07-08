@@ -384,6 +384,39 @@ describe('savePromotionTargets — replace-all promotion_targets honoring the CH
 });
 
 // =============================================================================
+// saveEntity — community side widgets via hidden fields (__hoa_links, __community_floor_plans)
+// =============================================================================
+describe('saveEntity community side widgets', () => {
+  beforeEach(() => {
+    H.sqlite.exec(`
+      INSERT INTO communities (id, name, hoa_links_json) VALUES ('c1', 'Aquero', '[]');
+      INSERT INTO floor_plans (id, name, communities, community_count, community_ids) VALUES
+        ('fp1', 'Plan A', NULL, 0, NULL);
+    `);
+  });
+
+  it('persists HOA links from __hoa_links', async () => {
+    const links = [{ title: 'HOA site', link: 'https://hoa.example' }];
+    const res = await saveEntity('communities', 'c1', form({ __hoa_links: JSON.stringify(links) }));
+    expect(res).toEqual({ ok: true });
+    const row = H.sqlite.prepare('SELECT hoa_links_json FROM communities WHERE id = ?').get('c1') as {
+      hoa_links_json: string;
+    };
+    expect(JSON.parse(row.hoa_links_json)).toEqual(links);
+  });
+
+  it('persists floor-plan membership from __community_floor_plans', async () => {
+    const res = await saveEntity('communities', 'c1', form({ __community_floor_plans: JSON.stringify(['fp1']) }));
+    expect(res).toEqual({ ok: true });
+    const fp = H.sqlite
+      .prepare('SELECT communities, community_ids FROM floor_plans WHERE id = ?')
+      .get('fp1') as { communities: string; community_ids: string };
+    expect(fp.communities).toBe('Aquero');
+    expect(fp.community_ids).toBe('c1');
+  });
+});
+
+// =============================================================================
 // deleteEntity — hard-delete a record + enqueue removal from Framer.
 // =============================================================================
 describe('deleteEntity', () => {

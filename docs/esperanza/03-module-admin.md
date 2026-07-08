@@ -54,6 +54,40 @@ Omit `--remote` to seed your local D1; include it to create a real production lo
 
 ---
 
+## Unified record edit shell
+
+Every record detail screen (generic `EntityEditForm`, bespoke QMI, bespoke Community)
+shares one layout:
+
+| Region | Component | Purpose |
+|---|---|---|
+| Breadcrumb | `RecordEditBreadcrumb` | `{Collection} › {Record name}` |
+| Sticky action bar | `StickyActionBar` | Save, last-save message; delete (generic entity) when applicable |
+| Main column | entity fields + section cards | Editable content; MarkSystems synced fields collapse under **From MarkSystems** |
+| Placement rail | `PlacementRail` | Live-site page type, **publish/status toggle**, visitor URL, copy/open-live, section map; community edit adds Media (logo, video, full gallery) then **Recent activity** as the last rail block |
+| Toast | `EditToast` | Brief save confirmation (4s) |
+| Leave guard | `UnsavedLeaveToast` | When the form is dirty, blocks in-app navigation (links, browser back) with Save / Discard / Stay; tab close/refresh uses the browser `beforeunload` prompt |
+
+`useEditSaveFeedback` tracks dirty state from form `input`/`change` events, drives the sticky bar status (`Unsaved changes` / `Saved … ago`), and wires the leave guard. **Save** on the leave toast submits the page form and navigates after a successful save; **Discard** clears dirty state and completes the pending navigation.
+
+Live URLs are built in `lib/live-site.ts` from `https://www.esperanzahomes.com` + paths
+that mirror `packages/api/src/sitesearch.ts` (QMI uses `qmiPublicSlug` for underscore
+slugs). `buildEditView`, `buildQmiDetailView`, and `buildCommunityDetailView` each attach
+a `liveSite` placement object the shell consumes.
+
+Media uploaders stay **inside** the page `<form>` so they submit with the main Save. The
+**bespoke community** editor adds a **site header preview** at the top of the form
+(`CommunitySiteHeader`): 2/3 featured image, 1/3 secondary + photo-gallery thumbnail — matching
+the live community page layout with admin card styling (rounded corners, gap, bordered slots);
+drag onto any panel to replace. Logo, featured video, and the ordered **Photo Gallery** (`photo_gallery_json`) stay in the placement rail Media card; **Description image** sits directly under **Description** in Community Details.
+
+**Side widgets on main Save:** Promotion targeting (`__promo_targets`), community HOA links
+(`__hoa_links`), and community floor-plan membership (`__community_floor_plans`) mirror
+into the edit form as hidden JSON fields. The page's primary **Save changes** persists them
+alongside column edits — standalone save buttons on those widgets are hidden by default.
+
+---
+
 ## Field-driven forms (`field_definitions`)
 
 The edit and list screens are **rendered from the `field_definitions` D1 table**, not from
@@ -67,7 +101,7 @@ Field `type` → widget mapping (`typeToWidget()`):
 |---|---|
 | `text`, `long`, `number`, `currency`, `bool`, `date`, `url`, `select` | `GenericField` |
 | `rich` | `RichTextEditor` — universal TipTap WYSIWYG (headings, bullet/numbered lists, bold/italic, links, quotes, inline R2 images) for ALL rich fields |
-| `image` | `ImageUploader` |
+| `image` | `ImageUploader` — rail: full-width vertical preview (`compact`); main form: horizontal `sm` row |
 | `imageGallery` / `elevationGallery` | `ImageGalleryEditor` / elevation grid editor |
 | `syncedOverride` (QMI etc.) | `SyncedOverrideField` — shows the Snowflake `synced_` value + an override box |
 | bespoke: `hoaLinks`, `jsonBlocks`, `promoScopeTag`, `communityFloorPlans` | custom editors with their own save buttons |
@@ -185,6 +219,7 @@ compiles them into `lib/help-content.generated.ts`, rendered at `/help`.
 | Change password policy/hashing | `lib/password.ts` |
 | Change image upload | `lib/actions.ts` (`uploadImage`/`uploadGalleryImage`), `components/fields/ImageUploader.tsx` |
 | Change audit/enqueue behavior | `lib/actions.ts` (`postWrite`), `lib/audit-chunk.ts` |
+| Change the edit shell / live-site links | `components/record-edit/*`, `lib/live-site.ts`, `lib/build-edit-view.ts` |
 | Add/edit help | `help-content/*.md` then `npm run gen:help` |
 | Change the community price-source selector UI | `lib/field-config.ts` (communities `close_out_elevation`) + the `buildFieldView` special-case in `lib/build-edit-view.ts` (renders it as the synced/override control) |
 
@@ -203,14 +238,18 @@ picker column is grouped by community via `SelectOption.group`).
 
 ### Promotion targeting saves with the page Save
 
-`PromoScopeTagPicker` (the "Targeting Scope" side-widget on a promotion) mirrors its
-live selection into the edit `<form>` as a hidden `__promo_targets` JSON field.
-`saveEntity` parses that field and calls `savePromotionTargets` server-side — so the
-**page's primary Save persists targeting** alongside the promo's columns. This runs
-before the empty-patch early-return, so a targeting-only edit still saves. (The
-picker's own "Save targeting" button remains as a secondary path; its standalone
-server action was unreliable in the deployed admin, which is why the main-Save path
-exists.) An empty "scoped" selection is a no-op on the main-Save path.
+`PromoScopeTagPicker` mirrors its live selection into the edit `<form>` as a hidden
+`__promo_targets` JSON field. `saveEntity` calls `savePromotionTargets` when that field is
+present — targeting-only edits still save (runs before the empty-patch early-return).
+
+### Community HOA links + floor plans save with the page Save
+
+`HoaLinksEditor` emits `__hoa_links`; `CommunityFloorPlansPicker` emits
+`__community_floor_plans`. `saveEntity('communities', …)` persists both via
+`saveCommunityHoaLinks` / `saveCommunityFloorPlans`. On the bespoke community detail page,
+**Floor Plans Offered** lives inside **Community Details** (above LotVue Map) as a
+multi-select combobox. The collapsible **Utilities** subsection groups gas, internet,
+water, electric, and **Security Details**; HOA links stay in their own panel below the form.
 
 ---
 **Next:** [04 — Module: framer-push (D1 → Framer)](./04-module-framer-push.md)

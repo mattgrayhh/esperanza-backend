@@ -98,6 +98,9 @@ export interface FieldConfig {
   visibleInForm?: boolean;
 }
 
+/** D1-only / custom_fields keys with no column and no admin use — hide from every community edit surface. */
+export const HIDDEN_COMMUNITY_FORM_FIELDS = new Set<string>(['description_image_location']);
+
 export interface ListColumn {
   /** column key to read off the row (post-COALESCE alias for QMI effective fields). */
   field: string;
@@ -310,7 +313,7 @@ const communities: EntityFieldConfig = {
     { field: 'latitude', label: 'Latitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
     { field: 'longitude', label: 'Longitude', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
     { field: 'master_planned', label: 'Master Planned', widget: 'boolean', bucket: 'admin', halfWidth: true },
-    { field: 'close_out', label: 'Close-Out Community', widget: 'boolean', bucket: 'admin', halfWidth: true, help: 'No quick move-in homes available. "Homes from" uses the lowest published floor plan offered in this community.' },
+    { field: 'close_out', label: 'Closeout Community', widget: 'boolean', bucket: 'admin', halfWidth: true, help: 'No quick move-in homes available. "Homes from" uses the lowest published floor plan offered in this community.' },
     // 0025: the PRICE SOURCE elevation, honored for EVERY community (column name is
     // historical — it started as the close-out pin in 0019). Rendered as a
     // synced/override-style control (buildFieldView special-case) so editors see the
@@ -319,6 +322,7 @@ const communities: EntityFieldConfig = {
     { field: 'coming_soon', label: 'Coming Soon', widget: 'boolean', bucket: 'admin', halfWidth: true, visibleInForm: false }, // [P1] hidden from form — header Status control owns it
     // richtext (markdown)
     { field: 'description', label: 'Description', widget: 'richtext', bucket: 'admin' },
+    { field: 'description_image_url', label: 'Description Image', widget: 'image', bucket: 'admin' },
     { field: 'amenities', label: 'Amenities', widget: 'richtext', bucket: 'admin' },
     { field: 'education_rich', label: 'Education', widget: 'richtext', bucket: 'admin' },
     { field: 'design_copy_rich', label: 'Design Copy', widget: 'richtext', bucket: 'admin' },
@@ -338,10 +342,9 @@ const communities: EntityFieldConfig = {
     { field: 'secondary_image_url', label: 'Secondary Image', widget: 'image', bucket: 'admin' },
     { field: 'photo_gallery_image_url', label: 'Photo Gallery Image (primary)', widget: 'image', bucket: 'admin' },
     { field: 'photo_gallery_json', label: 'Photo Gallery', widget: 'imageGallery', bucket: 'admin', help: 'All gallery images shown on the community detail page. Upload in order.' },
-    { field: 'description_image_url', label: 'Description Image', widget: 'image', bucket: 'admin' },
     { field: 'community_logo_url', label: 'Community Logo', widget: 'image', bucket: 'admin' },
-    { field: 'featured_image_alt', label: 'Featured Image Alt', widget: 'text', bucket: 'admin' },
-    // [T7] secondary_image_alt, photo_gallery_image_alt, community_logo_alt removed (dead alt fields — fill rate ~0%).
+    { field: 'featured_image_alt', label: 'Featured Image Alt', widget: 'text', bucket: 'admin', visibleInForm: false },
+    // [T7] featured_image_alt, secondary_image_alt, photo_gallery_image_alt, community_logo_alt removed (dead alt fields — fill rate ~0%).
     { field: 'featured_video', label: 'Featured Video', widget: 'text', bucket: 'admin' },
     // [T7] community_map_embed removed (superseded by live map from lat/lng coords).
     // [T7] directions removed (dead — no fill, superseded by map).
@@ -364,7 +367,7 @@ const communities: EntityFieldConfig = {
     { field: 'hoa_links_json', label: 'HOA Links', widget: 'hoaLinks', bucket: 'admin', help: 'Array of {title, link}; framer pushes the first 7.' },
     // Bespoke side widget (no column): which floor plans are offered in this community.
     // Writes the relationship onto floor_plans.communities via saveCommunityFloorPlans.
-    { field: 'community_floor_plans', label: 'Floor Plans Offered', widget: 'communityFloorPlans', bucket: 'admin', help: 'Pick the floor plans available in this community. Saved separately, below the form.' },
+    { field: 'community_floor_plans', label: 'Floor Plans Offered', widget: 'communityFloorPlans', bucket: 'admin', help: 'Pick the floor plans available in this community. Saves with the main Save button.' },
   ],
 };
 

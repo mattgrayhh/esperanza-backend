@@ -28,10 +28,13 @@ export function HoaLinksEditor({
   id,
   initial,
   onResult,
+  showStandaloneSave = false,
 }: {
   id: string;
   initial: HoaLink[];
   onResult?: (msg: string) => void;
+  /** Secondary path — main Save reads __hoa_links when false (default). */
+  showStandaloneSave?: boolean;
 }) {
   const [links, setLinks] = useState<HoaLink[]>(initial.length ? initial : [{ title: '', link: '' }]);
   const [pending, startTransition] = useTransition();
@@ -50,6 +53,7 @@ export function HoaLinksEditor({
 
   return (
     <div className="grid gap-3">
+      <input type="hidden" name="__hoa_links" value={JSON.stringify(links)} />
       <div className="grid gap-2">
         {links.map((l, i) => (
           <div key={i} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2">
@@ -72,9 +76,11 @@ export function HoaLinksEditor({
         <Button type="button" variant="outline" size="sm" onClick={add} disabled={links.length >= MAX}>
           <PlusIcon /> Add link
         </Button>
-        <Button type="button" size="sm" onClick={onSave} disabled={pending}>
-          {pending ? 'Saving…' : 'Save HOA links'}
-        </Button>
+        {showStandaloneSave ? (
+          <Button type="button" size="sm" onClick={onSave} disabled={pending}>
+            {pending ? 'Saving…' : 'Save HOA links'}
+          </Button>
+        ) : null}
       </div>
       {links.length >= MAX ? (
         <span className="text-xs text-muted-foreground">Max {MAX} links are pushed to Framer.</span>

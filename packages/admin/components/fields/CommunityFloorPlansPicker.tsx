@@ -1,47 +1,47 @@
 'use client';
 
-// =============================================================================
-// CommunityFloorPlansPicker — pick which floor plans are offered in this community.
-//
-// The relationship is denormalized on the floor-plan side (floor_plans.communities
-// CSV + community_count), so on Save → saveCommunityFloorPlans rewrites that CSV on
-// each AFFECTED floor-plan row (adds this community to newly-checked plans, strips it
-// from unchecked ones) and enqueues a Framer push per change. Mirrors PromoScopeTagPicker.
-// =============================================================================
-
-import { useState, useTransition } from 'react';
+import * as React from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { saveCommunityFloorPlans } from '../../lib/actions';
 import type { SelectOption } from '../../lib/select-options';
-import { cn } from '@/lib/utils';
-import { Card } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Combobox,
+  ComboboxChip,
+  ComboboxChips,
+  ComboboxChipsInput,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxValue,
+  useComboboxAnchor,
+} from '@/components/ui/combobox';
 
 export function CommunityFloorPlansPicker({
   communityId,
   initialSelected,
   options,
   onResult,
+  showStandaloneSave = false,
+  showFieldLabel = true,
 }: {
   communityId: string;
   initialSelected: string[];
   options: SelectOption[];
   onResult?: (msg: string) => void;
+  showStandaloneSave?: boolean;
+  /** When false, the parent section supplies the heading (e.g. Community Details). */
+  showFieldLabel?: boolean;
 }) {
   const [sel, setSel] = useState<string[]>(initialSelected);
-  const [q, setQ] = useState('');
   const [pending, startTransition] = useTransition();
+  const anchor = useComboboxAnchor();
 
-  function toggle(id: string) {
-    setSel((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  }
-
-  const filtered = q.trim()
-    ? options.filter((o) => o.label.toLowerCase().includes(q.toLowerCase()))
-    : options;
+  const labelById = useMemo(() => new Map(options.map((o) => [o.id, o.label])), [options]);
+  const items = useMemo(() => options.map((o) => o.id), [options]);
 
   function onSave() {
     startTransition(async () => {
@@ -57,35 +57,55 @@ export function CommunityFloorPlansPicker({
   }
 
   return (
-    <div className="grid gap-3">
-      <div className="flex items-center gap-1.5 text-sm font-semibold">
-        Floor plans in this community
-        <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-normal">
-          {sel.length}
-        </Badge>
-      </div>
-      <Input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="filter floor plans…"
-        className="h-8 max-w-xs text-xs"
-      />
-      <Card size="sm" className="gap-1.5 p-2">
-        <div className="grid max-h-72 grid-cols-1 gap-1.5 overflow-auto text-xs sm:grid-cols-2">
-          {filtered.map((o) => (
-            <Label key={o.id} className={cn('gap-2 font-normal')}>
-              <Checkbox checked={sel.includes(o.id)} onCheckedChange={() => toggle(o.id)} />
-              <span className="truncate" title={o.label}>
-                {o.label}
-              </span>
-            </Label>
-          ))}
-          {filtered.length === 0 ? <span className="text-muted-foreground">no matches</span> : null}
+    <div className="grid gap-2">
+      <input type="hidden" name="__community_floor_plans" value={JSON.stringify(sel)} />
+
+      {showFieldLabel ? (
+        <div className="flex items-center gap-1.5">
+          <Label className="font-medium text-foreground">Floor plans in this community</Label>
+          <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-normal">
+            {sel.length}
+          </Badge>
         </div>
-      </Card>
-      <Button type="button" onClick={onSave} disabled={pending} className="justify-self-start">
-        {pending ? 'Saving…' : 'Save floor plans'}
-      </Button>
+      ) : null}
+
+      <Combobox
+        multiple
+        autoHighlight
+        items={items}
+        value={sel}
+        onValueChange={(next) => setSel(next ?? [])}
+        itemToStringLabel={(id) => labelById.get(id) ?? id}
+      >
+        <ComboboxChips ref={anchor} className="w-full max-w-2xl">
+          <ComboboxValue>
+            {(values) => (
+              <React.Fragment>
+                {(values as string[]).map((id) => (
+                  <ComboboxChip key={id}>{labelById.get(id) ?? id}</ComboboxChip>
+                ))}
+                <ComboboxChipsInput placeholder="Search floor plans…" />
+              </React.Fragment>
+            )}
+          </ComboboxValue>
+        </ComboboxChips>
+        <ComboboxContent anchor={anchor}>
+          <ComboboxEmpty>No floor plans found.</ComboboxEmpty>
+          <ComboboxList>
+            {(id) => (
+              <ComboboxItem key={id} value={id}>
+                {labelById.get(id) ?? id}
+              </ComboboxItem>
+            )}
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
+
+      {showStandaloneSave ? (
+        <Button type="button" onClick={onSave} disabled={pending} className="justify-self-start">
+          {pending ? 'Saving…' : 'Save floor plans'}
+        </Button>
+      ) : null}
     </div>
   );
 }
