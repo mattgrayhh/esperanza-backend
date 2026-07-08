@@ -13,6 +13,7 @@
 // plus a conservative pattern so a Field-Builder-added image column (e.g. `*_image`)
 // also previews. We deliberately EXCLUDE:
 //   · `*_alt`            — alt-text strings (featured_image_alt, community_logo_alt, …)
+//   · `*_location`       — layout flags (description_image_location), not image URLs
 //   · `*_description`    — copy (hero_description)
 //   · `*_pdf`/brochure*  — documents; ImageUploader renders those as a file card already,
 //                          and they are NOT image previews, so they keep their text/upload
@@ -56,6 +57,7 @@ const IMAGE_NAME_PATTERN =
 function isImageException(field: string): boolean {
   return (
     /_alt$/.test(field) || // alt text (featured_image_alt, community_logo_alt, …)
+    /_location$/.test(field) || // layout/placement flags, not image URLs
     /(^|_)description$/.test(field) || // copy: hero_description, description
     /(^|_)pdf(_url)?$/.test(field) || // documents (rendered as a file card, not an image)
     /brochure/.test(field) ||

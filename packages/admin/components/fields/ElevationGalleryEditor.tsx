@@ -18,7 +18,7 @@ import { uploadGalleryImage } from '../../lib/actions';
 import { filterAcceptedFiles } from '../../lib/dropped-files';
 import { parseTypedGallery, deriveElevationType, ELEVATION_TYPES, type TypedImage } from '../../lib/elevation-types';
 import { cn } from '@/lib/utils';
-import { Label } from '@/components/ui/label';
+import { FieldLabel } from './FieldLabel';
 import { Button } from '@/components/ui/button';
 import { UploadIcon, XIcon, ChevronUpIcon, ChevronDownIcon, ImageIcon } from 'lucide-react';
 
@@ -97,7 +97,7 @@ export function ElevationGalleryEditor({
 
   return (
     <div className="grid gap-2 text-sm">
-      <Label className="font-medium text-foreground">{label}</Label>
+      <FieldLabel label={label} help={help} />
 
       {/* Hidden input carries the serialized [{url,type}] array into the form submit */}
       <input type="hidden" name={field} value={serialized} />
@@ -228,7 +228,6 @@ export function ElevationGalleryEditor({
       </div>
 
       {err ? <span className="text-xs text-destructive">{err}</span> : null}
-      {help ? <span className="text-xs text-muted-foreground">{help}</span> : null}
     </div>
   );
 }

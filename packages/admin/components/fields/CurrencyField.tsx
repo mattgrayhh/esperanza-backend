@@ -17,7 +17,7 @@
 
 import { useState } from 'react';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { FieldLabel } from './FieldLabel';
 
 /** Strip everything that isn't a digit, sign, or decimal point → canonical number string. */
 function toCanonical(raw: string): string {
@@ -58,7 +58,7 @@ export function CurrencyField({
 
   return (
     <div className="grid gap-1.5 text-sm">
-      <Label className="font-medium text-foreground">{label}</Label>
+      <FieldLabel label={label} help={help} />
 
       {/* Canonical numeric string the form submits (no $ / commas). */}
       <input type="hidden" name={field} value={canonical} />
@@ -92,7 +92,6 @@ export function CurrencyField({
         />
       </div>
 
-      {help ? <span className="text-xs text-muted-foreground">{help}</span> : null}
     </div>
   );
 }

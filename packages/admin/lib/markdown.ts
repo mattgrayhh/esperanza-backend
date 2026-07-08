@@ -33,6 +33,45 @@ export function looksLikeHtml(s: string): boolean {
   return /<[a-z][\s\S]*>/i.test(s);
 }
 
+/** Legacy values often store feature copy as plain newline-separated lines (no "- "
+ *  markdown prefix). Treat 2+ non-empty lines as a bullet list for WYSIWYG display.
+ *  When the first line ends with ":", treat it as a section title with bullets below. */
+function plainLinesToBulletList(text: string): string | null {
+  const lines = text
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return null;
+  if (lines.some((l) => /^(#{1,6})\s/.test(l) || /^\s*[-*+]\s+/.test(l) || /^\s*\d+[.)]\s+/.test(l))) {
+    return null;
+  }
+
+  const first = lines[0]!;
+  if (first.endsWith(':')) {
+    const title = first.slice(0, -1).trim();
+    const items = lines.slice(1);
+    if (title && items.length > 0) {
+      return `<p><strong>${inline(escapeHtml(title))}</strong></p><ul>${items.map((l) => `<li>${inline(escapeHtml(l))}</li>`).join('')}</ul>`;
+    }
+  }
+
+  return `<ul>${lines.map((l) => `<li>${inline(escapeHtml(l))}</li>`).join('')}</ul>`;
+}
+
+/** <p>line<br>line</p> legacy HTML → bullet list so TipTap shows real list formatting. */
+function htmlBrParagraphToList(html: string): string {
+  const trimmed = html.trim();
+  const match = trimmed.match(/^<p>([\s\S]*)<\/p>$/i);
+  if (!match?.[1]) return html;
+  const parts = match[1]
+    .split(/<br\s*\/?>/i)
+    .map((s) => s.replace(/<[^>]+>/g, '').trim())
+    .filter(Boolean);
+  if (parts.length < 2) return html;
+  return `<ul>${parts.map((p) => `<li>${escapeHtml(p)}</li>`).join('')}</ul>`;
+}
+
 /** Convert a markdown string to HTML. Returns '' for null/empty. */
 export function markdownToHtml(md: string | null | undefined): string {
   if (md == null) return '';
@@ -102,9 +141,15 @@ export function markdownToHtml(md: string | null | undefined): string {
   return html.join('');
 }
 
-/** Seed value for TipTap: pass HTML through, convert markdown/plain to HTML. */
+/** Seed value for TipTap: pass HTML through (with legacy normalization), convert markdown/plain. */
 export function toEditorHtml(value: string | null | undefined): string {
   const v = value ?? '';
   if (v.trim() === '') return '';
-  return looksLikeHtml(v) ? v : markdownToHtml(v);
+  if (looksLikeHtml(v)) {
+    const normalized = htmlBrParagraphToList(v);
+    return normalized === v ? v : normalized;
+  }
+  const asList = plainLinesToBulletList(v);
+  if (asList) return asList;
+  return markdownToHtml(v);
 }

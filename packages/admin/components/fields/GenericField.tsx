@@ -33,7 +33,7 @@ import { SelectField as BuilderSelectField } from './SelectField';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
+import { FieldLabel } from './FieldLabel';
 import { Switch } from '@/components/ui/switch';
 import {
   Select,
@@ -70,10 +70,6 @@ export interface GenericFieldProps {
   optionItems?: SelectOptionItem[];
   readOnly?: boolean;
   help?: string;
-}
-
-function FieldLabel({ label }: { label: string }) {
-  return <Label className="font-medium text-foreground">{label}</Label>;
 }
 
 export function GenericField({
@@ -124,7 +120,7 @@ export function GenericField({
 
   return (
     <div className="grid gap-1.5 text-sm">
-      <FieldLabel label={label} />
+      <FieldLabel label={label} help={help} />
 
       {widget === 'date' ? (
         // The date popover renders its own Label; suppress the outer one to avoid a
@@ -154,7 +150,6 @@ export function GenericField({
         <Input name={field} type="text" defaultValue={value} readOnly={readOnly} />
       )}
 
-      {help ? <span className="text-xs text-muted-foreground">{help}</span> : null}
     </div>
   );
 }

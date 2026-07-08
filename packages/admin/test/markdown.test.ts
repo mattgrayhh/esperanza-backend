@@ -36,4 +36,31 @@ describe('toEditorHtml — RichTextEditor load seeding', () => {
   it('numbered lists become <ol>', () => {
     expect(markdownToHtml('1. first\n2. second')).toBe('<ol><li>first</li><li>second</li></ol>');
   });
+
+  it('converts plain newline-separated feature lines to a bullet list', () => {
+    expect(toEditorHtml('Smoke Detectors\nCeramic Tile')).toBe(
+      '<ul><li>Smoke Detectors</li><li>Ceramic Tile</li></ul>',
+    );
+  });
+
+  it('converts <p>line<br>line</p> legacy HTML to a bullet list', () => {
+    expect(toEditorHtml('<p>One<br>Two</p>')).toBe('<ul><li>One</li><li>Two</li></ul>');
+  });
+
+  it('passes structured HTML through unchanged', () => {
+    const html = '<h2>Heading</h2><ul><li>one</li></ul>';
+    expect(toEditorHtml(html)).toBe(html);
+  });
+
+  it('converts plain title-colon + lines to bold title and bullet list', () => {
+    expect(toEditorHtml('Kitchen features:\nGranite counters\nSoft-close drawers')).toBe(
+      '<p><strong>Kitchen features</strong></p><ul><li>Granite counters</li><li>Soft-close drawers</li></ul>',
+    );
+  });
+
+  it('converts markdown mixed blocks (heading + list + paragraph)', () => {
+    expect(toEditorHtml('## Features\n- one\n- two\n\nRegular **bold** text')).toBe(
+      '<h2>Features</h2><ul><li>one</li><li>two</li></ul><p>Regular <strong>bold</strong> text</p>',
+    );
+  });
 });

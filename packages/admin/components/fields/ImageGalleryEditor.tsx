@@ -1,28 +1,13 @@
 'use client';
 
-// =============================================================================
-// ImageGalleryEditor — ordered multi-image gallery widget.
-//
-// Stores an ordered JSON array of stable R2 image URLs in a single hidden
-// <input name={field}> so the parent <form action={saveEntity}> picks it up
-// on submit.  Operators upload via R2 (uploadGalleryImage); they never type URLs.
-//
-// UX:
-//   · Grid of thumbnails with remove (×) buttons.
-//   · "Add images" button at the end opens a multi-select file picker.
-//   · Drag one or more image files anywhere onto the widget to bulk-upload
-//     them in drop order.
-//   · Re-order: arrow-up / arrow-down buttons per image.
-// =============================================================================
-
-import { useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { uploadGalleryImage } from '../../lib/actions';
 import { filterAcceptedFiles } from '../../lib/dropped-files';
 import { parseGalleryUrls } from '../../lib/gallery-urls';
 import { cn } from '@/lib/utils';
-import { Label } from '@/components/ui/label';
+import { FieldLabel } from './FieldLabel';
 import { Button } from '@/components/ui/button';
-import { UploadIcon, XIcon, ChevronUpIcon, ChevronDownIcon, ImageIcon } from 'lucide-react';
+import { UploadIcon, XIcon, ImageIcon, GripVerticalIcon } from 'lucide-react';
 
 const ACCEPT = 'image/*';
 
@@ -35,6 +20,7 @@ export function ImageGalleryEditor({
   label,
   initialValue,
   help,
+  compact = false,
 }: {
   entity: string;
   id: string;
@@ -42,19 +28,26 @@ export function ImageGalleryEditor({
   label: string;
   initialValue: string;
   help?: string;
+  compact?: boolean;
 }) {
   const [urls, setUrls] = useState<string[]>(() => parseGalleryUrls(initialValue));
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  function move(index: number, dir: -1 | 1) {
+  useEffect(() => {
+    setUrls(parseGalleryUrls(initialValue));
+  }, [initialValue]);
+
+  function reorder(from: number, to: number) {
+    if (from === to) return;
     setUrls((prev) => {
       const next = [...prev];
-      const swap = index + dir;
-      if (swap < 0 || swap >= next.length) return prev;
-      [next[index], next[swap]] = [next[swap]!, next[index]!];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item!);
       return next;
     });
   }
@@ -71,9 +64,8 @@ export function ImageGalleryEditor({
       return;
     }
     setErr(null);
-    let index = urls.length; // slot for the first new image
+    let index = urls.length;
     startTransition(async () => {
-      // Sequential on purpose: keeps the gallery in drop/pick order.
       const errors: string[] = [];
       for (const file of files) {
         const res = await uploadGalleryImage(entity, id, index, file);
@@ -92,16 +84,14 @@ export function ImageGalleryEditor({
   }
 
   const serialized = JSON.stringify(urls);
+  const showControls = compact ? true : undefined;
 
   return (
     <div className="grid gap-2 text-sm">
-      <Label className="font-medium text-foreground">{label}</Label>
+      <FieldLabel label={label} help={help} />
 
-      {/* Hidden input carries the serialized array into the form submit */}
       <input type="hidden" name={field} value={serialized} />
 
-      {/* Everything inside is a dropzone — drag image files anywhere onto the
-          widget to bulk-upload them in drop order. */}
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -120,94 +110,114 @@ export function ImageGalleryEditor({
           dragOver && 'outline-2 outline-dashed outline-primary bg-primary/5'
         )}
       >
-      {urls.length > 0 ? (
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-          {urls.map((url, i) => {
-            const isAirtable = url.includes(AIRTABLE_HOST);
-            return (
-              <div key={i} className="group relative overflow-hidden rounded-md border border-border bg-muted/30">
-                {isAirtable ? (
-                  <div className="flex h-24 flex-col items-center justify-center gap-1 p-1 text-center text-muted-foreground">
-                    <ImageIcon className="size-5" />
-                    <span className="text-[10px]">Stale — re-upload</span>
-                  </div>
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={url} alt={`${label} ${i + 1}`} className="h-24 w-full object-cover" />
-                )}
+        {urls.length > 0 ? (
+          <div className={cn('grid gap-2', compact ? 'grid-cols-2' : 'grid-cols-3 sm:grid-cols-4')}>
+            {urls.map((url, i) => {
+              const isAirtable = url.includes(AIRTABLE_HOST);
+              const isDragging = dragIndex === i;
+              const isDropTarget = dropIndex === i && dragIndex !== null && dragIndex !== i;
+              return (
+                <div
+                  key={`${i}-${url}`}
+                  draggable={!pending}
+                  onDragStart={() => setDragIndex(i)}
+                  onDragEnd={() => {
+                    setDragIndex(null);
+                    setDropIndex(null);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (dragIndex !== null && dragIndex !== i) setDropIndex(i);
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node) && dropIndex === i) {
+                      setDropIndex(null);
+                    }
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (dragIndex !== null) reorder(dragIndex, i);
+                    setDragIndex(null);
+                    setDropIndex(null);
+                  }}
+                  className={cn(
+                    'group relative overflow-hidden rounded-md border border-border bg-muted/30',
+                    isDragging && 'opacity-50',
+                    isDropTarget && 'ring-2 ring-primary ring-offset-1'
+                  )}
+                >
+                  {isAirtable ? (
+                    <div className="flex h-24 flex-col items-center justify-center gap-1 p-1 text-center text-muted-foreground">
+                      <ImageIcon className="size-5" />
+                      <span className="text-[10px]">Stale — re-upload</span>
+                    </div>
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={url} alt={`${label} ${i + 1}`} className="h-24 w-full object-cover" draggable={false} />
+                  )}
 
-                {/* Controls overlay */}
-                <div className="absolute inset-0 flex flex-col items-end justify-between p-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="icon"
-                    className="size-5 rounded-sm"
-                    onClick={() => remove(i)}
-                    title="Remove"
+                  <div
+                    className={cn(
+                      'absolute inset-0 flex flex-col items-end justify-between p-0.5 transition-opacity',
+                      showControls ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                    )}
                   >
-                    <XIcon className="size-3" />
-                  </Button>
-                  <div className="flex gap-0.5">
                     <Button
                       type="button"
-                      variant="secondary"
+                      variant="destructive"
                       size="icon"
                       className="size-5 rounded-sm"
-                      disabled={i === 0}
-                      onClick={() => move(i, -1)}
-                      title="Move left"
+                      onClick={() => remove(i)}
+                      title="Remove"
                     >
-                      <ChevronUpIcon className="size-3 rotate-[-90deg]" />
+                      <XIcon className="size-3" />
                     </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="icon"
-                      className="size-5 rounded-sm"
-                      disabled={i === urls.length - 1}
-                      onClick={() => move(i, 1)}
-                      title="Move right"
+                    <span
+                      className={cn(
+                        'inline-flex size-5 items-center justify-center rounded-sm bg-background/80 text-muted-foreground',
+                        !compact && 'opacity-0 group-hover:opacity-100'
+                      )}
+                      title="Drag to reorder"
                     >
-                      <ChevronDownIcon className="size-3 rotate-[-90deg]" />
-                    </Button>
+                      <GripVerticalIcon className="size-3" />
+                    </span>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="flex h-20 items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground">
-          <span className="text-xs">No images yet — drag photos here or use Add images</span>
-        </div>
-      )}
+              );
+            })}
+          </div>
+        ) : (
+          <div className="flex h-20 items-center justify-center rounded-lg border border-dashed border-border px-4 py-2 text-center text-muted-foreground">
+            <span className="text-xs text-balance">No images yet — drag photos here or use Add images</span>
+          </div>
+        )}
 
-      <input
-        ref={fileRef}
-        type="file"
-        accept={ACCEPT}
-        multiple
-        disabled={pending}
-        onChange={(e) => addFiles(e.target.files)}
-        className="hidden"
-      />
+        <input
+          ref={fileRef}
+          type="file"
+          accept={ACCEPT}
+          multiple
+          disabled={pending}
+          onChange={(e) => addFiles(e.target.files)}
+          className="hidden"
+        />
 
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={pending}
-        onClick={() => fileRef.current?.click()}
-        className="w-fit"
-      >
-        <UploadIcon />
-        {pending ? 'Uploading…' : 'Add images'}
-      </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={pending}
+          onClick={() => fileRef.current?.click()}
+          className="w-fit"
+        >
+          <UploadIcon />
+          {pending ? 'Uploading…' : 'Add images'}
+        </Button>
       </div>
 
       {err ? <span className="text-xs text-destructive">{err}</span> : null}
-      {help ? <span className="text-xs text-muted-foreground">{help}</span> : null}
     </div>
   );
 }
