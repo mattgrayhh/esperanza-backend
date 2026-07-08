@@ -35,6 +35,7 @@ export default async function EntityEditor({
       fields={view.fields}
       publishGate={view.publishGate}
       sideWidgets={view.sideWidgets}
+      liveSite={view.liveSite}
     />
   );
 }

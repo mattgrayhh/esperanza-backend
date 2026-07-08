@@ -23,23 +23,19 @@
 // <form action={saveEntity}> submission are UNCHANGED.
 // =============================================================================
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import { saveEntity } from '../lib/actions';
 import { GenericField } from './fields/GenericField';
 import { ImageUploader } from './fields/ImageUploader';
-import { SyncedOverrideField } from './fields/SyncedOverrideField';
-import { PublishedToggle } from './fields/PublishedToggle';
-import { HoaLinksEditor } from './fields/HoaLinksEditor';
 import { ImageGalleryEditor } from './fields/ImageGalleryEditor';
 import { ElevationGalleryEditor } from './fields/ElevationGalleryEditor';
-import { JsonBlocksEditor } from './fields/JsonBlocksEditor';
-import { PromoScopeTagPicker } from './fields/PromoScopeTagPicker';
-import { CommunityFloorPlansPicker } from './fields/CommunityFloorPlansPicker';
+import { SyncedOverrideField } from './fields/SyncedOverrideField';
+import { PublishedToggle } from './fields/PublishedToggle';
 import { DeleteEntityButton } from './DeleteEntityButton';
 import type { SelectOption } from '../lib/select-options';
 import type { SelectOptionItem } from '../lib/field-config';
+import type { LiveSitePlacement } from '@/lib/live-site';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Card,
@@ -47,7 +43,19 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { ArrowLeftIcon } from 'lucide-react';
+import {
+  EditToast,
+  MarkSystemsSection,
+  PlacementRail,
+  RecordEditBreadcrumb,
+  RecordEditLayout,
+  SectionJumpNav,
+  StickyActionBar,
+  UnsavedLeaveToast,
+  sectionId,
+} from '@/components/record-edit/RecordEditShell';
+import { useEditSaveFeedback } from '@/components/record-edit/useEditSaveFeedback';
+import { MAIN_SAVE_SIDE_WIDGETS, SideWidgetBlock } from '@/components/record-edit/SideWidgetBlock';
 
 // --- the per-field view model the RSC builds (one of these unions per field) ---
 
@@ -171,6 +179,7 @@ export function EntityEditForm({
   fields,
   publishGate,
   sideWidgets,
+  liveSite,
   preview = false,
 }: {
   entityKey: string;
@@ -184,17 +193,31 @@ export function EntityEditForm({
   fields: FieldView[];
   publishGate: PublishGateView | null;
   sideWidgets: SideWidget[];
+  liveSite?: LiveSitePlacement;
   /** LIVE PREVIEW (Field Builder): render the form read-only with no save/submit. */
   preview?: boolean;
 }) {
-  const [pending, startTransition] = useTransition();
-  const [msg, setMsg] = useState<string | null>(null);
+  const formId = `entity-edit-${entityKey}-${id}`;
+  const [activeSection, setActiveSection] = useState<string | undefined>();
+  const {
+    pending,
+    startTransition,
+    reportResult,
+    barStatusText,
+    barTone,
+    toast,
+    dismissToast,
+    leavePrompt,
+    saveBeforeLeave,
+    discardLeave,
+    stayOnPage,
+  } = useEditSaveFeedback(formId);
 
   function onSubmit(formData: FormData) {
-    if (preview) return; // preview never writes
+    if (preview) return;
     startTransition(async () => {
       const res = await saveEntity(entityKey, id, formData);
-      setMsg(res.ok ? 'Saved' : `Error: ${res.error}`);
+      reportResult(res.ok ? 'Saved' : `Error: ${res.error}`);
     });
   }
 
@@ -232,275 +255,265 @@ export function EntityEditForm({
     sections[idx]!.fields.push(f);
   }
 
-  const isError = msg != null && msg.startsWith('Error:');
+  const isMarkSystemsSection = (section: { label: string; fields: MainField[] }) =>
+    section.label === 'Pricing & specifications' ||
+    section.fields.every(
+      (f) =>
+        f.kind === 'syncedOverride' || (f.kind === 'generic' && f.widget === 'synced'),
+    );
 
-  return (
-    <div className="mx-auto w-full max-w-5xl">
-      {/* Header */}
-      <div className="mb-5 flex flex-wrap items-center gap-3">
-        <div className="min-w-0">
-          {/* Back link doubles as the "this is a {singular}" breadcrumb context. */}
-          <a
-            href={`/${segment}`}
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeftIcon className="size-4" /> {label}
-          </a>
-          {/* [13][14][15][43] The H1 IS the record's display name (not "Entitie recXXXX"). */}
-          <h1 className="font-heading mt-1 truncate text-2xl font-bold text-foreground">
-            {displayName}
-          </h1>
-          {subtitle ? (
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</p>
-          ) : null}
-        </div>
-        <div className="ml-auto flex items-center gap-3">
-          {publishGate && !preview ? (
-            <PublishedToggle
-              entityKey={entityKey}
+  const jumpSections = sections.map((s) => ({ id: sectionId(s.label), label: s.label }));
+
+  const mediaRail =
+    imageFields.length > 0 ? (
+      <div className="min-w-0 space-y-4">
+        <h3 className="text-sm font-medium text-foreground">Media</h3>
+        {imageFields.map((f) =>
+          f.kind === 'image' ? (
+            <ImageUploader
+              key={f.field}
+              entity={segment}
               id={id}
-              gate={publishGate.gate}
-              initialPublished={publishGate.published}
-              initialStatus={publishGate.status}
-              statusOptions={publishGate.statusOptions}
-              onResult={setMsg}
+              field={f.field}
+              label={f.label}
+              initialUrl={f.value}
+              help={f.help}
+              compact
             />
-          ) : null}
-          {!preview && id !== 'new' ? (
-            <DeleteEntityButton
-              entityKey={entityKey}
-              id={id}
-              segment={segment}
-              displayName={displayName}
-              synced={entityKey === 'qmi' || entityKey === 'communities' || entityKey === 'floor_plans'}
-              onResult={setMsg}
-            />
-          ) : null}
-          {preview ? (
-            <Badge variant="outline" className="h-5">
-              Preview
-            </Badge>
-          ) : null}
-          {msg ? (
-            <Badge variant={isError ? 'destructive' : 'secondary'} className="h-5">
-              {msg}
-            </Badge>
-          ) : null}
+          ) : null,
+        )}
+      </div>
+    ) : null;
+
+  function renderField(f: MainField, span: string) {
+    if (f.kind === 'syncedOverride') {
+      return (
+        <div key={f.field} className={span}>
+          <SyncedOverrideField
+            field={f.field}
+            label={f.label}
+            variant={f.variant}
+            syncedDisplay={f.syncedDisplay}
+            overrideValue={f.overrideValue}
+            step={f.step}
+            options={f.options}
+            help={f.help}
+          />
         </div>
+      );
+    }
+    if (f.kind === 'imageGallery') {
+      return (
+        <div key={f.field} className="col-span-1 sm:col-span-2">
+          <ImageGalleryEditor
+            entity={segment}
+            id={id}
+            field={f.field}
+            label={f.label}
+            initialValue={f.value}
+            help={f.help}
+          />
+        </div>
+      );
+    }
+    if (f.kind === 'elevationGallery') {
+      return (
+        <div key={f.field} className="col-span-1 sm:col-span-2">
+          <ElevationGalleryEditor
+            entity={segment}
+            id={id}
+            field={f.field}
+            label={f.label}
+            initialValue={f.value}
+            help={f.help}
+          />
+        </div>
+      );
+    }
+    return (
+      <div key={f.field} className={span}>
+        <GenericField
+          field={f.field}
+          label={f.label}
+          widget={f.widget}
+          value={f.value}
+          step={f.step}
+          options={f.options}
+          staticOptions={f.staticOptions}
+          optionItems={f.optionItems}
+          readOnly={f.readOnly}
+          help={f.help}
+          entity={segment}
+          id={id}
+        />
+      </div>
+    );
+  }
+
+  const mainColumn = (
+    <>
+      <div className="mb-5 space-y-2">
+        <h1 className="font-heading truncate text-2xl font-semibold tracking-tight text-foreground">
+          {displayName}
+        </h1>
+        {subtitle ? <p className="truncate text-sm text-muted-foreground">{subtitle}</p> : null}
+        {!preview ? <SectionJumpNav sections={jumpSections} /> : null}
       </div>
 
-      <form action={onSubmit}>
-        {/* In preview mode, force single-column layout — the preview panel is ~350px and
-            viewport-based breakpoints (lg/sm) would otherwise trigger on the full browser
-            width, causing the 2-column grids to overflow the narrow card. */}
-        <div className={cn('grid gap-5', !preview && imageFields.length ? 'lg:grid-cols-[1fr_20rem]' : 'grid-cols-1')}>
-          {/* MAIN column — one Card per field group (feedback [21][5][6]); ungrouped
-              fields collapse into a single "Details" section. */}
-          <div className="min-w-0 space-y-5">
-            {sections.map((section) => (
-              <Card key={section.label}>
-                <CardHeader className="border-b">
-                  <CardTitle>{section.label}</CardTitle>
-                </CardHeader>
-                {/* [32] Two-up grid: half-width fields take one column; the rest span both.
-                    In preview mode use single-column to avoid overflow in the narrow panel. */}
-                <CardContent className={cn('grid grid-cols-1 gap-4', !preview && 'sm:grid-cols-2')}>
-                  {section.fields.map((f) => {
-                    const span = preview
-                      ? 'col-span-1'
-                      : 'halfWidth' in f && f.halfWidth ? 'sm:col-span-1' : 'col-span-1 sm:col-span-2';
-                    if (f.kind === 'syncedOverride') {
-                      return (
-                        <div key={f.field} className={span}>
-                          <SyncedOverrideField
-                            field={f.field}
-                            label={f.label}
-                            variant={f.variant}
-                            syncedDisplay={f.syncedDisplay}
-                            overrideValue={f.overrideValue}
-                            step={f.step}
-                            options={f.options}
-                            help={f.help}
-                          />
-                        </div>
-                      );
-                    }
-                    if (f.kind === 'imageGallery') {
-                      return (
-                        <div key={f.field} className="col-span-1 sm:col-span-2">
-                          <ImageGalleryEditor
-                            entity={segment}
-                            id={id}
-                            field={f.field}
-                            label={f.label}
-                            initialValue={f.value}
-                            help={f.help}
-                          />
-                        </div>
-                      );
-                    }
-                    if (f.kind === 'elevationGallery') {
-                      return (
-                        <div key={f.field} className="col-span-1 sm:col-span-2">
-                          <ElevationGalleryEditor
-                            entity={segment}
-                            id={id}
-                            field={f.field}
-                            label={f.label}
-                            initialValue={f.value}
-                            help={f.help}
-                          />
-                        </div>
-                      );
-                    }
-                    return (
-                      <div key={f.field} className={span}>
-                        <GenericField
-                          field={f.field}
-                          label={f.label}
-                          widget={f.widget}
-                          value={f.value}
-                          step={f.step}
-                          options={f.options}
-                          staticOptions={f.staticOptions}
-                          optionItems={f.optionItems}
-                          readOnly={f.readOnly}
-                          help={f.help}
-                          entity={segment}
-                          id={id}
-                        />
-                      </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-            ))}
-            {preview ? null : (
-              <div className="flex items-center gap-3">
-                <Button type="submit" disabled={pending}>
-                  {pending ? 'Saving…' : 'Save'}
-                </Button>
+      <div className="min-w-0 space-y-5">
+        {sections.map((section) => {
+          const sid = sectionId(section.label);
+          const grid = (
+            <div className={cn('grid grid-cols-1 gap-4', !preview && 'sm:grid-cols-2')}>
+              {section.fields.map((f) => {
+                const span = preview
+                  ? 'col-span-1'
+                  : 'halfWidth' in f && f.halfWidth
+                    ? 'sm:col-span-1'
+                    : 'col-span-1 sm:col-span-2';
+                return renderField(f, span);
+              })}
+            </div>
+          );
+
+          if (!preview && isMarkSystemsSection(section)) {
+            return (
+              <div
+                key={section.label}
+                id={sid}
+                onFocusCapture={() => setActiveSection(sid)}
+                onMouseEnter={() => setActiveSection(sid)}
+              >
+                <MarkSystemsSection>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {section.fields.map((f) => {
+                      const span =
+                        'halfWidth' in f && f.halfWidth ? 'sm:col-span-1' : 'col-span-1 sm:col-span-2';
+                      return renderField(f, span);
+                    })}
+                  </div>
+                </MarkSystemsSection>
               </div>
-            )}
-          </div>
+            );
+          }
 
-          {/* RIGHT RAIL: image widgets (still inside the form → same FormData). */}
-          {imageFields.length ? (
-            <Card className="self-start">
+          return (
+            <Card
+              key={section.label}
+              id={sid}
+              onFocusCapture={() => setActiveSection(sid)}
+              onMouseEnter={() => setActiveSection(sid)}
+            >
               <CardHeader className="border-b">
-                <CardTitle>Media</CardTitle>
+                <CardTitle className="text-base font-medium">{section.label}</CardTitle>
               </CardHeader>
-              <CardContent className="grid gap-4">
-                {imageFields.map((f) =>
-                  f.kind === 'image' ? (
-                    <ImageUploader
-                      key={f.field}
-                      entity={segment}
-                      id={id}
-                      field={f.field}
-                      label={f.label}
-                      initialUrl={f.value}
-                      help={f.help}
-                    />
-                  ) : null
-                )}
-              </CardContent>
+              <CardContent>{grid}</CardContent>
             </Card>
-          ) : null}
-        </div>
+          );
+        })}
 
-        {/* promoScope MUST render inside the <form>: its hidden `__promo_targets`
-            input only rides along with the main Save (the proven saveEntity path)
-            if it's a form descendant. The other side-widgets use their own actions,
-            so they stay below the form. */}
         {preview
           ? null
           : sideWidgets
-              .filter((w) => w.kind === 'promoScope')
+              .filter((w) => MAIN_SAVE_SIDE_WIDGETS.has(w.kind))
               .map((w, i) => (
-                <SideWidgetBlock key={`in-${i}`} entityKey={entityKey} id={id} widget={w} onResult={setMsg} />
+                <SideWidgetBlock key={`in-${i}`} id={id} widget={w} onResult={reportResult} />
               ))}
-      </form>
-
-      {preview
-        ? null
-        : sideWidgets
-            .filter((w) => w.kind !== 'promoScope')
-            .map((w, i) => (
-              <SideWidgetBlock key={i} entityKey={entityKey} id={id} widget={w} onResult={setMsg} />
-            ))}
-    </div>
+      </div>
+    </>
   );
-}
 
-function SideWidgetBlock({
-  id,
-  widget,
-  onResult,
-}: {
-  entityKey: string;
-  id: string;
-  widget: SideWidget;
-  onResult: (msg: string) => void;
-}) {
-  if (widget.kind === 'hoaLinks') {
-    return (
-      <Card className="mt-6">
-        <CardHeader className="border-b">
-          <CardTitle>HOA Links</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <HoaLinksEditor id={id} initial={widget.initial} onResult={onResult} />
-        </CardContent>
-      </Card>
-    );
-  }
-  if (widget.kind === 'jsonBlocks') {
-    return (
-      <Card className="mt-6">
-        <CardHeader className="border-b">
-          <CardTitle>Content Blocks</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <JsonBlocksEditor id={id} initialCopy={widget.copy} initialVenue={widget.venue} onResult={onResult} />
-        </CardContent>
-      </Card>
-    );
-  }
-  if (widget.kind === 'communityFloorPlans') {
-    return (
-      <Card className="mt-6">
-        <CardHeader className="border-b">
-          <CardTitle>Floor Plans Offered</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <CommunityFloorPlansPicker
-            communityId={id}
-            initialSelected={widget.selected}
-            options={widget.options}
-            onResult={onResult}
+  const publishControl =
+    publishGate && !preview ? (
+      <PublishedToggle
+        entityKey={entityKey}
+        id={id}
+        gate={publishGate.gate}
+        initialPublished={publishGate.published}
+        initialStatus={publishGate.status}
+        statusOptions={publishGate.statusOptions}
+        onResult={reportResult}
+      />
+    ) : undefined;
+
+  const formBody =
+    preview || !liveSite ? (
+      mainColumn
+    ) : (
+      <RecordEditLayout
+        main={mainColumn}
+        rail={
+          <PlacementRail
+            placement={liveSite}
+            activeSectionId={activeSection}
+            media={mediaRail}
+            publishControl={publishControl}
           />
-        </CardContent>
-      </Card>
+        }
+      />
     );
-  }
-  // promoScope
+
   return (
-    <Card className="mt-6">
-      <CardHeader className="border-b">
-        <CardTitle>Targeting Scope</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <PromoScopeTagPicker
-          promoId={id}
-          initialGlobal={widget.global}
-          initialSelected={widget.selected}
-          options={widget.options}
-          surfaces={widget.surfaces}
-          published={widget.published}
-          onResult={onResult}
-        />
-      </CardContent>
-    </Card>
+    <div className="mx-auto w-full max-w-7xl">
+      {!preview ? (
+        <>
+          <RecordEditBreadcrumb
+            collectionLabel={label}
+            collectionHref={`/${segment}`}
+            recordName={displayName}
+          />
+          <div className="mt-3">
+            <StickyActionBar
+              formId={formId}
+              pending={pending}
+              statusText={barStatusText}
+              statusTone={barTone}
+            >
+              {id !== 'new' ? (
+                <DeleteEntityButton
+                  entityKey={entityKey}
+                  id={id}
+                  segment={segment}
+                  displayName={displayName}
+                  synced={entityKey === 'qmi' || entityKey === 'communities' || entityKey === 'floor_plans'}
+                  onResult={reportResult}
+                />
+              ) : null}
+            </StickyActionBar>
+          </div>
+          <EditToast message={toast?.message ?? null} tone={toast?.tone ?? 'success'} onDismiss={dismissToast} />
+          <UnsavedLeaveToast
+            open={leavePrompt != null}
+            pending={pending}
+            onSave={saveBeforeLeave}
+            onDiscard={discardLeave}
+            onStay={stayOnPage}
+          />
+        </>
+      ) : (
+        <div className="mb-3 flex items-center gap-2">
+          <h1 className="font-heading text-lg font-semibold">{displayName}</h1>
+          <Badge variant="outline" className="h-5">
+            Preview
+          </Badge>
+        </div>
+      )}
+
+      <div className="mt-5">
+        <form id={formId} action={onSubmit}>
+          {formBody}
+        </form>
+
+        {preview
+          ? null
+          : sideWidgets
+              .filter((w) => !MAIN_SAVE_SIDE_WIDGETS.has(w.kind))
+              .map((w, i) => (
+                <div key={i} className="mt-6">
+                  <SideWidgetBlock id={id} widget={w} onResult={reportResult} />
+                </div>
+              ))}
+      </div>
+    </div>
   );
 }
