@@ -3,41 +3,25 @@
 // =============================================================================
 // QmiDetail — the BESPOKE Quick Move-In detail screen (client shell).
 //
-// A real-estate property-detail page (adapted from bundui real-estate/detail) wired to
-// the EXISTING admin write path. EVERY mutation routes through the documented server
-// actions — no new write paths:
-//   · saveEntity('qmi', id, formData)  — one <form> carrying:
-//        - the floor-plan ASSIGNMENT select  (name="floor_plan_id" → QMI override field
-//          → buildOverrideWrite; this is the 80-90% auto-fill moment for a draft)
-//        - the Snowflake synced/override fields via <SyncedOverrideField/>
-//          (price/address/beds/baths/sqft/elevation — blank reverts to synced)
-//        - home-specific marketing fields via <GenericField/> (admin columns, direct)
-//        - the main image via <ImageUploader/> (text url submits with the same form;
-//          the file upload uses its own uploadImage round-trip)
-//   · togglePublished('qmi', id, value) — the publish gate, via <PublishedToggle/>.
-// FormData field names are IDENTICAL to the generic engine, so the audit_log +
-// FRAMER_QUEUE enqueue + first-primary session behaviour is unchanged.
-//
-// Layout: breadcrumb + address title + copyable SKU strip (Housemaster / ECI / Job) +
-// status badges + action buttons; photo gallery; stats row; base-vs-current price card;
-// the prominent "Assign floor plan" lead for drafts (floor_plan_id NULL); the synced/
-// override editors; home-specific marketing; promotions membership; description.
+// A real-estate property-detail page wired to the EXISTING admin write path. EVERY
+// mutation routes through the documented server actions — no new write paths.
 // =============================================================================
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { saveEntity } from '@/lib/actions';
 import type { QmiDetailView } from '@/lib/qmi-detail';
+import { parseGalleryUrls } from '@/lib/gallery-urls';
 import { SyncedOverrideField } from '@/components/fields/SyncedOverrideField';
 import { GenericField } from '@/components/fields/GenericField';
 import { ImageUploader } from '@/components/fields/ImageUploader';
 import { ImageGalleryEditor } from '@/components/fields/ImageGalleryEditor';
 import { PublishedToggle } from '@/components/fields/PublishedToggle';
 import { LOCATION_STATUS, statusTone } from '@/lib/status';
-import { QmiPhotoGallery } from './QmiPhotoGallery';
 import { CopyableId } from './CopyableId';
 import { QmiPriceCard } from './QmiPriceCard';
 import { QmiAssignFloorPlan } from './QmiAssignFloorPlan';
+import { QmiSiteHeader } from './QmiSiteHeader';
 import { ExpandableDescription } from './ExpandableDescription';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -71,6 +55,7 @@ function fmtNum(v: number | null): string {
 
 export function QmiDetail({ view }: { view: QmiDetailView }) {
   const formId = `qmi-edit-${view.id}`;
+  const [galleryUrls, setGalleryUrls] = useState(() => parseGalleryUrls(view.photoGalleryJson));
   const {
     pending,
     startTransition,
@@ -106,7 +91,6 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
   const jumpSections = [
     { id: sectionId('Overview'), label: 'Overview' },
     ...(view.isUnassigned ? [{ id: sectionId('Assign floor plan'), label: 'Assign plan' }] : []),
-    ...(!view.isUnassigned ? [{ id: sectionId('Floor plan assignment'), label: 'Assignment' }] : []),
     { id: sectionId('From MarkSystems'), label: 'MarkSystems' },
     { id: sectionId('Marketing'), label: 'Marketing' },
     { id: sectionId('Description'), label: 'Description' },
@@ -116,30 +100,33 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
   const mediaRail = (
     <div className="min-w-0 space-y-5">
       <h3 className="text-sm font-medium text-foreground">Media</h3>
-      <ImageUploader
-        entity="qmi"
-        id={view.id}
-        field="image_url"
-        label="Main Image"
-        initialUrl={view.gallery[0]?.url ?? ''}
-        help="Home-level hero. Falls back to the floor-plan rendering when empty."
-        compact
-      />
-      <ImageUploader
-        entity="qmi"
-        id={view.id}
-        field="floor_plan_image"
-        label="Floor Plan Image"
-        initialUrl={view.admin.floorPlanImage}
-        compact
-      />
+      {!view.isUnassigned ? (
+        <ImageUploader
+          entity="qmi"
+          id={view.id}
+          field="floor_plan_image"
+          label="Floor Plan Image"
+          initialUrl={view.admin.floorPlanImage}
+          fallbackPreviewUrl={view.admin.floorPlanImageDefault}
+          help={
+            view.admin.floorPlanImage
+              ? 'Home-specific override — replaces the plan layout on the live site for this home. Clear and save to revert to the plan default.'
+              : view.admin.floorPlanImageDefault
+                ? `Using the ${view.floorPlanName} plan layout. Upload only if this production home differs from the standard sketch.`
+                : 'Upload only when this home’s layout differs from the standard plan sketch.'
+          }
+          compact
+        />
+      ) : null}
       <ImageGalleryEditor
         entity="qmi"
         id={view.id}
         field="photo_gallery_json"
         label="Photo Gallery"
         initialValue={view.photoGalleryJson}
-        help="Per-home photos shown on the listing detail page — e.g. upgraded-option photos. Upload in display order."
+        galleryUrls={galleryUrls}
+        onGalleryUrlsChange={setGalleryUrls}
+        help="Per-home photos in display order. Slots 2 and 3 also appear in the header (right column). Entry 1 is usually the elevation render."
         compact
       />
     </div>
@@ -182,8 +169,6 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
           <CopyableId label="Job" value={view.markJobNumber} />
         </div>
       </div>
-
-      <QmiPhotoGallery images={view.gallery} alt={title} />
 
       {view.isUnassigned ? (
         <div id={sectionId('Assign floor plan')}>
@@ -248,35 +233,33 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
       </section>
 
       <div className="space-y-4">
-        {!view.isUnassigned ? (
-          <Card id={sectionId('Floor plan assignment')}>
-            <CardHeader className="border-b">
-              <CardTitle className="text-base font-medium">Floor plan assignment</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <SyncedOverrideField {...view.relations.floorPlan} />
-              <SyncedOverrideField {...view.relations.community} />
-              <SyncedOverrideField {...view.relations.city} />
-            </CardContent>
-          </Card>
-        ) : null}
-
         <div id={sectionId('From MarkSystems')}>
-          <MarkSystemsSection>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <SyncedOverrideField {...view.syncedOverride.price} />
-            <SyncedOverrideField {...view.syncedOverride.address} />
-            <SyncedOverrideField {...view.syncedOverride.bedroomCount} />
-            <SyncedOverrideField {...view.syncedOverride.bathroomCount} />
-            <SyncedOverrideField {...view.syncedOverride.livingSquareFootage} />
-            <SyncedOverrideField {...view.syncedOverride.totalSquareFootage} />
-            <SyncedOverrideField {...view.syncedOverride.elevation} />
-            <SyncedOverrideField {...view.syncedOverride.lotNumber} />
-            <SyncedOverrideField {...view.syncedOverride.elevationType} />
-            <SyncedOverrideField {...view.syncedOverride.materialType} />
-            <SyncedOverrideField {...view.syncedOverride.isModelHome} />
-          </div>
-        </MarkSystemsSection>
+          <MarkSystemsSection title="MarkSystems">
+            <div className="grid gap-4 sm:grid-cols-2">
+              {!view.isUnassigned ? (
+                <div className="sm:col-span-2">
+                  <SyncedOverrideField {...view.relations.floorPlan} label="Floor Plan Assignment" />
+                </div>
+              ) : null}
+              <SyncedOverrideField {...view.syncedOverride.price} />
+              <SyncedOverrideField {...view.syncedOverride.address} />
+              <SyncedOverrideField {...view.syncedOverride.bedroomCount} />
+              <SyncedOverrideField {...view.syncedOverride.bathroomCount} />
+              <SyncedOverrideField {...view.syncedOverride.livingSquareFootage} />
+              <SyncedOverrideField {...view.syncedOverride.totalSquareFootage} />
+              <SyncedOverrideField {...view.syncedOverride.elevation} />
+              <SyncedOverrideField {...view.syncedOverride.lotNumber} />
+              <SyncedOverrideField {...view.syncedOverride.elevationType} />
+              <SyncedOverrideField {...view.syncedOverride.materialType} />
+              <SyncedOverrideField {...view.syncedOverride.isModelHome} />
+              {!view.isUnassigned ? (
+                <>
+                  <SyncedOverrideField {...view.relations.community} />
+                  <SyncedOverrideField {...view.relations.city} />
+                </>
+              ) : null}
+            </div>
+          </MarkSystemsSection>
         </div>
 
         <Card id={sectionId('Marketing')}>
@@ -368,19 +351,22 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
   );
 
   return (
-    <div className="mx-auto w-full max-w-7xl">
-      <RecordEditBreadcrumb
-        collectionLabel="Quick Move-Ins"
-        collectionHref="/qmi"
-        recordName={title}
-      />
-      <div className="mt-3">
-        <StickyActionBar
-          formId={formId}
-          pending={pending}
-          statusText={barStatusText}
-          statusTone={barTone}
+    <div className="w-full">
+      <div className="mx-auto w-full max-w-screen-2xl px-2 md:px-4">
+        <RecordEditBreadcrumb
+          collectionLabel="Quick Move-Ins"
+          collectionHref="/qmi"
+          recordName={title}
         />
+        <div className="mt-3">
+          <StickyActionBar
+            formId={formId}
+            pending={pending}
+            statusText={barStatusText}
+            statusTone={barTone}
+            title={title}
+          />
+        </div>
       </div>
       <EditToast message={toast?.message ?? null} tone={toast?.tone ?? 'success'} onDismiss={dismissToast} />
       <UnsavedLeaveToast
@@ -391,8 +377,17 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
         onStay={stayOnPage}
       />
 
-      <div className="mt-5">
-        <form id={formId} action={onSubmit}>
+      <form id={formId} action={onSubmit} className="mt-5">
+        <QmiSiteHeader
+          id={view.id}
+          title={title}
+          imageUrl={view.admin.imageUrl}
+          heroFallbackUrl={view.admin.heroFallbackUrl}
+          galleryUrls={galleryUrls}
+          onGalleryUrlsChange={setGalleryUrls}
+        />
+
+        <div className="mx-auto w-full max-w-screen-2xl px-2 md:px-4">
           <RecordEditLayout
             main={mainContent}
             rail={
@@ -412,8 +407,8 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
               />
             }
           />
-        </form>
-      </div>
+        </div>
+      </form>
     </div>
   );
 }

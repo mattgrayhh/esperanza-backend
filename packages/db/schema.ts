@@ -149,6 +149,8 @@ export const qmi = sqliteTable(
     // STABLE image / doc urls
     imageUrl: text('image_url'),
     ogImageUrl: text('og_image_url'),
+    // 0026: optional home-specific top-down layout override; blank → linked plan's floor_plan_image.
+    floorPlanImage: text('floor_plan_image'),
     pageUrl: text('page_url'),
     dynamicPdf: text('dynamic_pdf'),
 
@@ -392,6 +394,8 @@ export const floorPlans = sqliteTable(
     imageUrl: text('image_url'),
     heroImage2: text('hero_image_2'),
     heroImage3: text('hero_image_3'),
+    // 0008: top-down layout PNG (R2). Shared per plan; JOINed onto QMI + Framer.
+    floorPlanImage: text('floor_plan_image'),
     // FP:* lookup sources carrying attachment-object JSON (feed v_public_qmi's
     // fp_image / fp_additional_images via the floor-plan JOIN). STABLE urls only.
     fpImage: text('fp_image'),

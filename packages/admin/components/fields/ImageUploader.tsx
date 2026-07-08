@@ -60,6 +60,7 @@ export function ImageUploader({
   field,
   label,
   initialUrl,
+  fallbackPreviewUrl,
   help,
   compact = false,
 }: {
@@ -68,6 +69,8 @@ export function ImageUploader({
   field: string;
   label: string;
   initialUrl: string;
+  /** Shown when `initialUrl` is blank — preview only, not submitted or persisted. */
+  fallbackPreviewUrl?: string;
   help?: string;
   compact?: boolean;
 }) {
@@ -106,9 +109,11 @@ export function ImageUploader({
   }
 
   const isAirtable = url.includes(AIRTABLE_HOST);
-  const hasFile = url !== '' && !isAirtable;
+  const inheritedPreview = url === '' && Boolean(fallbackPreviewUrl?.trim());
+  const previewUrl = url || fallbackPreviewUrl || '';
+  const hasFile = previewUrl !== '' && !isAirtable;
   const isDocField = /download|brochure|pdf/i.test(field);
-  const isDoc = hasFile && (isDocField || !isImageUrl(url));
+  const isDoc = hasFile && (isDocField || !isImageUrl(previewUrl));
   const hasImage = hasFile && !isDoc;
   const isLogoField = /logo/i.test(field) || /logo/i.test(label);
   // Rail (`compact`): full-width vertical preview. Main form: compact horizontal row.
@@ -135,7 +140,9 @@ export function ImageUploader({
       : isAirtable
         ? 'Stale — re-upload'
         : hasFile
-          ? fileKindLabel(url, isDoc)
+          ? inheritedPreview
+            ? 'From floor plan'
+            : fileKindLabel(previewUrl, isDoc)
           : useVerticalImage
             ? 'Drop an image or click to upload'
             : 'Drag here or upload';
@@ -183,7 +190,7 @@ export function ImageUploader({
               <Spinner />
             ) : hasImage ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={url} alt={label} />
+              <img src={previewUrl} alt={label} />
             ) : isDoc ? (
               <FileTextIcon />
             ) : (
@@ -199,7 +206,7 @@ export function ImageUploader({
           ) : null}
 
           <AttachmentActions>
-            {hasFile ? (
+            {hasFile && !inheritedPreview ? (
               <AttachmentAction
                 type="button"
                 aria-label={`Remove ${title}`}
@@ -234,7 +241,7 @@ export function ImageUploader({
             <AttachmentTrigger
               render={
                 <a
-                  href={url}
+                  href={previewUrl}
                   target="_blank"
                   rel="noreferrer"
                   aria-label={`Open ${label}`}

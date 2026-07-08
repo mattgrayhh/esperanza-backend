@@ -15,6 +15,7 @@ export function HeroImageSlot({
   field,
   label,
   initialUrl,
+  fallbackPreviewUrl,
   className,
   imageFit = 'cover',
   overlay,
@@ -24,6 +25,8 @@ export function HeroImageSlot({
   field: string;
   label: string;
   initialUrl: string;
+  /** Preview-only when `initialUrl` is blank (not submitted on save). */
+  fallbackPreviewUrl?: string;
   className?: string;
   imageFit?: 'cover' | 'contain';
   overlay?: React.ReactNode;
@@ -39,7 +42,9 @@ export function HeroImageSlot({
   }, [initialUrl, field]);
 
   const isAirtable = url.includes(AIRTABLE_HOST);
-  const hasImage = url !== '' && !isAirtable;
+  const inheritedPreview = url === '' && Boolean(fallbackPreviewUrl?.trim());
+  const previewUrl = url || fallbackPreviewUrl || '';
+  const hasImage = previewUrl !== '' && !isAirtable;
 
   function onPick(file: File | undefined) {
     if (!file) return;
@@ -85,7 +90,7 @@ export function HeroImageSlot({
       {hasImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={url}
+          src={previewUrl}
           alt={label}
           className={cn(
             'absolute inset-0 size-full',
@@ -111,7 +116,7 @@ export function HeroImageSlot({
 
       <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5 opacity-0 transition-opacity group-hover/slot:opacity-100">
         <span className="rounded-md bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
-          {label}
+          {inheritedPreview ? `${label} (from plan)` : label}
         </span>
       </div>
 

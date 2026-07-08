@@ -70,6 +70,8 @@ export async function loadQmiData(
     description: str(q.description) || str(q.fp_description),
     features: str(q.upgrades).split(/\r?\n/).map((s) => s.replace(/^[-•]\s*/, '').trim()).filter(Boolean),
     floorPlanId,
-    floorPlanImageUrl: opts.appendFloorPlanPages ? str(q.fp_floor_plan_image) : '',
+    floorPlanImageUrl: opts.appendFloorPlanPages
+      ? str(q.floor_plan_image) || str(q.fp_floor_plan_image)
+      : '',
   };
 }

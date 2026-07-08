@@ -175,8 +175,14 @@ export interface QmiDetailView {
     moveInDate: string;
     selfTourAvailable: boolean;
     availableNow: boolean;
-    /** Floor-plan image uploaded by the operator; stored in custom_fields JSON. */
+    /** Optional home-specific top-down layout override (qmi.floor_plan_image). */
     floorPlanImage: string;
+    /** Standard layout from the linked floor plan — used when the override is blank. */
+    floorPlanImageDefault: string;
+    /** Home-level hero (`image_url`); blank → floor-plan rendering on the live site. */
+    imageUrl: string;
+    /** First resolved gallery image — preview fallback for the main hero slot. */
+    heroFallbackUrl: string;
   };
 
   options: {
@@ -365,20 +371,6 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
     help,
   });
 
-  // Parse custom_fields JSON blob (user-added Field-Builder fields not in physical columns).
-  let customFields: Record<string, string> = {};
-  try {
-    const raw = r.custom_fields ?? r.customFields;
-    if (typeof raw === 'string' && raw.trim()) {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-          customFields[k] = v == null ? '' : String(v);
-        }
-      }
-    }
-  } catch { /* malformed custom_fields → treat as empty */ }
-
   const published = Boolean(r.published);
   const comingSoon = Boolean(r.coming_soon);
   const status = deriveStatus('location', { published, comingSoon });
@@ -479,7 +471,10 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
       moveInDate: s(effectiveValue(r.synced_move_in_date, r.override_move_in_date)),
       selfTourAvailable: Boolean(r.self_tour_available),
       availableNow: Boolean(r.available_now),
-      floorPlanImage: customFields['floor_plan_image'] ?? '',
+      floorPlanImage: s(r.floor_plan_image),
+      floorPlanImageDefault: s(fp?.floor_plan_image),
+      imageUrl: s(r.image_url),
+      heroFallbackUrl: dedupedGallery[0]?.url ?? '',
     },
 
     options: {

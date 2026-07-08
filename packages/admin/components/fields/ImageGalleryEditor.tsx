@@ -21,6 +21,8 @@ export function ImageGalleryEditor({
   initialValue,
   help,
   compact = false,
+  galleryUrls: controlledUrls,
+  onGalleryUrlsChange,
 }: {
   entity: string;
   id: string;
@@ -29,8 +31,20 @@ export function ImageGalleryEditor({
   initialValue: string;
   help?: string;
   compact?: boolean;
+  /** When set, gallery order is owned by the parent (e.g. QMI site header slots). */
+  galleryUrls?: string[];
+  onGalleryUrlsChange?: (urls: string[]) => void;
 }) {
-  const [urls, setUrls] = useState<string[]>(() => parseGalleryUrls(initialValue));
+  const [internalUrls, setInternalUrls] = useState<string[]>(() => parseGalleryUrls(initialValue));
+  const controlled = controlledUrls !== undefined && onGalleryUrlsChange !== undefined;
+  const urls = controlled ? controlledUrls! : internalUrls;
+
+  function applyUrls(update: string[] | ((prev: string[]) => string[])) {
+    const next = typeof update === 'function' ? update(urls) : update;
+    if (controlled) onGalleryUrlsChange!(next);
+    else setInternalUrls(next);
+  }
+
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -39,12 +53,12 @@ export function ImageGalleryEditor({
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setUrls(parseGalleryUrls(initialValue));
-  }, [initialValue]);
+    if (!controlled) setInternalUrls(parseGalleryUrls(initialValue));
+  }, [initialValue, controlled]);
 
   function reorder(from: number, to: number) {
     if (from === to) return;
-    setUrls((prev) => {
+    applyUrls((prev) => {
       const next = [...prev];
       const [item] = next.splice(from, 1);
       next.splice(to, 0, item!);
@@ -53,7 +67,7 @@ export function ImageGalleryEditor({
   }
 
   function remove(index: number) {
-    setUrls((prev) => prev.filter((_, i) => i !== index));
+    applyUrls((prev) => prev.filter((_, i) => i !== index));
   }
 
   function addFiles(picked: Iterable<File> | null | undefined) {
@@ -70,7 +84,7 @@ export function ImageGalleryEditor({
       for (const file of files) {
         const res = await uploadGalleryImage(entity, id, index, file);
         if (res.ok) {
-          setUrls((prev) => [...prev, res.url]);
+          applyUrls((prev) => [...prev, res.url]);
           index += 1;
         } else {
           errors.push(res.error);

@@ -119,6 +119,30 @@ describe('QMI mapper — field set, COALESCE, FP fallback, slug, numField', () =
     expect(sval(f['floor_plan_slug'])).toBe('kestrel');
   });
 
+  it('prefers a home-specific floor_plan_image override over the linked plan default', () => {
+    const db = freshDb();
+    insertRow(db, 'floor_plans', {
+      id: 'recFPkestrel0001',
+      name: 'Kestrel',
+      slug: 'kestrel',
+      published: 1,
+      floor_plan_image: 'https://media.esperanzahomes.com/floor_plans/recFPkestrel0001/floor-plan.png',
+    });
+    insertRow(db, 'qmi', {
+      id: 'recQMI0001ABCDEF',
+      published: 1,
+      synced_address: '1 Main',
+      synced_floor_plan_id: 'recFPkestrel0001',
+      floor_plan_image: 'https://media.esperanzahomes.com/qmi/recQMI0001/custom-layout.png',
+      updated_at: '2026-05-30T12:00:00.000Z',
+    });
+    const row = db.prepare(qmiDef.selectByIdSql).get('recQMI0001ABCDEF') as Record<string, unknown>;
+    const f = qmiDef.map(row).fieldData;
+    expect(sval(f['floor_plan_image'])).toBe(
+      'https://media.esperanzahomes.com/qmi/recQMI0001/custom-layout.png'
+    );
+  });
+
   it('emits lot_number_short = digits-only lot number (RC169 → 169), keeping raw lot_number', () => {
     const cases: Array<[string | null, unknown, unknown]> = [
       // [synced_lot_number, expected lot_number, expected lot_number_short]

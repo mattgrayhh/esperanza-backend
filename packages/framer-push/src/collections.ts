@@ -429,7 +429,7 @@ const QMI_PROJECTION = `
   q.collection, q.estimated_monthly_price, q.estimated_monthly_payment, q.monthly_energy_cost,
   q.car_garage_count, q.stories_count, q.stories,
   q.available_now, q.self_tour_available, q.include_in_xml_feed,
-  q.image_url, q.og_image_url, q.page_url, q.dynamic_pdf,
+  q.image_url, q.og_image_url, q.floor_plan_image, q.page_url, q.dynamic_pdf,
   q.featured_image, q.image_2, q.image_3, q.image_4, q.image_5,
   q.description, q.upgrades, q.incentive, q.virtual_tour_url,
   COALESCE(q.override_elevation_type, q.synced_elevation_type) AS elevation_type,
@@ -678,7 +678,7 @@ const qmi: CollectionDef = {
       image_3: imgIf(row['image_3']),
       image_4: imgIf(row['image_4']),
       image_5: imgIf(row['image_5']),
-      floor_plan_image: imgIf(row['fp_floor_plan_image']),
+      floor_plan_image: imgIf(asString(row['floor_plan_image']) ?? row['fp_floor_plan_image']),
       // Floor-plan-default → QMI-override content resolution (same COALESCE the
       // PDF renderer applies in packages/pdf/src/data/qmi.ts): the site binds this
       // ONE field; an editor sets qmi.description (admin TipTap WYSIWYG) only to

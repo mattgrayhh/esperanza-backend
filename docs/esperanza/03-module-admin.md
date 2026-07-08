@@ -129,6 +129,13 @@ visually — no markdown syntax. Notes:
     (the field type must match before the batch, per the framer-push golden rule):
     reseed `field_definitions` `--remote` → `/push-schema` (re-types `qmi.description`
     `string`→`formattedText`) → deploy → `/backfill?keys=qmi` (long timeout, ~356 homes).
+  - **`qmi.floor_plan_image` (optional home override):** blank inherits the linked plan's
+    top-down layout (`floor_plans.floor_plan_image` via JOIN). Upload on the QMI media rail
+    only when the production home differs from the standard plan sketch — same override
+    pattern as description. framer-push emits `COALESCE(qmi override, plan default)`.
+  - **QMI site header:** the detail page opens with a live-site hero preview (main image
+    2/3 + gallery photos 2 and 3 in the right column), matching the community editor
+    pattern. Floor Plan Assignment lives in the collapsed MarkSystems panel.
 - **Toolbar offers H1/H2/H3 + Body.** H1 is available because it was requested, but a Framer
   page already has its own page-title H1 — prefer H2/H3 for in-body section headings to avoid
   duplicate-H1 SEO.

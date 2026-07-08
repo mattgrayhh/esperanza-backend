@@ -20,8 +20,10 @@ first/second floor) for a plan — not an exterior elevation or a photo.
 ## Good to know
 
 - This image lives on the **plan**, so it automatically appears on **every
-  Quick Move-In home of that plan** — you only upload it once. You do not set a
-  floor plan image on individual homes.
+  Quick Move-In home of that plan** — you only upload it once on the plan.
+- On a **Quick Move-In home**, use **Floor Plan Image** in the media rail only when
+  that specific production home differs from the standard plan sketch. Leave it blank
+  and the plan layout is used. Clear the home override and save to revert.
 - It is a separate field from `Main Image` and the hero images, which are the
   exterior/marketing shots. Keep the layout drawing here and the exterior shots
   in those fields.
