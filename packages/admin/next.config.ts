@@ -39,6 +39,8 @@ const nextConfig: NextConfig = {
 
 // Initialise the Cloudflare dev context (bindings) for `next dev`. Awaited at module
 // load; harmless/short-circuits outside dev.
-void initOpenNextCloudflareForDev();
+void initOpenNextCloudflareForDev({
+  experimental: { remoteBindings: true },
+});
 
 export default nextConfig;

@@ -18,3 +18,8 @@ ADMIN_DEV_EMAIL=you@esperanzahomes.com
 # --- Public image base (also in wrangler.toml [vars]; .dev.vars overrides locally) ---
 # uploadImage() builds the stable url as `${IMAGES_PUBLIC_BASE_URL}/<entity>/<id>/<file>`.
 IMAGES_PUBLIC_BASE_URL=https://img.hazardhouse.ai
+
+# --- D1 during `next dev` ---
+# packages/admin/wrangler.toml sets `remote = true` on the DB binding so localhost
+# reads production D1 (matches rhodes / live media). Comment that line out to use
+# the emulated local D1 instead — it is often stale and missing migrations.
