@@ -17,12 +17,16 @@
 /** Parse a stored gallery column into an ordered list of image URL strings. */
 export function parseGalleryUrls(raw: string): string[] {
   if (!raw) return [];
+  const trimmed = raw.trim();
   // Legacy newline-separated string (only when it isn't a JSON array).
-  if (raw.indexOf('\n') !== -1 && raw.trim()[0] !== '[') {
+  if (raw.indexOf('\n') !== -1 && trimmed[0] !== '[') {
     return raw
       .split('\n')
       .map((u) => u.trim())
       .filter(Boolean);
+  }
+  if (trimmed[0] !== '[' && trimmed.startsWith('http')) {
+    return [trimmed];
   }
   let parsed: unknown;
   try {

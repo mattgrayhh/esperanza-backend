@@ -52,4 +52,8 @@ describe('parseGalleryUrls', () => {
   it('returns [] for malformed JSON that is not newline-separated', () => {
     expect(parseGalleryUrls('{not json')).toEqual([]);
   });
+
+  it('reads a single bare URL string', () => {
+    expect(parseGalleryUrls('https://r2/one.jpg')).toEqual(['https://r2/one.jpg']);
+  });
 });
