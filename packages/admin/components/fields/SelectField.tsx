@@ -14,7 +14,7 @@
 // =============================================================================
 
 import type { SelectOptionItem } from '../../lib/field-config';
-import { Label } from '@/components/ui/label';
+import { FieldLabel } from './FieldLabel';
 import { cn } from '@/lib/utils';
 import {
   Select,
@@ -39,7 +39,7 @@ export function SelectField({
 }) {
   return (
     <div className="grid gap-1.5 text-sm">
-      <Label className="font-medium text-foreground">{label}</Label>
+      <FieldLabel label={label} help={help} />
 
       <Select name={field} defaultValue={value}>
         <SelectTrigger className={cn('w-full')}>
@@ -58,7 +58,6 @@ export function SelectField({
         </SelectContent>
       </Select>
 
-      {help ? <span className="text-xs text-muted-foreground">{help}</span> : null}
     </div>
   );
 }

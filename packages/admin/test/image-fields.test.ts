@@ -65,6 +65,7 @@ describe('isImageField — adjacent TEXT columns are NOT images', () => {
     'virtual_tour_url',
     'featured_video',
     'community_map_embed',
+    'description_image_location',
     'slug',
     'title',
     'price',

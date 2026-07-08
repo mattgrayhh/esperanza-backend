@@ -19,7 +19,7 @@ import { useState } from 'react';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
+import { FieldLabel } from './FieldLabel';
 import { CalendarIcon, XIcon } from 'lucide-react';
 
 /** Parse a stored `YYYY-MM-DD` into a LOCAL Date (noon to dodge DST edges). null if blank/invalid. */
@@ -63,9 +63,7 @@ export function DatePicker({
   return (
     <div className="grid gap-1.5 text-sm">
       {/* When embedded in GenericField, the parent renders the label (label=''). */}
-      {label !== '' ? (
-        <Label className="font-medium text-foreground">{label}</Label>
-      ) : null}
+      {label !== '' ? <FieldLabel label={label} help={help} /> : null}
 
       {/* The column value travels via this hidden input as a YYYY-MM-DD string. */}
       <input type="hidden" name={field} value={ymd} />
@@ -112,7 +110,6 @@ export function DatePicker({
         ) : null}
       </div>
 
-      {help ? <span className="text-xs text-muted-foreground">{help}</span> : null}
     </div>
   );
 }

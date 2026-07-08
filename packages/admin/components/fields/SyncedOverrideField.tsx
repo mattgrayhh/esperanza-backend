@@ -26,6 +26,7 @@
 import { useId, useState } from 'react';
 import type { SelectOption } from '../../lib/select-options';
 import { Input } from '@/components/ui/input';
+import { FieldLabel } from './FieldLabel';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -72,24 +73,23 @@ export function SyncedOverrideField({
 
   return (
     <div className="grid gap-1.5 text-sm">
-      <Label className="font-medium text-foreground">
-        {label}
+      <FieldLabel label={label} help={help}>
         {overriding ? (
           <Badge
             variant="secondary"
-            className="ml-1 h-4 px-1.5 text-[10px] font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-400"
+            className="h-4 px-1.5 text-[10px] font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-400"
           >
             override
           </Badge>
         ) : (
           <Badge
             variant="secondary"
-            className="ml-1 h-4 px-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase"
+            className="h-4 px-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase"
           >
             synced
           </Badge>
         )}
-      </Label>
+      </FieldLabel>
 
       {/* The submitted value: '' while locked (revert/follow), override when unlocked. */}
       <input type="hidden" name={field} value={unlocked ? value : ''} />
@@ -139,7 +139,6 @@ export function SyncedOverrideField({
       <span className="text-xs text-muted-foreground">
         {unlocked ? `Snowflake: ${syncedShown} — re-lock to follow` : 'Locked to Snowflake sync'}
       </span>
-      {help ? <span className="text-xs text-muted-foreground">{help}</span> : null}
     </div>
   );
 }
