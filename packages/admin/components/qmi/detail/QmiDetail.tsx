@@ -24,7 +24,7 @@
 // override editors; home-specific marketing; promotions membership; description.
 // =============================================================================
 
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { saveEntity } from '@/lib/actions';
 import type { QmiDetailView } from '@/lib/qmi-detail';
@@ -43,23 +43,24 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  EditToast,
+  MarkSystemsSection,
+  PlacementRail,
+  RecordEditBreadcrumb,
+  RecordEditLayout,
+  SectionJumpNav,
+  StickyActionBar,
+  UnsavedLeaveToast,
+  sectionId,
+} from '@/components/record-edit/RecordEditShell';
+import { useEditSaveFeedback } from '@/components/record-edit/useEditSaveFeedback';
 import {
   BedDouble,
   Bath,
   Ruler,
   MapPin,
-  ChevronLeft,
-  ExternalLink,
-  Share2,
   TagIcon,
   Building2,
 } from 'lucide-react';
@@ -69,21 +70,29 @@ function fmtNum(v: number | null): string {
 }
 
 export function QmiDetail({ view }: { view: QmiDetailView }) {
-  const [pending, startTransition] = useTransition();
-  const [msg, setMsg] = useState<string | null>(null);
-  const isError = msg != null && msg.startsWith('Error:');
+  const formId = `qmi-edit-${view.id}`;
+  const {
+    pending,
+    startTransition,
+    reportResult,
+    barStatusText,
+    barTone,
+    toast,
+    dismissToast,
+    leavePrompt,
+    saveBeforeLeave,
+    discardLeave,
+    stayOnPage,
+  } = useEditSaveFeedback(formId);
 
   const title = view.address.trim() || view.housenumber || view.id;
 
-  // Single saveEntity submit for the whole editable form (override + admin + image).
   function onSubmit(formData: FormData) {
     startTransition(async () => {
       const res = await saveEntity('qmi', view.id, formData);
-      setMsg(res.ok ? 'Saved' : `Error: ${res.error}`);
+      reportResult(res.ok ? 'Saved' : `Error: ${res.error}`);
     });
   }
-
-  const previewHref = view.slug ? `/qmi/${view.slug}` : null;
 
   const stats = useMemo(
     () => [
@@ -94,72 +103,53 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
     [view.bedroomCount, view.bathroomCount, view.totalSquareFootage]
   );
 
-  return (
-    <div className="mx-auto w-full max-w-6xl space-y-4">
-      {/* ── Header: back + breadcrumb / actions ── */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="outline" size="icon" render={<Link href="/qmi" aria-label="Back to Quick Move-Ins" />}>
-            <ChevronLeft />
-          </Button>
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink render={<Link href="/qmi">Quick Move-Ins</Link>} />
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage className="max-w-[16rem] truncate">{title}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
+  const jumpSections = [
+    { id: sectionId('Overview'), label: 'Overview' },
+    ...(view.isUnassigned ? [{ id: sectionId('Assign floor plan'), label: 'Assign plan' }] : []),
+    ...(!view.isUnassigned ? [{ id: sectionId('Floor plan assignment'), label: 'Assignment' }] : []),
+    { id: sectionId('From MarkSystems'), label: 'MarkSystems' },
+    { id: sectionId('Marketing'), label: 'Marketing' },
+    { id: sectionId('Description'), label: 'Description' },
+    { id: sectionId('Promotions'), label: 'Promotions' },
+  ];
 
-        <div className="flex flex-wrap items-center gap-2">
-          {msg ? (
-            <Badge variant={isError ? 'destructive' : 'secondary'} className="h-7">
-              {msg}
-            </Badge>
-          ) : null}
-          {/* Publish gate — tri-state Status (Draft / Coming Soon / Live), matching the
-              generic Communities/Floor Plans control. Writes via setStatus('qmi',…),
-              which sets published + coming_soon atomically (lib/status.statusPatch), so a
-              freshly published home can be flagged "Coming Soon" per the operator's model. */}
-          <PublishedToggle
-            entityKey="qmi"
-            id={view.id}
-            gate="status"
-            initialStatus={view.status}
-            statusOptions={LOCATION_STATUS}
-            onResult={setMsg}
-          />
-          {previewHref ? (
-            <Button variant="ghost" size="sm" type="button" render={<a href={previewHref} target="_blank" rel="noreferrer" />}>
-              <ExternalLink />
-              Preview
-            </Button>
-          ) : null}
-          <Button
-            variant="ghost"
-            size="sm"
-            type="button"
-            onClick={() => {
-              const url = previewHref ?? `/qmi/${view.id}`;
-              void navigator.clipboard?.writeText(url).then(() => setMsg('Link copied')).catch(() => {});
-            }}
-          >
-            <Share2 />
-            Share
-          </Button>
-        </div>
-      </div>
+  const mediaRail = (
+    <div className="min-w-0 space-y-5">
+      <h3 className="text-sm font-medium text-foreground">Media</h3>
+      <ImageUploader
+        entity="qmi"
+        id={view.id}
+        field="image_url"
+        label="Main Image"
+        initialUrl={view.gallery[0]?.url ?? ''}
+        help="Home-level hero. Falls back to the floor-plan rendering when empty."
+        compact
+      />
+      <ImageUploader
+        entity="qmi"
+        id={view.id}
+        field="floor_plan_image"
+        label="Floor Plan Image"
+        initialUrl={view.admin.floorPlanImage}
+        compact
+      />
+      <ImageGalleryEditor
+        entity="qmi"
+        id={view.id}
+        field="photo_gallery_json"
+        label="Photo Gallery"
+        initialValue={view.photoGalleryJson}
+        help="Per-home photos shown on the listing detail page — e.g. upgraded-option photos. Upload in display order."
+        compact
+      />
+    </div>
+  );
 
-      {/* ── Title + ecommerce-SKU technical id strip ── */}
-      <div className="space-y-3">
+  const mainContent = (
+    <div className="space-y-4">
+      <div className="space-y-3" id={sectionId('Overview')}>
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-          {/* Tri-state publish status badge (Draft / Coming Soon / Live). Coming Soon is a
-              published home rendered in its coming-soon treatment on the site. */}
+          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
           <Badge
             variant={
               statusTone(view.status) === 'live'
@@ -185,6 +175,7 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
             <Badge variant="destructive">Unassigned draft</Badge>
           ) : null}
         </div>
+        <SectionJumpNav sections={jumpSections} />
         <div className="flex flex-wrap items-center gap-2">
           <CopyableId label="Housemaster" value={view.housenumber} />
           <CopyableId label="ECI" value={view.eciKey} />
@@ -192,15 +183,14 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
         </div>
       </div>
 
-      {/* ── Photo gallery (floor-plan renderings + home images) ── */}
       <QmiPhotoGallery images={view.gallery} alt={title} />
 
-      {/* ── Draft lead: prominent Assign floor plan (the 80-90% auto-fill) ── */}
       {view.isUnassigned ? (
-        <QmiAssignFloorPlan id={view.id} options={view.options.floorPlans} onResult={setMsg} />
+        <div id={sectionId('Assign floor plan')}>
+          <QmiAssignFloorPlan id={view.id} options={view.options.floorPlans} onResult={reportResult} />
+        </div>
       ) : null}
 
-      {/* ── Summary: stats + location + price ── */}
       <section className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <Card className="py-5">
           <CardContent className="space-y-6 px-5">
@@ -257,167 +247,102 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
         />
       </section>
 
-      {/* ── Editable form: floor plan + synced/override + marketing + image ── */}
-      <form action={onSubmit}>
-        <section className="grid gap-4 lg:grid-cols-[1fr_320px]">
-          <div className="space-y-4">
-            {/* Floor-plan re-assignment (always available; for drafts the prominent
-                QmiAssignFloorPlan above leads — but it also lives here so an assigned
-                home can be re-assigned). Submits name="floor_plan_id" → override write. */}
-            {!view.isUnassigned ? (
-              <Card>
-                <CardHeader className="border-b">
-                  <CardTitle>Floor plan assignment</CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-4">
-                  <SyncedOverrideField {...view.relations.floorPlan} />
-                  <SyncedOverrideField {...view.relations.community} />
-                  <SyncedOverrideField {...view.relations.city} />
-                </CardContent>
-              </Card>
-            ) : null}
+      <div className="space-y-4">
+        {!view.isUnassigned ? (
+          <Card id={sectionId('Floor plan assignment')}>
+            <CardHeader className="border-b">
+              <CardTitle className="text-base font-medium">Floor plan assignment</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <SyncedOverrideField {...view.relations.floorPlan} />
+              <SyncedOverrideField {...view.relations.community} />
+              <SyncedOverrideField {...view.relations.city} />
+            </CardContent>
+          </Card>
+        ) : null}
 
-            {/* Snowflake-fed home specifics (synced/override). Blank reverts to synced. */}
-            <Card>
-              <CardHeader className="border-b">
-                <CardTitle>Home specifics</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-2">
-                <SyncedOverrideField {...view.syncedOverride.price} />
-                <SyncedOverrideField {...view.syncedOverride.address} />
-                <SyncedOverrideField {...view.syncedOverride.bedroomCount} />
-                <SyncedOverrideField {...view.syncedOverride.bathroomCount} />
-                <SyncedOverrideField {...view.syncedOverride.livingSquareFootage} />
-                <SyncedOverrideField {...view.syncedOverride.totalSquareFootage} />
-                <SyncedOverrideField {...view.syncedOverride.elevation} />
-                <SyncedOverrideField {...view.syncedOverride.lotNumber} />
-                <SyncedOverrideField {...view.syncedOverride.elevationType} />
-                <SyncedOverrideField {...view.syncedOverride.materialType} />
-                <SyncedOverrideField {...view.syncedOverride.isModelHome} />
-              </CardContent>
-            </Card>
+        <div id={sectionId('From MarkSystems')}>
+          <MarkSystemsSection>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SyncedOverrideField {...view.syncedOverride.price} />
+            <SyncedOverrideField {...view.syncedOverride.address} />
+            <SyncedOverrideField {...view.syncedOverride.bedroomCount} />
+            <SyncedOverrideField {...view.syncedOverride.bathroomCount} />
+            <SyncedOverrideField {...view.syncedOverride.livingSquareFootage} />
+            <SyncedOverrideField {...view.syncedOverride.totalSquareFootage} />
+            <SyncedOverrideField {...view.syncedOverride.elevation} />
+            <SyncedOverrideField {...view.syncedOverride.lotNumber} />
+            <SyncedOverrideField {...view.syncedOverride.elevationType} />
+            <SyncedOverrideField {...view.syncedOverride.materialType} />
+            <SyncedOverrideField {...view.syncedOverride.isModelHome} />
+          </div>
+        </MarkSystemsSection>
+        </div>
 
-            {/* Home-specific marketing (admin columns, edited directly). */}
-            <Card>
-              <CardHeader className="border-b">
-                <CardTitle>Marketing</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4">
-                <GenericField field="incentive" label="Incentive" widget="textarea" value={view.admin.incentive} />
-                <GenericField field="promo_text" label="Promo Text" widget="text" value={view.admin.promoText} />
-                <GenericField
-                  field="availability_text"
-                  label="Availability Text"
-                  widget="text"
-                  value={view.admin.availabilityText}
-                />
-                <GenericField
-                  field="virtual_tour_url"
-                  label="Virtual Tour URL"
-                  widget="text"
-                  value={view.admin.virtualTourUrl}
-                />
-                <GenericField
-                  field="move_in_date"
-                  label="Move-In Date"
-                  widget="date"
-                  value={view.admin.moveInDate}
-                />
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <GenericField
-                    field="available_now"
-                    label="Available Now"
-                    widget="boolean"
-                    value={view.admin.availableNow ? '1' : '0'}
-                  />
-                  <GenericField
-                    field="self_tour_available"
-                    label="Self Tour Available"
-                    widget="boolean"
-                    value={view.admin.selfTourAvailable ? '1' : '0'}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Description — editable override (universal TipTap WYSIWYG). Blank ⇒ the
-                floor-plan copy is used on the site (shown below for reference). Set it to
-                reformat the plan copy for this home — e.g. the features as bullet points.
-                Submits name="description" via the same saveEntity FormData; the mapper
-                pushes it as formattedText (ftIf). */}
-            <Card>
-              <CardHeader className="border-b">
-                <CardTitle>Description</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4">
-                <GenericField
-                  field="description"
-                  label="Description"
-                  widget="richtext"
-                  value={view.ownDescription}
-                  entity="qmi"
-                  id={view.id}
-                  help="Leave blank to use the floor-plan copy shown below. Set it only to override the plan description for this home — e.g. to format the features as bullet points."
-                />
-                {view.ownDescription.trim() === '' && view.floorPlanDescription.trim() ? (
-                  <div className="space-y-1.5 rounded-lg border border-dashed bg-muted/40 p-3">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      Floor-plan copy (used on the site while the override above is blank)
-                    </p>
-                    <ExpandableDescription text={view.floorPlanDescription} />
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
-
-            <div className="flex items-center gap-3">
-              <Button type="submit" disabled={pending}>
-                {pending ? 'Saving…' : 'Save changes'}
-              </Button>
-              {msg ? (
-                <span className={cn('text-sm', isError ? 'text-destructive' : 'text-muted-foreground')}>{msg}</span>
-              ) : null}
+        <Card id={sectionId('Marketing')}>
+          <CardHeader className="border-b">
+            <CardTitle className="text-base font-medium">Marketing</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <GenericField field="incentive" label="Incentive" widget="textarea" value={view.admin.incentive} />
+            <GenericField field="promo_text" label="Promo Text" widget="text" value={view.admin.promoText} />
+            <GenericField
+              field="availability_text"
+              label="Availability Text"
+              widget="text"
+              value={view.admin.availabilityText}
+            />
+            <GenericField
+              field="virtual_tour_url"
+              label="Virtual Tour URL"
+              widget="text"
+              value={view.admin.virtualTourUrl}
+            />
+            <GenericField field="move_in_date" label="Move-In Date" widget="date" value={view.admin.moveInDate} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <GenericField
+                field="available_now"
+                label="Available Now"
+                widget="boolean"
+                value={view.admin.availableNow ? '1' : '0'}
+              />
+              <GenericField
+                field="self_tour_available"
+                label="Self Tour Available"
+                widget="boolean"
+                value={view.admin.selfTourAvailable ? '1' : '0'}
+              />
             </div>
-          </div>
+          </CardContent>
+        </Card>
 
-          {/* RIGHT RAIL: image uploaders (still inside the form → same saveEntity FormData). */}
-          <div className="space-y-4">
-            <Card className="self-start">
-              <CardHeader className="border-b">
-                <CardTitle>Media</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-5">
-                <ImageUploader
-                  entity="qmi"
-                  id={view.id}
-                  field="image_url"
-                  label="Main Image"
-                  initialUrl={view.gallery[0]?.url ?? ''}
-                  help="Home-level hero. Falls back to the floor-plan rendering when empty."
-                />
-                <ImageUploader
-                  entity="qmi"
-                  id={view.id}
-                  field="floor_plan_image"
-                  label="Floor Plan Image"
-                  initialUrl={view.admin.floorPlanImage}
-                />
-                <ImageGalleryEditor
-                  entity="qmi"
-                  id={view.id}
-                  field="photo_gallery_json"
-                  label="Photo Gallery"
-                  initialValue={view.photoGalleryJson}
-                  help="Per-home photos shown on the listing detail page — e.g. upgraded-option photos. Upload in display order."
-                />
-              </CardContent>
-            </Card>
-          </div>
-        </section>
-      </form>
+        <Card id={sectionId('Description')}>
+          <CardHeader className="border-b">
+            <CardTitle className="text-base font-medium">Description</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <GenericField
+              field="description"
+              label="Description"
+              widget="richtext"
+              value={view.ownDescription}
+              entity="qmi"
+              id={view.id}
+              help="Leave blank to use the floor-plan copy shown below. Set it only to override the plan description for this home — e.g. to format the features as bullet points."
+            />
+            {view.ownDescription.trim() === '' && view.floorPlanDescription.trim() ? (
+              <div className="space-y-1.5 rounded-lg border border-dashed bg-muted/40 p-3">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Floor-plan copy (used on the site while the override above is blank)
+                </p>
+                <ExpandableDescription text={view.floorPlanDescription} />
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* ── Promotions targeting this home (read-only; targeting is owned by the promo) ── */}
-      <Card className="py-5">
+      <Card className="py-5" id={sectionId('Promotions')}>
         <CardContent className="space-y-3 px-5">
           <h2 className="flex items-center gap-2 text-lg font-semibold">
             <TagIcon className="size-4" /> Promotions
@@ -439,7 +364,56 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
           </p>
         </CardContent>
       </Card>
+    </div>
+  );
 
+  return (
+    <div className="mx-auto w-full max-w-7xl">
+      <RecordEditBreadcrumb
+        collectionLabel="Quick Move-Ins"
+        collectionHref="/qmi"
+        recordName={title}
+      />
+      <div className="mt-3">
+        <StickyActionBar
+          formId={formId}
+          pending={pending}
+          statusText={barStatusText}
+          statusTone={barTone}
+        />
+      </div>
+      <EditToast message={toast?.message ?? null} tone={toast?.tone ?? 'success'} onDismiss={dismissToast} />
+      <UnsavedLeaveToast
+        open={leavePrompt != null}
+        pending={pending}
+        onSave={saveBeforeLeave}
+        onDiscard={discardLeave}
+        onStay={stayOnPage}
+      />
+
+      <div className="mt-5">
+        <form id={formId} action={onSubmit}>
+          <RecordEditLayout
+            main={mainContent}
+            rail={
+              <PlacementRail
+                placement={view.liveSite}
+                publishControl={
+                  <PublishedToggle
+                    entityKey="qmi"
+                    id={view.id}
+                    gate="status"
+                    initialStatus={view.status}
+                    statusOptions={LOCATION_STATUS}
+                    onResult={reportResult}
+                  />
+                }
+                media={mediaRail}
+              />
+            }
+          />
+        </form>
+      </div>
     </div>
   );
 }

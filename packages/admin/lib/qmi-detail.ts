@@ -24,6 +24,7 @@ import { qmi, floorPlans, communities, cities, promotions, promotionTargets } fr
 import { effectiveValue } from '@esperanza/db/override';
 import { loadOptions, type SelectOption } from './select-options';
 import { deriveStatus } from './status';
+import { buildLiveSitePlacement, type LiveSitePlacement } from './live-site';
 
 type Row = Record<string, unknown>;
 
@@ -192,6 +193,8 @@ export interface QmiDetailView {
    * "save QMI promotions" action — every write stays on the documented path.
    */
   promotions: Array<{ id: string; title: string; global: boolean }>;
+
+  liveSite: LiveSitePlacement;
 }
 
 /** One synced/override field's render inputs (mirrors build-edit-view's syncedOverride). */
@@ -378,6 +381,7 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
 
   const published = Boolean(r.published);
   const comingSoon = Boolean(r.coming_soon);
+  const status = deriveStatus('location', { published, comingSoon });
 
   return {
     id,
@@ -385,7 +389,7 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
     comingSoon,
     // Tri-state status from the same publish columns the rest of the engine uses
     // (lib/status: !published → Draft; published+coming_soon → Coming Soon; else Live).
-    status: deriveStatus('location', { published, comingSoon }),
+    status,
     availableNow: Boolean(r.available_now),
 
     housenumber: s(r.housenumber),
@@ -485,5 +489,7 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
     },
 
     promotions: promotionsList,
+
+    liveSite: buildLiveSitePlacement('qmi', r, { published, status }),
   };
 }
