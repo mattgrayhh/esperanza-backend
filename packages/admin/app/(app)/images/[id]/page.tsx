@@ -38,6 +38,7 @@ export default async function ImageEditor({
       fields={view.fields}
       publishGate={view.publishGate}
       sideWidgets={view.sideWidgets}
+      liveSite={view.liveSite}
     />
   );
 }

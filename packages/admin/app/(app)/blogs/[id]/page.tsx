@@ -39,9 +39,11 @@ export default async function BlogEditorPage({
       label={DEF.label}
       id={id}
       displayName={view.displayName}
+      subtitle={view.subtitle}
       fields={view.fields}
       publishGate={view.publishGate}
       sideWidgets={view.sideWidgets}
+      liveSite={view.liveSite}
     />
   )
 }
