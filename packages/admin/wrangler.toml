@@ -29,6 +29,10 @@ binding = "ASSETS"
 binding = "DB"
 database_name = "esperanza"
 database_id = "023ea995-0abc-4165-a1e1-6e2373fc43e9"
+# Local `next dev` reads production D1 so community media matches live data.
+# Remove `remote = true` to use the emulated local D1 instead (stale unless synced).
+remote = true
+migrations_dir = "../db/migrations"
 
 # Shared R2 bucket — image uploads land here; only stable URLs are persisted to D1.
 [[r2_buckets]]
