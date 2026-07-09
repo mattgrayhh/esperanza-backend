@@ -251,7 +251,7 @@ export function EntityEditForm({
     (f) => f.kind === 'image' && !(entityKey === 'promotions' && PROMO_SURFACE_OWNED.has(f.field)),
   );
   const mainFields = fields.filter(
-    (f) =>
+    (f): f is Exclude<(typeof fields)[number], { kind: 'image' }> =>
       f.kind !== 'image' &&
       !(entityKey === 'promotions' && PROMO_SURFACE_OWNED.has(f.field)),
   );
