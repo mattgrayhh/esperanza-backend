@@ -24,6 +24,7 @@
 // =============================================================================
 
 import { useState } from 'react';
+import { PencilIcon } from 'lucide-react';
 import { saveEntity } from '../lib/actions';
 import { GenericField } from './fields/GenericField';
 import { ImageUploader } from './fields/ImageUploader';
@@ -56,6 +57,28 @@ import {
 } from '@/components/record-edit/RecordEditShell';
 import { useEditSaveFeedback } from '@/components/record-edit/useEditSaveFeedback';
 import { MAIN_SAVE_SIDE_WIDGETS, SideWidgetBlock } from '@/components/record-edit/SideWidgetBlock';
+import { PromotionIncentiveSection } from '@/components/promotions/PromotionIncentiveSection';
+import { PromotionSurfacesSection } from '@/components/promotions/PromotionSurfacesSection';
+
+/** Fields owned by promo surface preview sections — skip in the generic field loop. */
+const PROMO_SURFACE_OWNED = new Set([
+  'show_incentive_page',
+  'title',
+  'copy',
+  'image_url',
+  'show_site_banner',
+  'show_banner_button',
+  'show_card_badge',
+  'show_card_cta',
+  'badge_text',
+  'banner_text',
+  'cta_label',
+  'cta_url',
+]);
+
+function promoBool(raw: string): boolean {
+  return raw === '1' || raw === 'true';
+}
 
 // --- the per-field view model the RSC builds (one of these unions per field) ---
 
@@ -222,9 +245,16 @@ export function EntityEditForm({
   }
 
   // Split fields: single-image widgets go to the right rail; everything else (including
-  // imageGallery) to the main column.
-  const imageFields = fields.filter((f) => f.kind === 'image');
-  const mainFields = fields.filter((f) => f.kind !== 'image');
+  // imageGallery) to the main column. Promotions: surface copy + toggles are owned by
+  // PromotionIncentiveSection / PromotionSurfacesSection.
+  const imageFields = fields.filter(
+    (f) => f.kind === 'image' && !(entityKey === 'promotions' && PROMO_SURFACE_OWNED.has(f.field)),
+  );
+  const mainFields = fields.filter(
+    (f) =>
+      f.kind !== 'image' &&
+      !(entityKey === 'promotions' && PROMO_SURFACE_OWNED.has(f.field)),
+  );
 
   // [21][5][6] Group the main fields into section cards by their `group`
   // (field_definitions.group_label). Ungrouped fields fall under "Details".
@@ -240,6 +270,7 @@ export function EntityEditForm({
     if (f.kind === 'syncedOverride') return 'Pricing & specifications';
     if (f.kind === 'generic' && f.widget === 'synced') return 'Pricing & specifications';
     if (f.kind === 'generic' && (f.widget === 'richtext' || f.widget === 'textarea')) return 'Content';
+    if (entityKey === 'promotions') return 'Promotion Details';
     return 'Details';
   };
   const sections: { label: string; fields: MainField[] }[] = [];
@@ -255,6 +286,22 @@ export function EntityEditForm({
     sections[idx]!.fields.push(f);
   }
 
+  // Promotions: Start/End dates first in Promotion Details regardless of DB sort_order.
+  if (entityKey === 'promotions') {
+    const details = sections.find((s) => s.label === 'Promotion Details');
+    if (details) {
+      const dateOrder = new Map([
+        ['start_date', 0],
+        ['end_date', 1],
+      ]);
+      details.fields.sort((a, b) => {
+        const ai = dateOrder.get(a.field) ?? 100;
+        const bi = dateOrder.get(b.field) ?? 100;
+        return ai - bi;
+      });
+    }
+  }
+
   const isMarkSystemsSection = (section: { label: string; fields: MainField[] }) =>
     section.label === 'Pricing & specifications' ||
     section.fields.every(
@@ -263,6 +310,35 @@ export function EntityEditForm({
     );
 
   const jumpSections = sections.map((s) => ({ id: sectionId(s.label), label: s.label }));
+
+  const promoFieldStr = (key: string) => {
+    const f = fields.find((x) => x.field === key);
+    return f && 'value' in f ? String(f.value ?? '') : '';
+  };
+
+  const promoIncentiveInitial =
+    entityKey === 'promotions'
+      ? {
+          showIncentivePage: promoBool(promoFieldStr('show_incentive_page')),
+          title: promoFieldStr('title'),
+          description: promoFieldStr('copy'),
+          imageUrl: promoFieldStr('image_url'),
+        }
+      : null;
+
+  const promoSurfacesInitial =
+    entityKey === 'promotions'
+      ? {
+          showSiteBanner: promoBool(promoFieldStr('show_site_banner')),
+          showBannerButton: promoBool(promoFieldStr('show_banner_button')),
+          showCardBadge: promoBool(promoFieldStr('show_card_badge')),
+          showCardCta: promoBool(promoFieldStr('show_card_cta')),
+          badgeText: promoFieldStr('badge_text'),
+          bannerText: promoFieldStr('banner_text'),
+          ctaLabel: promoFieldStr('cta_label'),
+          ctaUrl: promoFieldStr('cta_url'),
+        }
+      : null;
 
   const mediaRail =
     imageFields.length > 0 ? (
@@ -353,15 +429,44 @@ export function EntityEditForm({
   const mainColumn = (
     <>
       <div className="mb-5 space-y-2">
-        <h1 className="font-heading truncate text-2xl font-semibold tracking-tight text-foreground">
-          {displayName}
-        </h1>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <h1 className="font-heading min-w-0 truncate text-2xl font-semibold tracking-tight text-foreground">
+            {displayName}
+          </h1>
+          {!preview ? (
+            <button
+              type="button"
+              aria-label="Jump to name field"
+              onClick={() => {
+                const el = document
+                  .getElementById(formId)
+                  ?.querySelector<HTMLElement>('input[name="name"], textarea[name="name"]');
+                el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el?.focus();
+              }}
+              className="inline-flex shrink-0 items-center justify-center rounded-md p-1 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
+            >
+              <PencilIcon className="size-3.5" />
+            </button>
+          ) : null}
+        </div>
         {subtitle ? <p className="truncate text-sm text-muted-foreground">{subtitle}</p> : null}
-        {!preview ? <SectionJumpNav sections={jumpSections} /> : null}
+        {!preview && entityKey !== 'promotions' ? (
+          <SectionJumpNav sections={jumpSections} />
+        ) : null}
       </div>
 
       <div className="min-w-0 space-y-5">
-        {sections.map((section) => {
+        {!preview && promoSurfacesInitial ? (
+          <PromotionSurfacesSection initial={promoSurfacesInitial} />
+        ) : null}
+        {!preview && promoIncentiveInitial ? (
+          <PromotionIncentiveSection entityId={id} initial={promoIncentiveInitial} />
+        ) : null}
+
+        {sections
+          .filter((section) => section.fields.length > 0)
+          .map((section) => {
           const sid = sectionId(section.label);
           const grid = (
             <div className={cn('grid grid-cols-1 gap-4', !preview && 'sm:grid-cols-2')}>

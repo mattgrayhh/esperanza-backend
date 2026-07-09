@@ -37,7 +37,6 @@ import {
   ArrowRightIcon,
   RocketIcon,
   ListChecksIcon,
-  RefreshCwIcon,
   CircleCheckIcon,
   TriangleAlertIcon,
   type LucideIcon,
@@ -235,18 +234,19 @@ export default async function DashboardPage() {
   const hasWork = d.qmi.ready > 0 || drafts > 0 || syncErrored;
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="dash-enter flex flex-col gap-10">
       {/* ── Title band ─────────────────────────────────────────────────── */}
-      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-col gap-1">
+      <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="flex min-w-0 flex-col gap-1">
           <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">
             Dashboard
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Manage Quick Move-Ins, communities, and promotions.
+          <p className="max-w-xl text-sm text-muted-foreground text-pretty">
+            What needs action next — then a quick read on Quick&nbsp;Move-Ins, communities, and
+            promotions.
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           {/* Manual Snowflake→D1 pull (admin saves already push to the site in seconds). */}
           <SyncNowButton />
           <Button render={<Link href="/qmi/new" />} size="sm">
@@ -260,22 +260,30 @@ export default async function DashboardPage() {
         </div>
       </header>
 
-      {/* ── Needs attention (the lead) ─────────────────────────────────── */}
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+      {/* ── Needs attention (signature: operator worklist) ─────────────── */}
+      <section className="flex flex-col gap-2" aria-labelledby="dash-attention-heading">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2
+            id="dash-attention-heading"
+            className="text-xs font-medium tracking-wide text-muted-foreground"
+          >
             Needs attention
           </h2>
           {syncOk && (
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <CircleCheckIcon className="size-3.5 text-primary" />
+              <CircleCheckIcon className="size-3.5 text-primary" aria-hidden />
               Website synced {timeAgo(d.framer!.at)}
             </span>
           )}
         </div>
 
         {hasWork ? (
-          <div className="flex flex-col gap-px overflow-hidden rounded-xl border bg-border sm:flex-row">
+          <div
+            className={cn(
+              'flex flex-col gap-px overflow-hidden rounded-xl shadow-sm ring-1 ring-foreground/10 sm:flex-row',
+              d.qmi.ready > 0 ? 'bg-primary/15' : syncErrored ? 'bg-destructive/15' : 'bg-border'
+            )}
+          >
             {d.qmi.ready > 0 && (
               <AttentionItem
                 href="/qmi"
@@ -325,18 +333,26 @@ export default async function DashboardPage() {
             )}
           </div>
         ) : (
-          <div className="flex items-center gap-3 rounded-xl border bg-secondary/40 px-4 py-3 text-sm">
-            <CircleCheckIcon className="size-4 shrink-0 text-primary" />
-            <span className="text-foreground">
-              All clear. Every draft is published or in good shape, and the last website sync succeeded.
+          <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3.5 text-sm shadow-sm">
+            <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <CircleCheckIcon className="size-4" aria-hidden />
             </span>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <span className="font-medium text-foreground">All clear</span>
+              <span className="text-muted-foreground text-pretty">
+                Every draft is published or in good shape, and the last website sync succeeded.
+              </span>
+            </div>
           </div>
         )}
       </section>
 
       {/* ── At a glance ────────────────────────────────────────────────── */}
-      <section className="flex flex-col gap-3">
-        <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+      <section className="flex flex-col gap-2" aria-labelledby="dash-glance-heading">
+        <h2
+          id="dash-glance-heading"
+          className="text-xs font-medium tracking-wide text-muted-foreground"
+        >
           At a glance
         </h2>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -362,7 +378,7 @@ export default async function DashboardPage() {
 
       {/* ── Activity + nav ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2 shadow-sm">
           <CardHeader className="border-b">
             <CardTitle>Recent activity</CardTitle>
             <CardDescription>Latest changes across every collection.</CardDescription>
@@ -393,17 +409,20 @@ export default async function DashboardPage() {
                   return (
                     <li
                       key={`${g.entity}-${g.action}-${g.at}-${i}`}
-                      className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-muted"
+                      className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors duration-150 hover:bg-muted/70"
                     >
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                        <Icon className="size-4" />
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                        <Icon className="size-4" aria-hidden />
                       </span>
                       <div className="flex min-w-0 flex-1 flex-col">
                         <span className="truncate text-sm text-foreground">
                           {activityPhrase(g)}{' '}
                           <span className="text-muted-foreground">on</span>{' '}
                           {seg ? (
-                            <Link href={`/${seg}`} className="font-medium text-primary hover:underline">
+                            <Link
+                              href={`/${seg}`}
+                              className="font-medium text-primary underline-offset-2 hover:underline decoration-skip-ink-auto"
+                            >
                               {label}
                             </Link>
                           ) : (
@@ -424,34 +443,37 @@ export default async function DashboardPage() {
         </Card>
 
         {/* Jump-to all 9 entities. */}
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="border-b">
             <CardTitle>All collections</CardTitle>
             <CardDescription>Jump to any of the 9 managed entities.</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-1 px-2">
+          <CardContent className="flex flex-col gap-0.5 px-2 pb-2">
             {ENTITY_LIST.map((e) => {
               const Icon = ENTITY_ICON[e.key];
               return (
                 <div
                   key={e.key}
-                  className="group flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted"
+                  className="group flex min-h-10 items-center gap-3 rounded-lg px-2 py-1.5 transition-colors duration-150 hover:bg-muted/70"
                 >
-                  <Icon className="size-4 shrink-0 text-muted-foreground" />
-                  <Link href={`/${e.segment}`} className="flex-1 text-sm font-medium hover:underline">
+                  <Icon className="size-4 shrink-0 text-muted-foreground transition-colors duration-150 group-hover:text-primary" aria-hidden />
+                  <Link
+                    href={`/${e.segment}`}
+                    className="flex-1 text-sm font-medium underline-offset-2 hover:underline decoration-skip-ink-auto"
+                  >
                     {e.label}
                   </Link>
                   <Link
                     href={`/${e.segment}/new`}
                     aria-label={`New ${e.label}`}
-                    className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-primary group-hover:opacity-100 focus-visible:opacity-100"
+                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color,background-color] duration-150 hover:bg-background hover:text-primary group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50"
                   >
                     <PlusIcon className="size-4" />
                   </Link>
                   <Link
                     href={`/${e.segment}`}
                     aria-label={`Open ${e.label}`}
-                    className="rounded p-1 text-muted-foreground hover:text-primary"
+                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-background hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/50"
                   >
                     <ArrowRightIcon className="size-4" />
                   </Link>
@@ -466,9 +488,8 @@ export default async function DashboardPage() {
 }
 
 // ── Needs-attention item ────────────────────────────────────────────────────
-// One actionable cell. `count` items lead with the number; the sync item leads
-// with a timestamp instead. Tone tints only the icon + accent, never a full fill,
-// so the band stays calm even when it is dense.
+// Signature tile: count leads, tone tints icon + number, hover lifts the card.
+// Positive tiles carry a soft mint wash so "ready to publish" reads as the win.
 function AttentionItem({
   href,
   tone,
@@ -495,38 +516,58 @@ function AttentionItem({
       : tone === 'alert'
         ? 'text-destructive'
         : 'text-muted-foreground';
+  const bubbleBg =
+    tone === 'positive'
+      ? 'bg-primary/10'
+      : tone === 'alert'
+        ? 'bg-destructive/10'
+        : 'bg-muted';
   return (
     <Link
       href={href}
       style={{ flexGrow: grow, flexBasis: 0 }}
-      className="group flex min-w-0 flex-col gap-2 bg-card p-4 transition-colors hover:bg-muted/50"
+      className={cn(
+        'group relative flex min-w-0 flex-col gap-2.5 bg-card p-4 transition-[background-color,box-shadow,transform] duration-200 ease-out',
+        'hover:bg-muted/40 hover:shadow-sm',
+        'focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+        'motion-safe:hover:-translate-y-px',
+        'active:scale-[0.995]',
+        tone === 'positive' && 'bg-primary/[0.04]'
+      )}
     >
+      {tone === 'positive' && (
+        <span
+          aria-hidden
+          className="absolute inset-y-3 left-0 w-0.5 rounded-full bg-primary opacity-80"
+        />
+      )}
       <div className="flex items-center justify-between">
         <span
           className={cn(
-            'flex size-8 items-center justify-center rounded-lg bg-muted',
+            'flex size-8 items-center justify-center rounded-lg transition-transform duration-200 group-hover:scale-105',
+            bubbleBg,
             accent
           )}
         >
-          <Icon className="size-4" />
+          <Icon className="size-4" aria-hidden />
         </span>
-        <ArrowRightIcon className="size-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+        <ArrowRightIcon className="size-4 text-muted-foreground opacity-0 transition-[opacity,transform] duration-150 group-hover:translate-x-0.5 group-hover:opacity-100" aria-hidden />
       </div>
-      <div className="flex items-baseline gap-2">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         {count != null ? (
-          <span className={cn('font-heading text-3xl font-semibold leading-none tabular-nums', accent)}>
+          <span className={cn('font-heading text-3xl font-semibold leading-none tabular-nums tracking-tight', accent)}>
             {count}
           </span>
         ) : (
           timestamp && (
-            <span className={cn('font-heading text-2xl font-semibold leading-none', accent)}>
+            <span className={cn('font-heading text-2xl font-semibold leading-none tracking-tight', accent)}>
               {timestamp}
             </span>
           )
         )}
         <span className="text-sm font-medium text-foreground">{label}</span>
       </div>
-      {sub && <p className="text-xs leading-relaxed text-muted-foreground">{sub}</p>}
+      {sub && <p className="text-xs leading-relaxed text-muted-foreground text-pretty">{sub}</p>}
     </Link>
   );
 }
@@ -549,14 +590,15 @@ function QmiStatusCard({
     { n: draftsTotal, label: 'In progress', className: 'bg-muted-foreground/30' },
   ];
   return (
-    <Card className={className}>
+    <Card className={cn('shadow-sm', className)}>
       <CardHeader className="border-b">
         <CardTitle className="flex items-center gap-2">
-          <HomeIcon className="size-4 text-primary" />
-          Quick Move-Ins
+          <HomeIcon className="size-4 text-primary" aria-hidden />
+          Quick&nbsp;Move-Ins
         </CardTitle>
         <CardDescription>
-          {qmi.published} of {qmi.total} live.
+          <span className="tabular-nums">{qmi.published}</span> of{' '}
+          <span className="tabular-nums">{qmi.total}</span> live.
         </CardDescription>
         <CardAction>
           <Button render={<Link href="/qmi" />} variant="outline" size="sm">
@@ -566,14 +608,22 @@ function QmiStatusCard({
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted"
+          role="img"
+          aria-label={`Quick Move-Ins: ${qmi.published} published, ${qmi.ready} ready, ${draftsTotal} in progress`}
+        >
           {segments.map(
             (s) =>
               s.n > 0 && (
                 <div
                   key={s.label}
-                  className={cn('h-full first:rounded-l-full last:rounded-r-full', s.className)}
+                  className={cn(
+                    'dash-bar-seg h-full first:rounded-l-full last:rounded-r-full',
+                    s.className
+                  )}
                   style={{ width: w(s.n) }}
+                  title={`${s.n} ${s.label.toLowerCase()}`}
                 />
               )
           )}
@@ -581,7 +631,7 @@ function QmiStatusCard({
         <div className="flex flex-wrap gap-x-6 gap-y-2">
           {segments.map((s) => (
             <div key={s.label} className="flex items-center gap-2">
-              <span className={cn('size-2.5 rounded-full', s.className)} />
+              <span className={cn('size-2.5 rounded-full', s.className)} aria-hidden />
               <span className="text-sm font-medium tabular-nums text-foreground">{s.n}</span>
               <span className="text-sm text-muted-foreground">{s.label.toLowerCase()}</span>
             </div>
@@ -609,21 +659,27 @@ function CompactStat({
   return (
     <Link
       href={href}
-      className="group flex items-center justify-between rounded-xl border bg-card p-4 transition-colors hover:bg-muted/50"
+      className={cn(
+        'group flex items-center justify-between rounded-xl border bg-card p-4 shadow-sm',
+        'transition-[background-color,box-shadow,transform] duration-200 ease-out',
+        'hover:bg-muted/40 hover:shadow-md motion-safe:hover:-translate-y-px',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+        'active:scale-[0.995]'
+      )}
     >
       <div className="flex flex-col gap-1">
         <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <Icon className="size-4 text-primary" />
+          <Icon className="size-4 text-primary" aria-hidden />
           {label}
         </span>
         <span className="text-xs text-muted-foreground">
-          <span className="font-heading text-xl font-semibold tabular-nums text-foreground">
+          <span className="font-heading text-xl font-semibold tabular-nums tracking-tight text-primary">
             {primary}
           </span>{' '}
-          live / {total} total
+          live / <span className="tabular-nums">{total}</span> total
         </span>
       </div>
-      <ArrowRightIcon className="size-4 text-muted-foreground transition-colors group-hover:text-primary" />
+      <ArrowRightIcon className="size-4 text-muted-foreground transition-[color,transform] duration-150 group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden />
     </Link>
   );
 }

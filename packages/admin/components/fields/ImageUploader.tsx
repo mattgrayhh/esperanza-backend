@@ -63,6 +63,7 @@ export function ImageUploader({
   fallbackPreviewUrl,
   help,
   compact = false,
+  onUrlChange,
 }: {
   entity: string;
   id: string;
@@ -73,12 +74,19 @@ export function ImageUploader({
   fallbackPreviewUrl?: string;
   help?: string;
   compact?: boolean;
+  /** Called when the stored URL changes (upload / clear) so parents can mirror preview state. */
+  onUrlChange?: (url: string) => void;
 }) {
   const [url, setUrl] = useState(initialUrl);
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  function setStoredUrl(next: string) {
+    setUrl(next);
+    onUrlChange?.(next);
+  }
 
   function onPick(file: File | undefined) {
     if (!file) return;
@@ -87,7 +95,7 @@ export function ImageUploader({
       try {
         const res = await uploadImage(entity, id, field, file);
         if (res.ok) {
-          setUrl(res.url);
+          setStoredUrl(res.url);
         } else {
           setErr(res.error);
         }
@@ -212,7 +220,7 @@ export function ImageUploader({
                 aria-label={`Remove ${title}`}
                 disabled={pending}
                 onClick={() => {
-                  setUrl('');
+                  setStoredUrl('');
                   setErr(null);
                 }}
               >

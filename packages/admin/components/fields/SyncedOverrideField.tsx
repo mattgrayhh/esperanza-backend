@@ -76,8 +76,7 @@ export function SyncedOverrideField({
       <FieldLabel label={label} help={help}>
         {overriding ? (
           <Badge
-            variant="secondary"
-            className="h-4 px-1.5 text-[10px] font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-400"
+            className="h-4 border-warning/30 bg-warning/10 px-1.5 text-[10px] font-semibold tracking-wide text-warning uppercase"
           >
             override
           </Badge>
@@ -135,10 +134,6 @@ export function SyncedOverrideField({
           {unlocked ? 'Unlocked — manual value overrides Snowflake' : 'Unlock to override'}
         </Label>
       </div>
-
-      <span className="text-xs text-muted-foreground">
-        {unlocked ? `Snowflake: ${syncedShown} — re-lock to follow` : 'Locked to Snowflake sync'}
-      </span>
     </div>
   );
 }

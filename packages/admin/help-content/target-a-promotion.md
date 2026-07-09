@@ -37,12 +37,12 @@ promotion targets. Type a lot number into the list's search box to jump straight
 to the promotions that apply to that lot (handy when your sheet is organized by
 lot number).
 
-## The "Where will this show" preview
+## Surface previews
 
-Below the picker, a summary box combines your current selection with the saved
-**"Where it shows"** surface toggles and spells the result out — which surfaces
-render, and on how many homes in which communities. Surface toggles reflect the
-last save; the reach updates live as you check targets.
+Use the **Site banner**, **Incentives page**, and **Card surfaces** sections on
+the promotion editor for a visual preview of those surfaces. Targeting (which
+pages) is still set with the Associated Locations picker; the list **Shows On**
+column summarizes surfaces.
 
 ## Which promotion shows when several apply?
 
