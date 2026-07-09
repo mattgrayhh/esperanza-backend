@@ -10,6 +10,10 @@
   --color-brand-foreground: #ffffff;
   --color-surface: #f3f1ed;
   --color-mint: #dfefe4;
+  /* Warning/override state — warm amber, distinct from brand green and destructive terracotta.
+     Used for override badges, unsaved-changes borders, and any caution signal.
+     Darkened to oklch(0.52 0.18 52) ≈ amber-800 for AA contrast on both white and mint surfaces. */
+  --color-warning: oklch(0.52 0.18 52);
   /* Geist is the dashboard typeface everywhere (body + headings).
      --font-geist is injected by next/font (Geist) via the <html> className. */
   --font-sans: var(--font-geist), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -199,6 +203,8 @@ body {
   --status-draft-foreground: oklch(0.2 0.012 80);
   --status-sold: oklch(0.62 0.12 39);
   --status-sold-foreground: oklch(0.98 0.01 40);
+  /* Warning lifts in dark mode for legibility on dark surfaces. */
+  --color-warning: oklch(0.76 0.14 55);
 }
 
 @layer base {
@@ -212,4 +218,48 @@ body {
     @apply font-sans;
   }
   /* Headings inherit Geist via --font-sans — no separate display face. */
+}
+
+/* Dashboard entrance — one staggered reveal per page load; honor reduced motion. */
+@keyframes dash-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dash-bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dash-enter > * {
+    animation: dash-fade-up 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .dash-enter > *:nth-child(1) {
+    animation-delay: 0ms;
+  }
+  .dash-enter > *:nth-child(2) {
+    animation-delay: 40ms;
+  }
+  .dash-enter > *:nth-child(3) {
+    animation-delay: 80ms;
+  }
+  .dash-enter > *:nth-child(4) {
+    animation-delay: 120ms;
+  }
+  .dash-bar-seg {
+    transform-origin: left center;
+    animation: dash-bar-grow 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: 160ms;
+  }
 }

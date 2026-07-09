@@ -8,7 +8,6 @@
 // =============================================================================
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
 import { saveEntity } from '@/lib/actions';
 import type { QmiDetailView } from '@/lib/qmi-detail';
 import { parseGalleryUrls } from '@/lib/gallery-urls';
@@ -17,15 +16,15 @@ import { GenericField } from '@/components/fields/GenericField';
 import { ImageUploader } from '@/components/fields/ImageUploader';
 import { ImageGalleryEditor } from '@/components/fields/ImageGalleryEditor';
 import { PublishedToggle } from '@/components/fields/PublishedToggle';
-import { LOCATION_STATUS, statusTone } from '@/lib/status';
+import { LOCATION_STATUS } from '@/lib/status';
 import { CopyableId } from './CopyableId';
-import { QmiPriceCard } from './QmiPriceCard';
 import { QmiAssignFloorPlan } from './QmiAssignFloorPlan';
 import { QmiSiteHeader } from './QmiSiteHeader';
+import { QmiPriceOverrideStat } from './QmiPriceOverrideStat';
+import { QmiMarketingSection } from './QmiMarketingSection';
 import { ExpandableDescription } from './ExpandableDescription';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -34,7 +33,6 @@ import {
   PlacementRail,
   RecordEditBreadcrumb,
   RecordEditLayout,
-  SectionJumpNav,
   StickyActionBar,
   UnsavedLeaveToast,
   sectionId,
@@ -44,9 +42,6 @@ import {
   BedDouble,
   Bath,
   Ruler,
-  MapPin,
-  TagIcon,
-  Building2,
 } from 'lucide-react';
 
 function fmtNum(v: number | null): string {
@@ -83,19 +78,11 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
     () => [
       { icon: BedDouble, value: fmtNum(view.bedroomCount), label: 'beds' },
       { icon: Bath, value: fmtNum(view.bathroomCount), label: 'baths' },
-      { icon: Ruler, value: fmtNum(view.totalSquareFootage), label: 'sqft' },
+      { icon: Ruler, value: fmtNum(view.totalSquareFootage), label: 'Total SqFt' },
+      { icon: Ruler, value: fmtNum(view.livingSquareFootage), label: 'Living SqFt' },
     ],
-    [view.bedroomCount, view.bathroomCount, view.totalSquareFootage]
+    [view.bedroomCount, view.bathroomCount, view.totalSquareFootage, view.livingSquareFootage]
   );
-
-  const jumpSections = [
-    { id: sectionId('Overview'), label: 'Overview' },
-    ...(view.isUnassigned ? [{ id: sectionId('Assign floor plan'), label: 'Assign plan' }] : []),
-    { id: sectionId('From MarkSystems'), label: 'MarkSystems' },
-    { id: sectionId('Marketing'), label: 'Marketing' },
-    { id: sectionId('Description'), label: 'Description' },
-    { id: sectionId('Promotions'), label: 'Promotions' },
-  ];
 
   const mediaRail = (
     <div className="min-w-0 space-y-5">
@@ -118,6 +105,12 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
           compact
         />
       ) : null}
+      <GenericField
+        field="virtual_tour_url"
+        label="Virtual Tour URL"
+        widget="text"
+        value={view.admin.virtualTourUrl}
+      />
       <ImageGalleryEditor
         entity="qmi"
         id={view.id}
@@ -132,42 +125,24 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
     </div>
   );
 
+  const titleWithStatus = (
+    <div className="flex flex-wrap items-center gap-2">
+      <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+      {view.availableNow ? (
+        <Badge variant="outline" className="text-emerald-700 dark:text-emerald-400">
+          Available now
+        </Badge>
+      ) : null}
+      {view.isUnassigned ? (
+        <Badge variant="destructive">Unassigned draft</Badge>
+      ) : null}
+    </div>
+  );
+
   const mainContent = (
     <div className="space-y-4">
-      <div className="space-y-3" id={sectionId('Overview')}>
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-          <Badge
-            variant={
-              statusTone(view.status) === 'live'
-                ? 'default'
-                : statusTone(view.status) === 'pending'
-                  ? 'outline'
-                  : 'secondary'
-            }
-            className={
-              statusTone(view.status) === 'pending'
-                ? 'text-amber-700 dark:text-amber-400'
-                : undefined
-            }
-          >
-            {view.status}
-          </Badge>
-          {view.availableNow ? (
-            <Badge variant="outline" className="text-emerald-700 dark:text-emerald-400">
-              Available now
-            </Badge>
-          ) : null}
-          {view.isUnassigned ? (
-            <Badge variant="destructive">Unassigned draft</Badge>
-          ) : null}
-        </div>
-        <SectionJumpNav sections={jumpSections} />
-        <div className="flex flex-wrap items-center gap-2">
-          <CopyableId label="Housemaster" value={view.housenumber} />
-          <CopyableId label="ECI" value={view.eciKey} />
-          <CopyableId label="Job" value={view.markJobNumber} />
-        </div>
+      <div id={sectionId('Overview')} className="sr-only">
+        Overview
       </div>
 
       {view.isUnassigned ? (
@@ -176,61 +151,42 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
         </div>
       ) : null}
 
-      <section className="grid gap-4 lg:grid-cols-[1fr_320px]">
-        <Card className="py-5">
-          <CardContent className="space-y-6 px-5">
-            <div className="space-y-4">
-              <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-                <div className="space-y-1.5">
-                  <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <MapPin className="size-3.5" />
-                    {[view.communityName, view.cityName].filter(Boolean).join(' · ') || '—'}
-                  </p>
-                  <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <Building2 className="size-3.5" />
-                    {view.isUnassigned ? (
-                      <span className="text-amber-700 dark:text-amber-400">No floor plan assigned</span>
-                    ) : (
-                      <>
-                        <span className="font-medium text-foreground">{view.floorPlanName || '—'}</span>
-                        <span className="text-xs">(from floor plan)</span>
-                      </>
-                    )}
-                  </p>
-                </div>
-                <div className="grid grid-cols-3 gap-3 text-sm *:space-y-1 *:rounded-md *:border *:p-3 *:text-center">
-                  {stats.map((stat) => (
-                    <div key={stat.label}>
-                      <p className="text-2xl font-semibold">{stat.value}</p>
-                      <p className="inline-flex items-center gap-1 text-muted-foreground">
-                        <stat.icon className="size-4" />
-                        {stat.label}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+      <Card className="py-5">
+        <CardContent className="space-y-6 px-5">
+          <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4 *:space-y-1 *:rounded-md *:border *:p-3 *:text-center">
+            {stats.map((stat) => (
+              <div key={stat.label}>
+                <p className="text-2xl font-semibold">{stat.value}</p>
+                <p className="inline-flex items-center gap-1 text-muted-foreground">
+                  <stat.icon className="size-4" />
+                  {stat.label}
+                </p>
               </div>
-            </div>
+            ))}
+          </div>
 
-            <Separator />
+          <QmiPriceOverrideStat
+            price={view.price}
+            syncedDisplay={view.syncedOverride.price.syncedDisplay}
+            overrideValue={view.syncedOverride.price.overrideValue}
+          />
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Info label="Elevation" value={view.elevation || '—'} />
-              <Info label="Living SqFt" value={fmtNum(view.livingSquareFootage)} />
-              <Info label="Move-in date" value={view.moveInDate || 'TBD'} />
-              <Info label="Slug" value={view.slug || '—'} mono />
-              <Info label="Floor plan" value={view.isUnassigned ? 'Unassigned' : view.floorPlanName || '—'} />
-              <Info label="Community" value={view.communityName || '—'} />
-            </div>
-          </CardContent>
-        </Card>
+          <Separator />
 
-        <QmiPriceCard
-          basePrice={view.fpStartingPrice}
-          currentPrice={view.price}
-          hasOverride={view.hasPriceOverride}
-        />
-      </section>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Info label="Elevation" value={view.elevation || '—'} />
+            <GenericField
+              field="move_in_date"
+              label="Move-In Date"
+              widget="date"
+              value={view.admin.moveInDate}
+            />
+            <Info label="Slug" value={view.slug || '—'} mono />
+            <Info label="Floor plan" value={view.isUnassigned ? 'Unassigned' : view.floorPlanName || '—'} />
+            <Info label="Community" value={view.communityName || '—'} />
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="space-y-4">
         <div id={sectionId('From MarkSystems')}>
@@ -241,7 +197,6 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
                   <SyncedOverrideField {...view.relations.floorPlan} label="Floor Plan Assignment" />
                 </div>
               ) : null}
-              <SyncedOverrideField {...view.syncedOverride.price} />
               <SyncedOverrideField {...view.syncedOverride.address} />
               <SyncedOverrideField {...view.syncedOverride.bedroomCount} />
               <SyncedOverrideField {...view.syncedOverride.bathroomCount} />
@@ -262,42 +217,29 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
           </MarkSystemsSection>
         </div>
 
-        <Card id={sectionId('Marketing')}>
-          <CardHeader className="border-b">
-            <CardTitle className="text-base font-medium">Marketing</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            <GenericField field="incentive" label="Incentive" widget="textarea" value={view.admin.incentive} />
-            <GenericField field="promo_text" label="Promo Text" widget="text" value={view.admin.promoText} />
-            <GenericField
-              field="availability_text"
-              label="Availability Text"
-              widget="text"
-              value={view.admin.availabilityText}
-            />
-            <GenericField
-              field="virtual_tour_url"
-              label="Virtual Tour URL"
-              widget="text"
-              value={view.admin.virtualTourUrl}
-            />
-            <GenericField field="move_in_date" label="Move-In Date" widget="date" value={view.admin.moveInDate} />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <GenericField
-                field="available_now"
-                label="Available Now"
-                widget="boolean"
-                value={view.admin.availableNow ? '1' : '0'}
-              />
-              <GenericField
-                field="self_tour_available"
-                label="Self Tour Available"
-                widget="boolean"
-                value={view.admin.selfTourAvailable ? '1' : '0'}
-              />
-            </div>
-          </CardContent>
-        </Card>
+        <QmiMarketingSection
+          initial={{
+            incentive: view.admin.incentive,
+            availabilityText: view.admin.availabilityText,
+            availableNow: view.admin.availableNow,
+            selfTourAvailable: view.admin.selfTourAvailable,
+          }}
+          card={{
+            address: view.address,
+            cityName: view.cityName,
+            price: view.price,
+            bedroomCount: view.bedroomCount,
+            bathroomCount: view.bathroomCount,
+            livingSquareFootage: view.livingSquareFootage,
+            totalSquareFootage: view.totalSquareFootage,
+            communityName: view.communityName,
+            floorPlanName: view.floorPlanName,
+            lotNumber:
+              view.syncedOverride.lotNumber.overrideValue.trim() ||
+              view.syncedOverride.lotNumber.syncedDisplay,
+            imageUrl: view.admin.imageUrl || view.admin.heroFallbackUrl,
+          }}
+        />
 
         <Card id={sectionId('Description')}>
           <CardHeader className="border-b">
@@ -306,7 +248,7 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
           <CardContent className="grid gap-4">
             <GenericField
               field="description"
-              label="Description"
+              label="Floorplan Description"
               widget="richtext"
               value={view.ownDescription}
               entity="qmi"
@@ -325,28 +267,8 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
         </Card>
       </div>
 
-      <Card className="py-5" id={sectionId('Promotions')}>
-        <CardContent className="space-y-3 px-5">
-          <h2 className="flex items-center gap-2 text-lg font-semibold">
-            <TagIcon className="size-4" /> Promotions
-          </h2>
-          {view.promotions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No promotions currently target this home.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {view.promotions.map((p) => (
-                <Button key={p.id} variant="outline" size="sm" render={<Link href={`/promotions/${p.id}`} />}>
-                  {p.title}
-                  {p.global ? <span className="ml-1 text-xs text-muted-foreground">(global)</span> : null}
-                </Button>
-              ))}
-            </div>
-          )}
-          <p className="text-xs text-muted-foreground">
-            Targeting is managed on each promotion (scope picker). This list is read-only.
-          </p>
-        </CardContent>
-      </Card>
+      {/* Promotions membership list hidden for now — targeting still lives on each
+          promotion's scope picker; revisit if operators need a home-side jump list. */}
     </div>
   );
 
@@ -364,7 +286,14 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
             pending={pending}
             statusText={barStatusText}
             statusTone={barTone}
-            title={title}
+            title={titleWithStatus}
+            footer={
+              <div className="flex flex-wrap items-center gap-2">
+                <CopyableId label="Housemaster" value={view.housenumber} />
+                <CopyableId label="ECI" value={view.eciKey} />
+                <CopyableId label="Job" value={view.markJobNumber} />
+              </div>
+            }
           />
         </div>
       </div>

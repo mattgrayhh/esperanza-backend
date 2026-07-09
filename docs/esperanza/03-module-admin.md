@@ -64,7 +64,7 @@ shares one layout:
 | Breadcrumb | `RecordEditBreadcrumb` | `{Collection} › {Record name}` |
 | Sticky action bar | `StickyActionBar` | Save, last-save message; delete (generic entity) when applicable |
 | Main column | entity fields + section cards | Editable content; MarkSystems synced fields collapse under **From MarkSystems** |
-| Placement rail | `PlacementRail` | Live-site page type, **publish/status toggle**, visitor URL, copy/open-live, section map; community edit adds Media (logo, video, full gallery) then **Recent activity** as the last rail block |
+| Placement rail | `PlacementRail` | **Publish/status toggle**, visitor URL, copy/open-live, section map; community edit adds Media (logo, video, full gallery) then **Recent activity** as the last rail block |
 | Toast | `EditToast` | Brief save confirmation (4s) |
 | Leave guard | `UnsavedLeaveToast` | When the form is dirty, blocks in-app navigation (links, browser back) with Save / Discard / Stay; tab close/refresh uses the browser `beforeunload` prompt |
 
@@ -135,7 +135,16 @@ visually — no markdown syntax. Notes:
     pattern as description. framer-push emits `COALESCE(qmi override, plan default)`.
   - **QMI site header:** the detail page opens with a live-site hero preview (main image
     2/3 + gallery photos 2 and 3 in the right column), matching the community editor
-    pattern. Floor Plan Assignment lives in the collapsed MarkSystems panel.
+    pattern. Address + Available now badges live in the sticky action bar (not
+    duplicated under Overview). Overview stats: beds / baths / Total SqFt / Living SqFt,
+    then a second-row price box with pencil override (`QmiPriceOverrideStat` — same
+    `price` submit contract as SyncedOverrideField; not duplicated under MarkSystems).
+    Floor Plan Assignment lives in the collapsed MarkSystems panel.
+  - **QMI listing card preview:** Marketing opens with a live-style listing card
+    (`QmiListingCardPreview`) above Incentive. Hover/focus Incentive, Availability Text,
+    Available Now, or Self Tour Available spotlights the matching banner (tan incentive,
+    gray/green availability, self-tour + house icon) while the rest of the image fades.
+    Edits update the preview live; Available Now forces a green **AVAILABLE NOW** banner.
 - **Toolbar offers H1/H2/H3 + Body.** H1 is available because it was requested, but a Framer
   page already has its own page-title H1 — prefer H2/H3 for in-body section headings to avoid
   duplicate-H1 SEO.
@@ -176,6 +185,44 @@ after the D1 commit. `postWrite()`:
 - for entities with brochures, marks PDFs stale via the render queue.
 
 `actor` is the logged-in user's email from the Auth.js session.
+
+---
+
+## Dashboard (`/`)
+
+Operator worklist, not a scoreboard. Layout (top → bottom):
+
+1. **Needs attention** — actionable tiles only (homes ready to publish, drafts in the
+   readiness funnel, Framer sync failures). Empty state is an explicit “All clear.”
+2. **At a glance** — QMI published/ready/in-progress bar + compact community and
+   promotion counts.
+3. **Recent activity** + **All collections** jump list.
+
+QMI readiness gates (unpublished homes): house number present, complete published floor
+plan, live PDF render. Data is server-rendered from D1 in `app/(app)/page.tsx`.
+
+---
+
+## Status page (`/status`)
+
+Infra / site-service health for the stack marketing and ops rely on. Entry points:
+
+- **Header pill** (top-right of `AppHeader`) — colored status indicator + “Status”;
+  overall health drives the pill tone (green / amber / rose / sky). Not in the sidebar.
+
+Page layout mirrors a public status page: overall banner (“All Systems Operational”),
+then grouped components with a 90-day uptime bar each.
+
+| Group | Components (placeholders today) |
+|---|---|
+| Snowflake / MarkSystems | Snowflake, MarkSystems |
+| Cloudflare | `esperanza-admin`, `esperanza-ingest`, `esperanza-framer-push`, `esperanza-api`, `esperanza-pdf`, `esperanza-ops`, `esperanza-xml-feed`, `rhodes-availability`, D1 `esperanza`, R2 `esperanza-cms` |
+| Website | `esperanzahomes.com` (future: ping every few minutes) |
+| Site services | Lotvue, HubSpot, Mapbox |
+
+**Data:** `lib/status-page.ts` → `getStatusSnapshot()`. All rows are **placeholders** until
+Sentry (and a website ping checker) are wired; keep the snapshot shape stable when swapping
+the feed. UI: `components/status-page-view.tsx`, header pill: `components/status-header-pill.tsx`.
 
 ---
 
@@ -228,9 +275,10 @@ compiles them into `lib/help-content.generated.ts`, rendered at `/help`.
 | Change audit/enqueue behavior | `lib/actions.ts` (`postWrite`), `lib/audit-chunk.ts` |
 | Change the edit shell / live-site links | `components/record-edit/*`, `lib/live-site.ts`, `lib/build-edit-view.ts` |
 | Add/edit help | `help-content/*.md` then `npm run gen:help` |
+| Change Status page / header pill | `lib/status-page.ts`, `components/status-page-view.tsx`, `components/status-header-pill.tsx`, `app/(app)/status/page.tsx` |
 | Change the community price-source selector UI | `lib/field-config.ts` (communities `close_out_elevation`) + the `buildFieldView` special-case in `lib/build-edit-view.ts` (renders it as the synced/override control) |
 
-### Promotion surfaces ("Where it shows" + the preview)
+### Promotion surfaces ("Where it shows" + visual previews)
 
 A promotion renders on up to five independent surfaces, each an explicit boolean on
 `promotions` (migrations 0021 + 0024): `show_site_banner`, `show_incentive_page`,
@@ -238,16 +286,35 @@ A promotion renders on up to five independent surfaces, each an explicit boolean
 banner/badge flatten in `toResolved()`, so a global-surface-only promo no longer
 stamps badge-less home cards), `show_banner_button`, `show_card_cta`. They compose
 with `promotion_targets` (surface = WHERE, targets = WHICH). The promotions list
-shows a derived **Shows On** column (`build-list-view.ts`), and the promo editor
-renders a **"Where will this show"** summary inside `PromoScopeTagPicker`
-(saved surfaces + live target selection, with per-community home counts — the QMI
-picker column is grouped by community via `SelectOption.group`).
+shows a derived **Shows On** column (`build-list-view.ts`).
+
+**Visual previews** (promo editor, `EntityEditForm` when `entityKey === 'promotions'`):
+
+- **Site banner** (`PromotionSurfacesSection`) — `show_site_banner` + `show_banner_button`;
+  green ticker preview; center copy = `badge_text` (Banner Overlay Promo); CTA pill =
+  `cta_label` / `cta_url` when banner button is on.
+- **Card surfaces** (same section) — `show_card_badge` / `show_card_cta` with a listing-card
+  preview (corner badge + Headline incentive line + Learn More CTA); shared editors for
+  `badge_text`, `banner_text`, `cta_label`, `cta_url` (single FormData source).
+- **Incentives page** (`PromotionIncentiveSection`) — master `show_incentive_page`;
+  live card preview; Image / Title / Description section toggles reveal editors and
+  spotlight the matching region (`image_url`, `title`, `copy`).
+
+Jump nav is hidden on the promo editor. Ungrouped fields render as **Promotion Details**
+(Start/End dates first). The old text **"Where will this show"** box in
+`PromoScopeTagPicker` is hidden (targeting + `__promo_targets` unchanged). The empty
+**Where it shows** field group is omitted once surface toggles move into the preview
+sections.
 
 ### Promotion targeting saves with the page Save
 
 `PromoScopeTagPicker` mirrors its live selection into the edit `<form>` as a hidden
 `__promo_targets` JSON field. `saveEntity` calls `savePromotionTargets` when that field is
 present — targeting-only edits still save (runs before the empty-patch early-return).
+
+The four scope columns (Cities / Communities / Floor Plans / QMIs) render as stacked
+accordion rows (`Collapsible` from `@base-ui/react`). Sections with active selections
+open by default; empty sections collapse. Count badges remain visible on closed headers.
 
 ### Community HOA links + floor plans save with the page Save
 

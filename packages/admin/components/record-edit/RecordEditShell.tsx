@@ -25,9 +25,7 @@ export function PlacementRail({
   return (
     <aside className="flex flex-col gap-4 lg:sticky lg:top-[calc(var(--app-header-height)+3.5rem)] lg:self-start">
       <div className="rounded-xl border bg-card p-4">
-        <p className="text-sm text-muted-foreground">{placement.pageLabel}</p>
-
-        <div className="mt-3">
+        <div>
           {publishControl ?? (
             <span className="inline-flex items-center rounded-md bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
               {placement.visitorStatus}
@@ -126,7 +124,8 @@ export function StickyActionBar({
   pending: boolean;
   statusText: string | null;
   statusTone: 'neutral' | 'success' | 'error';
-  title?: string;
+  /** Plain string → truncated h1. React node → left slot (e.g. title + status badges). */
+  title?: React.ReactNode;
   children?: React.ReactNode;
   footer?: React.ReactNode;
 }) {
@@ -136,20 +135,24 @@ export function StickyActionBar({
       : statusTone === 'success'
         ? 'text-primary'
         : 'text-muted-foreground';
+  const hasTitle = title != null && title !== '';
 
   return (
     <div className="sticky top-(--app-header-height) z-30 -mx-4 border-b bg-background/95 backdrop-blur-sm supports-backdrop-filter:bg-background/80 md:-mx-6">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 md:px-6">
-        {title ? (
-          <h1 className="min-w-0 truncate font-heading text-xl font-semibold tracking-tight text-foreground">
-            {title}
-          </h1>
+        {hasTitle ? (
+          typeof title === 'string' ? (
+            <h1 className="min-w-0 truncate font-heading text-xl font-semibold tracking-tight text-foreground">
+              {title}
+            </h1>
+          ) : (
+            <div className="min-w-0 flex-1">{title}</div>
+          )
         ) : null}
         <div
           className={cn(
             'flex min-w-0 flex-wrap items-center gap-3',
-            title ? 'shrink-0' : 'flex-1',
-            !title && !statusText && 'justify-end',
+            hasTitle ? 'shrink-0' : 'ml-auto',
           )}
         >
           {statusText ? (
@@ -282,7 +285,7 @@ export function UnsavedLeaveToast({
       role="alertdialog"
       aria-labelledby="unsaved-leave-title"
       aria-describedby="unsaved-leave-desc"
-      className="fixed bottom-6 right-6 z-50 w-[min(100vw-3rem,22rem)] rounded-lg border border-amber-500/30 bg-background px-4 py-3 text-sm text-foreground shadow-lg"
+      className="fixed bottom-6 right-6 z-50 w-[min(100vw-3rem,22rem)] rounded-lg border border-warning/30 bg-background px-4 py-3 text-sm text-foreground shadow-lg"
     >
       <p id="unsaved-leave-title" className="font-medium">
         Unsaved changes

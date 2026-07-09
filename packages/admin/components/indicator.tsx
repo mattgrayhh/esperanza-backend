@@ -12,6 +12,7 @@ const statusIndicatorVariants = cva(
 	{
 		variants: {
 			color: {
+				brand: "text-primary",
 				emerald: "text-emerald-500",
 				rose: "text-rose-500",
 				amber: "text-amber-500",

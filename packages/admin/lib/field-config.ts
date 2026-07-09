@@ -545,26 +545,26 @@ const promotions: EntityFieldConfig = {
   fields: [
     // gate column renamed from `active` to `published` in migration 0005.
     { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish', help: 'The single gate; published=false → framer draft:true.' },
+    // Schedule first in Promotion Details (surface copy lives in preview sections).
+    { field: 'start_date', label: 'Start Date', widget: 'date', bucket: 'admin', halfWidth: true },
+    { field: 'end_date', label: 'End Date', widget: 'date', bucket: 'admin', halfWidth: true },
     { field: 'title', label: 'Title', widget: 'text', bucket: 'admin', help: 'Internal name (not shown on the site).' },
-    { field: 'banner_text', label: 'Headline', widget: 'text', bucket: 'admin' },
+    { field: 'banner_text', label: 'Headline', widget: 'text', bucket: 'admin', help: 'Card incentive line when Show Card Badge is on.' },
     { field: 'copy', label: 'Description', widget: 'textarea', bucket: 'admin' },
-    { field: 'badge_text', label: 'Banner Overlay Promo', widget: 'text', bucket: 'admin', help: 'Card image banner text.' },
+    { field: 'badge_text', label: 'Banner Overlay Promo', widget: 'text', bucket: 'admin', help: 'Site banner center text + card corner badge.' },
     { field: 'cta_label', label: 'CTA Label', widget: 'text', bucket: 'admin' },
     { field: 'cta_url', label: 'CTA URL', widget: 'text', bucket: 'admin' },
     { field: 'image_url', label: 'Image', widget: 'image', bucket: 'admin' },
     { field: 'pdf_url', label: 'PDF (optional)', widget: 'image', bucket: 'admin', help: 'Optional PDF (e.g. a flyer). Upload or drag a file; PDFs show as a document card.' },
     { field: 'rate_override', label: 'Rate Override %', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true, help: 'Blank = company-wide Incentive Rate. Enter a value to override this promo only.' },
-    // Per-surface visibility toggles (migration 0021). Independent of Published AND of
-    // Associated Locations — they compose: these say WHERE a promo may appear; the
-    // locations narrow WHICH pages. All default OFF; turn on a surface per promo.
-    { field: 'show_site_banner', label: 'Show on Site Banner', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Site-wide header ticker banner (uses the Headline).' },
+    // Per-surface visibility toggles (migration 0021). Edited in Site banner / Incentives /
+    // Card surfaces preview sections — still seeded so Framer + list "Shows On" stay in sync.
+    { field: 'show_site_banner', label: 'Show on Site Banner', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Site-wide header ticker (Banner Overlay Promo + optional CTA).' },
     { field: 'show_incentive_page', label: 'Show on Incentives Page', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Featured card on the dedicated /incentives page.' },
     { field: 'show_card_badge', label: 'Show Card Badge', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Corner badge (Banner Overlay Promo) + incentive line (Headline) on community / home / floor-plan cards and detail pages, for the locations this promo targets.' },
     { field: 'show_banner_button', label: 'Show Banner Button', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Render the CTA button inside the site banner.' },
     { field: 'show_card_cta', label: 'Show Card CTA Button', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Render the CTA button on promo cards / location pages.' },
     { field: 'sort_order', label: 'Sort Order', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
-    { field: 'start_date', label: 'Start Date', widget: 'date', bucket: 'admin', halfWidth: true },
-    { field: 'end_date', label: 'End Date', widget: 'date', bucket: 'admin', halfWidth: true },
     { field: 'applies_to', label: 'Applies-To Label (legacy)', widget: 'text', bucket: 'admin', help: 'Informational only; does NOT drive targeting.', visibleInForm: false },
     { field: 'promotion_targets', label: 'Associated Locations', widget: 'promoScopeTag', bucket: 'target' },
     // Engine-derived target-id CSVs pushed to Framer so a location page can filter
