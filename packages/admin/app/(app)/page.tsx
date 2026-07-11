@@ -91,10 +91,43 @@ interface QmiBreakdown {
   pdfPending: number; // matched + plan complete, PDFs not rendered
 }
 
-interface FramerSync {
-  status: string | null;
-  at: string;
-  errorMessage: string | null;
+// Public Caddy site the dashboard pings for reachability (chosen by ops).
+const SITE_URL = 'https://esperanzahomes.com';
+
+interface SiteHealth {
+  online: boolean;
+  checkedAt: string;
+  detail: string | null;
+}
+
+// Live reachability check, run on each dashboard load. Framer is gone; the public
+// site now reads D1 live, so the only meaningful "is the site OK" signal is whether
+// it actually responds. Short timeout so a dead site can't hang the dashboard.
+// ponytail: page-load ping, no separate cron/checker until one's actually needed.
+async function checkSite(): Promise<SiteHealth> {
+  const checkedAt = new Date().toISOString();
+  try {
+    const res = await fetch(SITE_URL, {
+      method: 'GET',
+      redirect: 'follow',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
+    });
+    return {
+      online: res.ok,
+      checkedAt,
+      detail: res.ok ? null : `Site returned HTTP ${res.status}.`,
+    };
+  } catch (e) {
+    return {
+      online: false,
+      checkedAt,
+      detail:
+        e instanceof Error && e.name === 'TimeoutError'
+          ? 'Site did not respond within 5s.'
+          : 'Site is unreachable.',
+    };
+  }
 }
 
 interface DashboardData {
@@ -103,8 +136,7 @@ interface DashboardData {
   communitiesPublished: number;
   promotionsTotal: number;
   promotionsActive: number;
-  framer: FramerSync | null;
-  framerLastOk: string | null;
+  site: SiteHealth;
   recent: AuditRow[];
 }
 
@@ -171,24 +203,10 @@ async function loadDashboard(): Promise<DashboardData> {
     )
   );
 
-  // ── Framer sync health ──────────────────────────────────────────────────
-  // framer-push writes one sync_log row per batch (source='framer'). There is no
-  // per-record push state in D1, so we surface system-level health: the latest
-  // batch outcome + the last known-good push time.
-  const [framer] = await db.all<{ status: string | null; at: string; error_message: string | null }>(
-    sql.raw(
-      `SELECT status, at, error_message
-       FROM sync_log
-       WHERE source = 'framer'
-       ORDER BY at DESC, id DESC
-       LIMIT 1`
-    )
-  );
-  const [framerOk] = await db.all<{ last_ok: string | null }>(
-    sql.raw(
-      `SELECT MAX(at) AS last_ok FROM sync_log WHERE source = 'framer' AND status = 'success'`
-    )
-  );
+  // ── Public site health ────────────────────────────────────────────────────
+  // Live reachability ping of the Caddy site (see checkSite). Runs on every
+  // dashboard load alongside the D1 reads.
+  const site = await checkSite();
 
   // Pull a wider window than we render so adjacent same-actor edits group well.
   const recent = await db.all<AuditRow>(
@@ -213,8 +231,7 @@ async function loadDashboard(): Promise<DashboardData> {
     communitiesPublished: Number(communities?.published ?? 0),
     promotionsTotal: Number(promotions?.total ?? 0),
     promotionsActive: Number(promotions?.active ?? 0),
-    framer: framer ? { status: framer.status, at: framer.at, errorMessage: framer.error_message } : null,
-    framerLastOk: framerOk?.last_ok ?? null,
+    site,
     recent: recent ?? [],
   };
 }
@@ -227,11 +244,10 @@ export default async function DashboardPage() {
   const groups = groupActivity(d.recent).slice(0, 7);
   const drafts = d.qmi.unmatched + d.qmi.planGaps + d.qmi.pdfPending;
 
-  const syncErrored = d.framer != null && d.framer.status !== 'success';
-  const syncOk = d.framer != null && d.framer.status === 'success';
+  const siteOffline = !d.site.online;
 
   // The band is a true worklist: it lists only things the operator should act on.
-  const hasWork = d.qmi.ready > 0 || drafts > 0 || syncErrored;
+  const hasWork = d.qmi.ready > 0 || drafts > 0 || siteOffline;
 
   return (
     <div className="dash-enter flex flex-col gap-10">
@@ -269,10 +285,10 @@ export default async function DashboardPage() {
           >
             Needs attention
           </h2>
-          {syncOk && (
+          {d.site.online && (
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
               <CircleCheckIcon className="size-3.5 text-primary" aria-hidden />
-              Website synced {timeAgo(d.framer!.at)}
+              Website online
             </span>
           )}
         </div>
@@ -281,7 +297,7 @@ export default async function DashboardPage() {
           <div
             className={cn(
               'flex flex-col gap-px overflow-hidden rounded-xl shadow-sm ring-1 ring-foreground/10 sm:flex-row',
-              d.qmi.ready > 0 ? 'bg-primary/15' : syncErrored ? 'bg-destructive/15' : 'bg-border'
+              d.qmi.ready > 0 ? 'bg-primary/15' : siteOffline ? 'bg-destructive/15' : 'bg-border'
             )}
           >
             {d.qmi.ready > 0 && (
@@ -314,21 +330,14 @@ export default async function DashboardPage() {
               />
             )}
 
-            {syncErrored && (
+            {siteOffline && (
               <AttentionItem
-                href="/activity"
+                href={SITE_URL}
                 tone="alert"
                 icon={TriangleAlertIcon}
                 grow={1}
-                label={`Website update ${d.framer!.status === 'partial' ? 'partly failed' : 'failed'}`}
-                timestamp={timeAgo(d.framer!.at)}
-                sub={
-                  d.framer!.errorMessage
-                    ? d.framer!.errorMessage.slice(0, 120)
-                    : d.framerLastOk
-                      ? `Last clean sync ${timeAgo(d.framerLastOk)}. Open the sync log.`
-                      : 'Open the sync log to investigate.'
-                }
+                label="Website unreachable"
+                sub={`${d.site.detail ?? 'The public site did not respond.'} Open ${SITE_URL.replace('https://', '')} to check.`}
               />
             )}
           </div>
@@ -340,7 +349,7 @@ export default async function DashboardPage() {
             <div className="flex min-w-0 flex-col gap-0.5">
               <span className="font-medium text-foreground">All clear</span>
               <span className="text-muted-foreground text-pretty">
-                Every draft is published or in good shape, and the last website sync succeeded.
+                Every draft is published or in good shape, and the public site is responding.
               </span>
             </div>
           </div>
