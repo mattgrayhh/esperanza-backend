@@ -7,7 +7,7 @@ import { parseGalleryUrls } from '../../lib/gallery-urls';
 import { cn } from '@/lib/utils';
 import { FieldLabel } from './FieldLabel';
 import { Button } from '@/components/ui/button';
-import { UploadIcon, XIcon, ImageIcon, GripVerticalIcon } from 'lucide-react';
+import { UploadIcon, XIcon, ImageIcon, GripVerticalIcon, CheckIcon, PlusIcon } from 'lucide-react';
 
 const ACCEPT = 'image/*';
 
@@ -23,6 +23,9 @@ export function ImageGalleryEditor({
   compact = false,
   galleryUrls: controlledUrls,
   onGalleryUrlsChange,
+  suggestions,
+  suggestionsLabel = 'From the floor plan',
+  suggestionsHelp = 'Master-plan photos. Click to add to (or remove from) this home’s gallery.',
 }: {
   entity: string;
   id: string;
@@ -34,6 +37,12 @@ export function ImageGalleryEditor({
   /** When set, gallery order is owned by the parent (e.g. QMI site header slots). */
   galleryUrls?: string[];
   onGalleryUrlsChange?: (urls: string[]) => void;
+  /** Inherited photos (e.g. the assigned floor plan's) offered as a selectable palette.
+   *  A suggestion is "selected" when its url is present in the gallery; clicking toggles
+   *  it in/out. Upload path is unchanged. */
+  suggestions?: string[];
+  suggestionsLabel?: string;
+  suggestionsHelp?: string;
 }) {
   const [internalUrls, setInternalUrls] = useState<string[]>(() => parseGalleryUrls(initialValue));
   const controlled = controlledUrls !== undefined && onGalleryUrlsChange !== undefined;
@@ -69,6 +78,16 @@ export function ImageGalleryEditor({
   function remove(index: number) {
     applyUrls((prev) => prev.filter((_, i) => i !== index));
   }
+
+  function toggleSuggestion(url: string) {
+    applyUrls((prev) => (prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url]));
+  }
+
+  function addAllSuggestions() {
+    applyUrls((prev) => [...prev, ...(suggestions ?? []).filter((u) => !prev.includes(u))]);
+  }
+
+  const unselectedSuggestions = (suggestions ?? []).filter((u) => !urls.includes(u));
 
   function addFiles(picked: Iterable<File> | null | undefined) {
     if (!picked) return;
@@ -230,6 +249,48 @@ export function ImageGalleryEditor({
           {pending ? 'Uploading…' : 'Add images'}
         </Button>
       </div>
+
+      {suggestions && suggestions.length > 0 ? (
+        <div className="grid gap-2 rounded-lg border border-dashed border-border p-2">
+          <div className="flex items-center justify-between gap-2">
+            <FieldLabel label={suggestionsLabel} help={suggestionsHelp} />
+            {unselectedSuggestions.length > 0 ? (
+              <Button type="button" variant="ghost" size="sm" onClick={addAllSuggestions} className="h-7">
+                Add all
+              </Button>
+            ) : null}
+          </div>
+          <div className={cn('grid gap-2', compact ? 'grid-cols-2' : 'grid-cols-3 sm:grid-cols-4')}>
+            {suggestions.map((url, i) => {
+              const selected = urls.includes(url);
+              return (
+                <button
+                  key={`sug-${i}-${url}`}
+                  type="button"
+                  onClick={() => toggleSuggestion(url)}
+                  aria-pressed={selected}
+                  title={selected ? 'In gallery — click to remove' : 'Click to add to gallery'}
+                  className={cn(
+                    'group relative overflow-hidden rounded-md border bg-muted/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                    selected ? 'border-primary ring-2 ring-primary ring-offset-1' : 'border-border opacity-80 hover:opacity-100'
+                  )}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt={`${suggestionsLabel} ${i + 1}`} className="h-24 w-full object-cover" draggable={false} />
+                  <span
+                    className={cn(
+                      'absolute right-1 top-1 inline-flex size-5 items-center justify-center rounded-sm text-white',
+                      selected ? 'bg-primary' : 'bg-background/80 text-muted-foreground'
+                    )}
+                  >
+                    {selected ? <CheckIcon className="size-3" /> : <PlusIcon className="size-3" />}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       {err ? <span className="text-xs text-destructive">{err}</span> : null}
     </div>

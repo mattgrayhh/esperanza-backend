@@ -141,6 +141,10 @@ export interface QmiDetailView {
    *  editable ImageGalleryEditor. Distinct from `gallery` above, which is the merged
    *  read-only display set (floor-plan renderings + home images). */
   photoGalleryJson: string;
+  /** Master-plan photos (from the assigned floor plan) offered as selectable defaults in
+   *  the editable gallery. A photo is "selected" when its url is present in
+   *  photoGalleryJson. Stable R2 urls only (airtable urls filtered out). */
+  floorPlanGallery: GalleryImage[];
 
   /** synced/override field view models (Snowflake-fed, edited via SyncedOverrideField). */
   syncedOverride: {
@@ -172,9 +176,21 @@ export interface QmiDetailView {
     promoText: string;
     availabilityText: string;
     virtualTourUrl: string;
+    /** the assigned floor plan's virtual_tour_url — shown as the inherit-default when the
+     *  home's own virtualTourUrl is blank (mirrors floorPlanImageDefault). */
+    virtualTourUrlDefault: string;
+    /** NterNow self-tour booking link (qmi.nter_now). The self-tour toggle only flags
+     *  availability; this is the actual URL the "Self-Touring Available" button opens. */
+    nterNow: string;
     moveInDate: string;
     selfTourAvailable: boolean;
     availableNow: boolean;
+    /** per-home map coordinates for the "Get Directions" button (qmi.latitude/longitude). */
+    latitude: number | null;
+    longitude: number | null;
+    /** raw-contract fallback pair (qmi.geo_latitude/geo_longitude) — read-only hint. */
+    geoLatitude: number | null;
+    geoLongitude: number | null;
     /** Optional home-specific top-down layout override (qmi.floor_plan_image). */
     floorPlanImage: string;
     /** Standard layout from the linked floor plan — used when the override is blank. */
@@ -309,6 +325,20 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
   const seen = new Set<string>();
   const dedupedGallery = gallery.filter((g) => (seen.has(g.url) ? false : (seen.add(g.url), true)));
 
+  // Master-plan photos offered as selectable defaults in the editable gallery. Sourced
+  // ONLY from the linked floor plan (clean R2 interior_photos_json first, then the
+  // Airtable-era fp_image / fp_additional_images). Filter expiring airtable urls — the
+  // gallery editor refuses them — and de-dupe by url.
+  const AIRTABLE = 'airtableusercontent.com';
+  const fpSeen = new Set<string>();
+  const floorPlanGallery: GalleryImage[] = [
+    ...parseImages(fp?.interior_photos_json, alt),
+    ...parseImages(fp?.fp_image, alt),
+    ...parseImages(fp?.fp_additional_images, alt),
+  ].filter((g) =>
+    g.url.includes(AIRTABLE) ? false : fpSeen.has(g.url) ? false : (fpSeen.add(g.url), true)
+  );
+
   // Option lists for the assignment + override selects.
   const [fpOptions, communityOptions, cityOptions] = await Promise.all([
     loadOptions('floor_plans'),
@@ -416,6 +446,7 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
 
     gallery: dedupedGallery,
     photoGalleryJson: s(r.photo_gallery_json),
+    floorPlanGallery,
 
     syncedOverride: {
       price: buildSO('price', 'Price', 'number', 'synced_price', 'override_price', 'any', 'Blank = follow Snowflake.'),
@@ -468,9 +499,15 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
       promoText: s(r.promo_text),
       availabilityText: s(r.availability_text),
       virtualTourUrl: s(r.virtual_tour_url),
+      virtualTourUrlDefault: s(fp?.virtual_tour_url),
+      nterNow: s(r.nter_now),
       moveInDate: s(effectiveValue(r.synced_move_in_date, r.override_move_in_date)),
       selfTourAvailable: Boolean(r.self_tour_available),
       availableNow: Boolean(r.available_now),
+      latitude: n(r.latitude),
+      longitude: n(r.longitude),
+      geoLatitude: n(r.geo_latitude),
+      geoLongitude: n(r.geo_longitude),
       floorPlanImage: s(r.floor_plan_image),
       floorPlanImageDefault: s(fp?.floor_plan_image),
       imageUrl: s(r.image_url),

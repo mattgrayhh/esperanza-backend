@@ -133,6 +133,35 @@ visually — no markdown syntax. Notes:
     top-down layout (`floor_plans.floor_plan_image` via JOIN). Upload on the QMI media rail
     only when the production home differs from the standard plan sketch — same override
     pattern as description. framer-push emits `COALESCE(qmi override, plan default)`.
+    The uploader (`ImageUploader`) renders floor-plan/diagram fields **`object-contain`
+    (uncropped)** — the generic square `object-cover` chip crops wide layouts, which looked
+    like a broken/stale image and masked successful PNG swaps. The `isDiagram` branch
+    (field/label matches `floor_plan`) reuses the existing logo "contain" treatment. NB: a
+    `floor_plan_image` still stored as a **PDF** shows a file icon, not an image — that
+    needs the brochure→PNG conversion (data fix), not a UI change.
+  - **`qmi` photo gallery inherits master-plan photos:** the editable **Photo Gallery**
+    (`photo_gallery_json`, `ImageGalleryEditor`) now shows a selectable palette of the
+    assigned plan's photos (`floorPlanGallery` in `qmi-detail.ts` = plan
+    `interior_photos_json` + `fp_image` + `fp_additional_images`, airtable urls filtered,
+    de-duped). A palette photo is **selected iff its url is present in `photo_gallery_json`**
+    — click to add/remove, or **Add all** — so no new column/migration is needed. Uploading
+    actual home photos is unchanged. Blank gallery still falls back to `image_url`/plan on
+    the site.
+  - **`qmi.nter_now` (self-tour link):** the Marketing section now has a **Self-Tour Link
+    (NterNow)** URL field beside the Self Tour Available toggle. The toggle only flags the
+    banner; this is the actual booking URL it opens. Plain admin column — saved via
+    `saveEntity` like any other.
+  - **`qmi.virtual_tour_url` (inherit-with-fallback):** per-home 3D/video tour. When the
+    home's own value is blank and the linked plan has a `floor_plans.virtual_tour_url`, the
+    media rail shows the plan tour with a **Use plan tour** button that fills it in (same
+    inherit UX as `floor_plan_image`). Kept per-spec (one-click inherit) rather than forced
+    re-entry.
+  - **`qmi.latitude` / `qmi.longitude` (Map Coordinates → Get Directions):** a **Map
+    Coordinates** section on the detail page edits the per-home lat/long that drive the
+    spec page's Get-Directions button + map pin (already served to the site; previously
+    only visible on staging, not editable in admin). Per-home (each spec = its own lot); no
+    community fallback. If only the raw-contract `geo_latitude`/`geo_longitude` pair is
+    populated, it's shown as a read-only hint to copy up. Plain columns via `saveEntity`.
   - **QMI site header:** the detail page opens with a live-site hero preview (main image
     2/3 + gallery photos 2 and 3 in the right column), matching the community editor
     pattern. Address + Available now badges live in the sticky action bar (not
