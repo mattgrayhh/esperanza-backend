@@ -124,6 +124,10 @@ export function ImageUploader({
   const isDoc = hasFile && (isDocField || !isImageUrl(previewUrl));
   const hasImage = hasFile && !isDoc;
   const isLogoField = /logo/i.test(field) || /logo/i.test(label);
+  // Floor-plan / layout diagrams are wide, not square — center-cropping them (the default
+  // aspect-square + object-cover) hides most of the plan. Show them "contained" (uncropped)
+  // like logos, matching how the live site renders floor_plan_image.
+  const isDiagram = isLogoField || /floor_?plan/i.test(field) || /floor\s*plan/i.test(label);
   // Rail (`compact`): full-width vertical preview. Main form: compact horizontal row.
   const useVerticalImage = !isDocField && compact;
 
@@ -189,9 +193,9 @@ export function ImageUploader({
             variant={hasImage ? 'image' : 'icon'}
             className={cn(
               useVerticalImage && 'w-full',
-              isLogoField &&
+              isDiagram &&
                 'bg-muted/50 [&_img]:!aspect-auto [&_img]:h-full [&_img]:w-full [&_img]:!object-contain [&_img]:p-2',
-              isLogoField && useVerticalImage && 'aspect-[4/3]'
+              isDiagram && useVerticalImage && 'aspect-[4/3]'
             )}
           >
             {pending ? (

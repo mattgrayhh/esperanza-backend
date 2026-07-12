@@ -17,6 +17,7 @@ type MarketingValues = {
   availabilityText: string;
   availableNow: boolean;
   selfTourAvailable: boolean;
+  nterNow: string;
 };
 
 export function QmiMarketingSection({
@@ -42,6 +43,7 @@ export function QmiMarketingSection({
   const [availabilityText, setAvailabilityText] = useState(initial.availabilityText);
   const [availableNow, setAvailableNow] = useState(initial.availableNow);
   const [selfTourAvailable, setSelfTourAvailable] = useState(initial.selfTourAvailable);
+  const [nterNow, setNterNow] = useState(initial.nterNow);
   const [spotlight, setSpotlight] = useState<ListingCardSpotlight>(null);
 
   function spotlightHandlers(region: Exclude<ListingCardSpotlight, null>) {
@@ -151,6 +153,21 @@ export function QmiMarketingSection({
               </span>
             </div>
           </div>
+        </div>
+
+        <div className="grid gap-1.5 text-sm" {...spotlightHandlers('self_tour')}>
+          <FieldLabel
+            label="Self-Tour Link (NterNow)"
+            help="The NterNow booking URL the “Self-Touring Available” button opens (e.g. https://www.webflow.nternow.com/EsperanzaHomes/property/…). Turn on the toggle above to show the banner."
+          />
+          <Input
+            name="nter_now"
+            type="url"
+            inputMode="url"
+            placeholder="https://www.webflow.nternow.com/EsperanzaHomes/property/…"
+            value={nterNow}
+            onChange={(e) => setNterNow(e.target.value)}
+          />
         </div>
       </CardContent>
     </Card>

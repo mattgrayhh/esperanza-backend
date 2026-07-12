@@ -25,6 +25,9 @@ import { QmiMarketingSection } from './QmiMarketingSection';
 import { ExpandableDescription } from './ExpandableDescription';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { FieldLabel } from '@/components/fields/FieldLabel';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -51,6 +54,9 @@ function fmtNum(v: number | null): string {
 export function QmiDetail({ view }: { view: QmiDetailView }) {
   const formId = `qmi-edit-${view.id}`;
   const [galleryUrls, setGalleryUrls] = useState(() => parseGalleryUrls(view.photoGalleryJson));
+  // Virtual tour is a per-home field; when blank it can inherit the assigned plan's tour
+  // (one click), mirroring how the Floor Plan Image falls back to the plan default.
+  const [virtualTourUrl, setVirtualTourUrl] = useState(view.admin.virtualTourUrl);
   const {
     pending,
     startTransition,
@@ -105,12 +111,36 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
           compact
         />
       ) : null}
-      <GenericField
-        field="virtual_tour_url"
-        label="Virtual Tour URL"
-        widget="text"
-        value={view.admin.virtualTourUrl}
-      />
+      <div className="grid gap-1.5 text-sm">
+        <FieldLabel
+          label="Virtual Tour URL"
+          help="Per-home 3D/video tour. Leave blank to inherit the floor plan's tour (use the button below)."
+        />
+        <Input
+          name="virtual_tour_url"
+          type="url"
+          inputMode="url"
+          placeholder="https://…"
+          value={virtualTourUrl}
+          onChange={(e) => setVirtualTourUrl(e.target.value)}
+        />
+        {virtualTourUrl.trim() === '' && view.admin.virtualTourUrlDefault.trim() ? (
+          <div className="flex items-center justify-between gap-2 rounded-md border border-dashed bg-muted/40 px-2 py-1.5">
+            <span className="min-w-0 truncate text-xs text-muted-foreground" title={view.admin.virtualTourUrlDefault}>
+              Plan tour: {view.admin.virtualTourUrlDefault}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 shrink-0"
+              onClick={() => setVirtualTourUrl(view.admin.virtualTourUrlDefault)}
+            >
+              Use plan tour
+            </Button>
+          </div>
+        ) : null}
+      </div>
       <ImageGalleryEditor
         entity="qmi"
         id={view.id}
@@ -119,6 +149,8 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
         initialValue={view.photoGalleryJson}
         galleryUrls={galleryUrls}
         onGalleryUrlsChange={setGalleryUrls}
+        suggestions={view.floorPlanGallery.map((g) => g.url)}
+        suggestionsLabel={`Photos from ${view.floorPlanName || 'the floor plan'}`}
         help="Per-home photos in display order. Slots 2 and 3 also appear in the header (right column). Entry 1 is usually the elevation render."
         compact
       />
@@ -223,6 +255,7 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
             availabilityText: view.admin.availabilityText,
             availableNow: view.admin.availableNow,
             selfTourAvailable: view.admin.selfTourAvailable,
+            nterNow: view.admin.nterNow,
           }}
           card={{
             address: view.address,
@@ -240,6 +273,40 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
             imageUrl: view.admin.imageUrl || view.admin.heroFallbackUrl,
           }}
         />
+
+        <Card id={sectionId('Map Coordinates')}>
+          <CardHeader className="border-b">
+            <CardTitle className="text-base font-medium">Map Coordinates</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Drives the “Get Directions” button and the map pin on the spec page. Per-home
+              (each spec sits on its own lot) — leave blank for no directions link.
+            </p>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <GenericField
+              field="latitude"
+              label="Latitude"
+              widget="number"
+              step="any"
+              value={view.admin.latitude == null ? '' : String(view.admin.latitude)}
+            />
+            <GenericField
+              field="longitude"
+              label="Longitude"
+              widget="number"
+              step="any"
+              value={view.admin.longitude == null ? '' : String(view.admin.longitude)}
+            />
+            {view.admin.latitude == null &&
+            view.admin.longitude == null &&
+            (view.admin.geoLatitude != null || view.admin.geoLongitude != null) ? (
+              <p className="text-xs text-muted-foreground sm:col-span-2">
+                Raw geo on file: {view.admin.geoLatitude ?? '—'}, {view.admin.geoLongitude ?? '—'} —
+                copy into the fields above to use it for directions.
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
 
         <Card id={sectionId('Description')}>
           <CardHeader className="border-b">
