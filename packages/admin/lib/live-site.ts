@@ -23,6 +23,9 @@ export interface LiveSitePlacement {
   path: string | null;
   fullUrl: string | null;
   visitorStatus: string;
+  /** True only when the public page actually exists (record is published/active). Drafts
+      resolve a slug but 404 on the public site — the UI must not offer a broken "preview". */
+  isLive: boolean;
   sections: PlacementSection[];
 }
 
@@ -170,11 +173,16 @@ export function buildLiveSitePlacement(
   gate?: { published?: boolean; status?: string; active?: boolean },
 ): LiveSitePlacement {
   const path = liveSitePath(entity, row);
+  // The public site only renders published/active records; a draft resolves a slug but
+  // 404s. Coming-soon counts as live (the page renders). Fall back to `active` for
+  // entities gated on that instead of `published`.
+  const isLive = Boolean(path) && Boolean(gate?.published ?? gate?.active ?? false);
   return {
     pageLabel: PAGE_LABELS[entity],
     path,
     fullUrl: fullUrl(path),
     visitorStatus: visitorStatusLabel(entity, gate ?? {}),
+    isLive,
     sections: SECTIONS[entity] ?? [{ id: 'content', label: 'Page content' }],
   };
 }

@@ -50,7 +50,7 @@ export function PlacementRail({
           <p className="mt-3 text-xs text-muted-foreground">No public page URL for this record type.</p>
         )}
 
-        {placement.fullUrl ? (
+        {placement.fullUrl && placement.isLive ? (
           <div className="mt-2">
             <a
               href={placement.fullUrl}
@@ -58,10 +58,14 @@ export function PlacementRail({
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs text-foreground hover:bg-muted"
             >
-              Open live
+              Preview live page
               <ExternalLinkIcon className="size-3" />
             </a>
           </div>
+        ) : placement.fullUrl ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Preview available once published — this page isn’t live on the public site yet.
+          </p>
         ) : null}
 
         {placement.sections.length > 0 ? (

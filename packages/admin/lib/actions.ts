@@ -144,7 +144,15 @@ async function postWrite(
   }
 
   const env = getCloudflareContext().env;
-  await env.FRAMER_QUEUE.send({ collection, action: 'upsert', id });
+  // Framer is retired; the queue binding may be dead or its consumer gone. A failed
+  // enqueue must never reject the caller's save — the row (and, for uploads, the R2
+  // object) is already persisted before postWrite runs. This unguarded send was
+  // surfacing to operators as "an unexpected response was received from the server."
+  try {
+    await env.FRAMER_QUEUE.send({ collection, action: 'upsert', id });
+  } catch {
+    /* framer retired — best-effort enqueue */
+  }
 
   // Purge the public api edge cache for this entity (+ promo-coupled dependents)
   // so the edit shows before the TTL instead of after it. Best-effort.
@@ -1109,17 +1117,25 @@ export async function uploadImage(
     .set(toDrizzlePatch(def.key, { [col.column]: url, updated_at: at }) as never)
     .where(eq(idColumn(def.table), id));
 
-  await postWrite(db, def.key, id, [
-    {
-      entity: def.key,
-      entityId: id,
-      field,
-      action: 'upload_image',
-      oldValue: toStr(oldValue),
-      newValue: url,
-      actor,
-    },
-  ]);
+  // The image (R2) and column (D1) are already persisted above. postWrite only fans out
+  // best-effort side effects (audit, cache purge, PDF re-render, retired-Framer enqueue).
+  // Never let those reject the upload — that failure was reported as "an unexpected
+  // response was received from the server" while the image had actually saved.
+  try {
+    await postWrite(db, def.key, id, [
+      {
+        entity: def.key,
+        entityId: id,
+        field,
+        action: 'upload_image',
+        oldValue: toStr(oldValue),
+        newValue: url,
+        actor,
+      },
+    ]);
+  } catch (e) {
+    console.error('uploadImage postWrite failed (image already saved):', e);
+  }
 
   revalidatePath(`/admin/${def.segment}/${id}`);
   return { ok: true, url };

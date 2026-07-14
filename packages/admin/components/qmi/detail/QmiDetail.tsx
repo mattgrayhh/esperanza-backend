@@ -93,24 +93,25 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
   const mediaRail = (
     <div className="min-w-0 space-y-5">
       <h3 className="text-sm font-medium text-foreground">Media</h3>
-      {!view.isUnassigned ? (
-        <ImageUploader
-          entity="qmi"
-          id={view.id}
-          field="floor_plan_image"
-          label="Floor Plan Image"
-          initialUrl={view.admin.floorPlanImage}
-          fallbackPreviewUrl={view.admin.floorPlanImageDefault}
-          help={
-            view.admin.floorPlanImage
-              ? 'Home-specific override — replaces the plan layout on the live site for this home. Clear and save to revert to the plan default.'
-              : view.admin.floorPlanImageDefault
-                ? `Using the ${view.floorPlanName} plan layout. Upload only if this production home differs from the standard sketch.`
-                : 'Upload only when this home’s layout differs from the standard plan sketch.'
-          }
-          compact
-        />
-      ) : null}
+      {/* Always render: the floor_plan_image override is a valid per-home column even for
+          specs with no effective plan (isUnassigned) — those operators still need somewhere
+          to set the home's image. */}
+      <ImageUploader
+        entity="qmi"
+        id={view.id}
+        field="floor_plan_image"
+        label="Floor Plan Image"
+        initialUrl={view.admin.floorPlanImage}
+        fallbackPreviewUrl={view.admin.floorPlanImageDefault}
+        help={
+          view.admin.floorPlanImage
+            ? 'Home-specific override — replaces the plan layout on the live site for this home. Clear and save to revert to the plan default.'
+            : view.admin.floorPlanImageDefault
+              ? `Using the ${view.floorPlanName} plan layout. Upload only if this production home differs from the standard sketch.`
+              : 'Upload only when this home’s layout differs from the standard plan sketch.'
+        }
+        compact
+      />
       <div className="grid gap-1.5 text-sm">
         <FieldLabel
           label="Virtual Tour URL"
