@@ -56,6 +56,45 @@ export interface TypedImage {
 }
 
 /**
+ * Split a gallery elevation label ("Tuscan Brick", "Farmhouse") into the MarkSystems
+ * columns: elevation_type (style) + material_type. Returns nulls when the label isn't
+ * a recognizable style[/material] pair — callers should leave overrides alone.
+ */
+export function splitElevationLabel(label: string): {
+  elevationType: string | null;
+  materialType: string | null;
+} {
+  const trimmed = label.trim();
+  if (!trimmed) return { elevationType: null, materialType: null };
+
+  // Prefer canonical "Style Material" / bare Farmhouse.
+  for (const style of STYLES) {
+    if (style === 'Farmhouse') {
+      if (trimmed === 'Farmhouse' || /^Farmhouse$/i.test(trimmed)) {
+        return { elevationType: 'Farmhouse', materialType: null };
+      }
+      continue;
+    }
+    for (const material of MATERIALS) {
+      if (trimmed === `${style} ${material}`) {
+        return { elevationType: style, materialType: material };
+      }
+    }
+  }
+
+  // Slash form used by community price-source labels: "Tuscan / Stucco".
+  const slash = trimmed.match(/^([A-Za-z]+)\s*\/\s*([A-Za-z]+)$/);
+  if (slash) {
+    const style = STYLES.find((s) => s.toLowerCase() === slash[1]!.toLowerCase());
+    const material = MATERIALS.find((m) => m.toLowerCase() === slash[2]!.toLowerCase());
+    if (style === 'Farmhouse') return { elevationType: 'Farmhouse', materialType: null };
+    if (style && material) return { elevationType: style, materialType: material };
+  }
+
+  return { elevationType: null, materialType: null };
+}
+
+/**
  * Parse a stored elevation gallery into `{ url, type }[]`. Accepts the new `{url,type}`
  * shape, the legacy `{url,filename}` shape, and bare-string arrays — deriving `type`
  * from the filename whenever it isn't explicitly stored. Mirrors the dual-shape

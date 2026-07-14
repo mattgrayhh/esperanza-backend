@@ -19,6 +19,7 @@ export function HeroImageSlot({
   className,
   imageFit = 'cover',
   overlay,
+  onUrlChange,
 }: {
   entity: string;
   id: string;
@@ -30,6 +31,8 @@ export function HeroImageSlot({
   className?: string;
   imageFit?: 'cover' | 'contain';
   overlay?: React.ReactNode;
+  /** Called when the submitted url changes (upload or external initialUrl sync). */
+  onUrlChange?: (url: string) => void;
 }) {
   const [url, setUrl] = useState(initialUrl);
   const [pending, startTransition] = useTransition();
@@ -46,13 +49,18 @@ export function HeroImageSlot({
   const previewUrl = url || fallbackPreviewUrl || '';
   const hasImage = previewUrl !== '' && !isAirtable;
 
+  function applyUrl(next: string) {
+    setUrl(next);
+    onUrlChange?.(next);
+  }
+
   function onPick(file: File | undefined) {
     if (!file) return;
     setErr(null);
     startTransition(async () => {
       try {
         const res = await uploadImage(entity, id, field, file);
-        if (res.ok) setUrl(res.url);
+        if (res.ok) applyUrl(res.url);
         else setErr(res.error);
       } catch (e) {
         setErr(e instanceof Error ? e.message : 'Upload failed');

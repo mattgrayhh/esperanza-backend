@@ -102,7 +102,7 @@ export function QmiPriceOverrideStat({
             override
           </Badge>
         ) : (
-          'price'
+          'Sale Price'
         )}
       </p>
     </div>

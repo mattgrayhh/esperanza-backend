@@ -64,6 +64,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { CreateDraftButton } from "@/components/CreateDraftButton"
 
 // ── serializable shapes (mirror lib/build-list-view.ts ListView, kept local so
 //    this client component imports no server-only modules) ────────────────────
@@ -100,6 +101,9 @@ export interface DataTableProps {
    *  this field's value (e.g. communities grouped by Town). */
   groupByField?: string
   groupByLabel?: string
+  /** When set, New posts this server action instead of linking to /{segment}/new
+   *  (communities: create draft + redirect to editor). */
+  createAction?: (formData: FormData) => Promise<void>
 }
 
 // =============================================================================
@@ -320,6 +324,7 @@ export function DataTable({
   helpTitle,
   groupByField,
   groupByLabel,
+  createAction,
 }: DataTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>(DEFAULT_SORT[segment] ?? [])
   const [globalFilter, setGlobalFilter] = React.useState("")
@@ -393,10 +398,16 @@ export function DataTable({
             {truncated ? ` · showing first ${totalRows}` : ""}
           </p>
         </div>
-        <Button render={<Link href={`/${segment}/new`} />}>
-          <Plus className="size-4" />
-          New
-        </Button>
+        {createAction ? (
+          <form action={createAction}>
+            <CreateDraftButton />
+          </form>
+        ) : (
+          <Button render={<Link href={`/${segment}/new`} />}>
+            <Plus className="size-4" />
+            New
+          </Button>
+        )}
       </div>
 
       {/* ── toolbar: search + column visibility ── */}

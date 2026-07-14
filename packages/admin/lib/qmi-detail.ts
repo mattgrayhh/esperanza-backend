@@ -25,6 +25,7 @@ import { effectiveValue } from '@esperanza/db/override';
 import { loadOptions, type SelectOption } from './select-options';
 import { deriveStatus } from './status';
 import { buildLiveSitePlacement, type LiveSitePlacement } from './live-site';
+import { parseTypedGallery, type TypedImage } from './elevation-types';
 
 type Row = Record<string, unknown>;
 
@@ -145,6 +146,9 @@ export interface QmiDetailView {
    *  the editable gallery. A photo is "selected" when its url is present in
    *  photoGalleryJson. Stable R2 urls only (airtable urls filtered out). */
   floorPlanGallery: GalleryImage[];
+  /** Elevation renderings from the linked plan's `elevation_gallery` — picker options
+   *  in MarkSystems for which exterior render is this home's site Main Image. */
+  elevationRenders: TypedImage[];
 
   /** synced/override field view models (Snowflake-fed, edited via SyncedOverrideField). */
   syncedOverride: {
@@ -339,6 +343,12 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
     g.url.includes(AIRTABLE) ? false : fpSeen.has(g.url) ? false : (fpSeen.add(g.url), true)
   );
 
+  // Elevation renders for the MarkSystems picker (plan elevation_gallery). Filter
+  // expiring airtable urls; type comes from stored metadata or filename derivation.
+  const elevationRenders: TypedImage[] = parseTypedGallery(s(fp?.elevation_gallery)).filter(
+    (g) => !g.url.includes(AIRTABLE)
+  );
+
   // Option lists for the assignment + override selects.
   const [fpOptions, communityOptions, cityOptions] = await Promise.all([
     loadOptions('floor_plans'),
@@ -447,6 +457,7 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
     gallery: dedupedGallery,
     photoGalleryJson: s(r.photo_gallery_json),
     floorPlanGallery,
+    elevationRenders,
 
     syncedOverride: {
       price: buildSO('price', 'Price', 'number', 'synced_price', 'override_price', 'any', 'Blank = follow Snowflake.'),

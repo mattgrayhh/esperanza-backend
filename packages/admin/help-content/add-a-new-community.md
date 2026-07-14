@@ -18,13 +18,10 @@ Communities ARE created by hand (unlike homes). The one rule that matters:
 
 ## Steps
 
-1. Open `Communities` → `New`.
-2. Enter the `Name` (matching MarkSystems) and the basics: `Town`, `Address`,
-   map coordinates, and link the `City`.
-3. `Save` — then work through the content checklist (see *Community content
-   checklist*).
-4. Keep it `Draft` or set `Coming Soon` while content is in progress; flip to
-   `Live` when it's ready.
+1. Open `Communities` → `New`. That creates an unpublished draft and opens its editor immediately (no confirm step, no separate `/new` page).
+2. Enter the `Name` (matching MarkSystems) and the basics: `Town`, `Address`, map coordinates, and link the `City`.
+3. `Save` — then work through the content checklist (see *Community content checklist*).
+4. Keep it `Draft` or set `Coming Soon` while content is in progress; flip to `Live` when it's ready.
 
 ## What syncs vs. what you write
 

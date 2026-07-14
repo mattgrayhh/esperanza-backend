@@ -119,7 +119,7 @@ export function GenericField({
   }
 
   return (
-    <div className="grid gap-1.5 text-sm">
+    <div className="grid min-w-0 gap-1.5 text-sm">
       <FieldLabel label={label} help={help} />
 
       {widget === 'date' ? (

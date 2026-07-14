@@ -20,7 +20,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { FieldLabel } from './FieldLabel';
-import { CalendarIcon, XIcon } from 'lucide-react';
+import { CalendarIcon } from 'lucide-react';
 
 /** Parse a stored `YYYY-MM-DD` into a LOCAL Date (noon to dodge DST edges). null if blank/invalid. */
 function parseYmd(value: string): Date | undefined {
@@ -61,55 +61,40 @@ export function DatePicker({
   const selected = parseYmd(ymd);
 
   return (
-    <div className="grid gap-1.5 text-sm">
+    <div className="grid min-w-0 gap-1.5 text-sm">
       {/* When embedded in GenericField, the parent renders the label (label=''). */}
       {label !== '' ? <FieldLabel label={label} help={help} /> : null}
 
       {/* The column value travels via this hidden input as a YYYY-MM-DD string. */}
       <input type="hidden" name={field} value={ymd} />
 
-      <div className="flex items-center gap-2">
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger
-            render={
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start font-normal data-[empty=true]:text-muted-foreground"
-                data-empty={ymd.trim() === '' ? 'true' : 'false'}
-              />
-            }
-          >
-            <CalendarIcon className="size-4" />
-            {pretty(selected, ymd)}
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-2" align="start">
-            <Calendar
-              mode="single"
-              selected={selected}
-              defaultMonth={selected}
-              onSelect={(date: Date | undefined) => {
-                setYmd(date ? toYmd(date) : '');
-                setOpen(false);
-              }}
-              autoFocus
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger
+          render={
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full min-w-0 justify-start font-normal data-[empty=true]:text-muted-foreground"
+              data-empty={ymd.trim() === '' ? 'true' : 'false'}
             />
-          </PopoverContent>
-        </Popover>
-
-        {ymd.trim() !== '' ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Clear date"
-            onClick={() => setYmd('')}
-          >
-            <XIcon className="size-4" />
-          </Button>
-        ) : null}
-      </div>
-
+          }
+        >
+          <CalendarIcon className="size-4 shrink-0" />
+          <span className="truncate">{pretty(selected, ymd)}</span>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-2" align="start">
+          <Calendar
+            mode="single"
+            selected={selected}
+            defaultMonth={selected}
+            onSelect={(date: Date | undefined) => {
+              setYmd(date ? toYmd(date) : '');
+              setOpen(false);
+            }}
+            autoFocus
+          />
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

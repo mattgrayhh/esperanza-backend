@@ -8,7 +8,8 @@
 //   (1) write D1 via the PRIMARY session (read-your-writes — see lib/db.ts),
 //   (2) insert an audit_log row (actor = Cloudflare Access identity),
 //   (3) enqueue an esperanza-framer-queue message {collection, action:'upsert', id}
-//       for the changed record so framer-push re-pushes it.
+//       for the changed record so framer-push re-pushes it
+//       (skipped for unpublished draft creates — see createEntity `{ sync: false }`).
 //
 // QMI synced-field edits route through @esperanza/db/override (buildOverrideWrite /
 // buildOverrideAudit). Plain fields are written directly. The publish toggle is the
@@ -20,6 +21,7 @@
 // =============================================================================
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { eq } from 'drizzle-orm';
 import { and, asc } from 'drizzle-orm';
@@ -115,15 +117,20 @@ async function purgePublicCache(apiBaseUrl: string | undefined, collection: stri
 }
 
 /**
- * Insert audit rows and enqueue a single Framer push for the changed record. Call
- * AFTER the D1 write committed. `collection` must be a framer-push CollectionKey
- * (== EntityKey). Idempotent enqueue: the consumer re-reads the full row by id.
+ * Insert audit rows and (optionally) fan out site sync side effects. Call AFTER the
+ * D1 write committed. `collection` must be a framer-push CollectionKey (== EntityKey).
+ * Idempotent enqueue: the consumer re-reads the full row by id.
+ *
+ * Pass `{ sync: false }` for unpublished draft creates — audit only. Framer queue,
+ * public-cache purge, and PDF register/re-render are skipped until a real save or
+ * publish (those paths leave sync at the default true).
  */
 async function postWrite(
   db: Db,
   collection: EntityKey,
   id: string,
-  audits: AuditInput[]
+  audits: AuditInput[],
+  opts?: { sync?: boolean }
 ): Promise<void> {
   if (audits.length > 0) {
     const rows: NewAuditLogRow[] = audits.map((a) => ({
@@ -142,6 +149,8 @@ async function postWrite(
       await db.insert(auditLog).values(batch);
     }
   }
+
+  if (opts?.sync === false) return;
 
   const env = getCloudflareContext().env;
   // Framer is retired; the queue binding may be dead or its consumer gone. A failed
@@ -177,7 +186,7 @@ async function postWrite(
     for (const k of keys) {
       const res = k.type === 'list'
         ? await d1.prepare(`UPDATE pdf_renders SET status='stale' WHERE type='list' AND city_slug=? AND status<>'rendering' RETURNING type, slug`).bind(k.citySlug).all()
-        : await d1.prepare(`UPDATE pdf_renders SET status='stale' WHERE type=? AND entity_id=? AND status<>'rendering' RETURNING type, slug`).bind(k.type, k.entityId).all();
+      : await d1.prepare(`UPDATE pdf_renders SET status='stale' WHERE type=? AND entity_id=? AND status<>'rendering' RETURNING type, slug`).bind(k.type, k.entityId).all();
       for (const row of (res.results ?? []) as any[]) toEnqueue.push({ type: row.type, slug: row.slug });
     }
     // Idempotently register a pdf_renders row + backfill the URL for newly-created /
@@ -219,8 +228,9 @@ const toStr = (v: unknown): string | null => (v === null || v === undefined ? nu
 // =============================================================================
 // createEntity — insert a fresh admin-created record with a generated id and return it.
 // New records start unpublished/draft (the publish toggle is the only path to live).
-// Audits a `create` row and enqueues the framer push (it'll push as draft until set
-// live). The generated id is prefixed `adm` to distinguish admin-created rows from the
+// Audits a `create` row only — no Framer enqueue, cache purge, or PDF work until the
+// operator saves content or publishes (saveEntity / setStatus / togglePublished).
+// The generated id is prefixed `adm` to distinguish admin-created rows from the
 // Airtable-seeded `rec` ids; the framer upsert key is just the id, so any value works.
 // =============================================================================
 
@@ -247,20 +257,33 @@ export async function createEntity(
     .insert(def.table)
     .values(toDrizzlePatch(def.key, { id, created_at: at, updated_at: at }) as never);
 
-  await postWrite(db, def.key, id, [
-    {
-      entity: def.key,
-      entityId: id,
-      field: null,
-      action: 'create',
-      oldValue: null,
-      newValue: id,
-      actor,
-    },
-  ]);
+  await postWrite(
+    db,
+    def.key,
+    id,
+    [
+      {
+        entity: def.key,
+        entityId: id,
+        field: null,
+        action: 'create',
+        oldValue: null,
+        newValue: id,
+        actor,
+      },
+    ],
+    { sync: false }
+  );
 
-  revalidatePath(`/admin/${def.segment}`);
+  revalidatePath(`/${def.segment}`);
   return { ok: true, id };
+}
+
+/** Communities list/dashboard New — create unpublished draft, open editor (no /new page). */
+export async function createCommunityDraft(_formData?: FormData): Promise<void> {
+  const res = await createEntity('communities');
+  if (res.ok) redirect(`/communities/${res.id}`);
+  throw new Error(res.error);
 }
 
 // Belt-and-suspenders sanitize for rich-text HTML. The RichTextEditor (TipTap

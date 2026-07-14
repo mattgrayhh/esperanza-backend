@@ -7,10 +7,15 @@
 // mutation routes through the documented server actions — no new write paths.
 // =============================================================================
 
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { saveEntity } from '@/lib/actions';
 import type { QmiDetailView } from '@/lib/qmi-detail';
 import { parseGalleryUrls } from '@/lib/gallery-urls';
+import {
+  deriveElevationType,
+  splitElevationLabel,
+  type TypedImage,
+} from '@/lib/elevation-types';
 import { SyncedOverrideField } from '@/components/fields/SyncedOverrideField';
 import { GenericField } from '@/components/fields/GenericField';
 import { ImageUploader } from '@/components/fields/ImageUploader';
@@ -22,11 +27,13 @@ import { QmiAssignFloorPlan } from './QmiAssignFloorPlan';
 import { QmiSiteHeader } from './QmiSiteHeader';
 import { QmiPriceOverrideStat } from './QmiPriceOverrideStat';
 import { QmiMarketingSection } from './QmiMarketingSection';
+import { QmiElevationRenderPicker } from './QmiElevationRenderPicker';
 import { ExpandableDescription } from './ExpandableDescription';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { FieldLabel } from '@/components/fields/FieldLabel';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,9 +61,28 @@ function fmtNum(v: number | null): string {
 export function QmiDetail({ view }: { view: QmiDetailView }) {
   const formId = `qmi-edit-${view.id}`;
   const [galleryUrls, setGalleryUrls] = useState(() => parseGalleryUrls(view.photoGalleryJson));
-  // Virtual tour is a per-home field; when blank it can inherit the assigned plan's tour
-  // (one click), mirroring how the Floor Plan Image falls back to the plan default.
+  const [imageUrl, setImageUrl] = useState(view.admin.imageUrl);
+  // Elevation override patches from the render picker — remount SyncedOverrideField via
+  // `patchGen` so unlock + value apply without fighting manual unlock typing.
+  const [elevationTypeOverride, setElevationTypeOverride] = useState(
+    view.syncedOverride.elevationType.overrideValue
+  );
+  const [materialTypeOverride, setMaterialTypeOverride] = useState(
+    view.syncedOverride.materialType.overrideValue
+  );
+  const [elevationPatchGen, setElevationPatchGen] = useState(0);
+  // Locked by default (inherit plan tour); unlock only when a home-specific override exists.
   const [virtualTourUrl, setVirtualTourUrl] = useState(view.admin.virtualTourUrl);
+  const [virtualTourUnlocked, setVirtualTourUnlocked] = useState(
+    view.admin.virtualTourUrl.trim() !== ''
+  );
+  const virtualTourCheckboxId = useId();
+  const slugCheckboxId = useId();
+  const planTour = view.admin.virtualTourUrlDefault.trim();
+  // Marketing-owned URL piece (not Snowflake). Locked by default so operators don't
+  // nudge the public path by accident; unlock → edit → Save writes `slug`.
+  const [slug, setSlug] = useState(view.slug);
+  const [slugUnlocked, setSlugUnlocked] = useState(false);
   const {
     pending,
     startTransition,
@@ -72,6 +98,22 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
   } = useEditSaveFeedback(formId);
 
   const title = view.address.trim() || view.housenumber || view.id;
+
+  function onSelectElevationRender(item: TypedImage | null) {
+    if (!item) {
+      setImageUrl('');
+      return;
+    }
+    setImageUrl(item.url);
+    const label = item.type.trim() || deriveElevationType(item.url) || '';
+    const { elevationType, materialType } = splitElevationLabel(label);
+    if (!elevationType && !materialType) return;
+    if (elevationType) setElevationTypeOverride(elevationType);
+    if (materialType) setMaterialTypeOverride(materialType);
+    // Farmhouse: clear material override so we don't leave a stale Brick/Stucco pin.
+    if (elevationType === 'Farmhouse') setMaterialTypeOverride('');
+    setElevationPatchGen((n) => n + 1);
+  }
 
   function onSubmit(formData: FormData) {
     startTransition(async () => {
@@ -115,32 +157,57 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
       <div className="grid gap-1.5 text-sm">
         <FieldLabel
           label="Virtual Tour URL"
-          help="Per-home 3D/video tour. Leave blank to inherit the floor plan's tour (use the button below)."
-        />
-        <Input
-          name="virtual_tour_url"
-          type="url"
-          inputMode="url"
-          placeholder="https://…"
-          value={virtualTourUrl}
-          onChange={(e) => setVirtualTourUrl(e.target.value)}
-        />
-        {virtualTourUrl.trim() === '' && view.admin.virtualTourUrlDefault.trim() ? (
-          <div className="flex items-center justify-between gap-2 rounded-md border border-dashed bg-muted/40 px-2 py-1.5">
-            <span className="min-w-0 truncate text-xs text-muted-foreground" title={view.admin.virtualTourUrlDefault}>
-              Plan tour: {view.admin.virtualTourUrlDefault}
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 shrink-0"
-              onClick={() => setVirtualTourUrl(view.admin.virtualTourUrlDefault)}
+          help="Defaults to the linked floor plan’s tour. Unlock to set a home-specific URL; clear/re-lock and save to inherit the plan tour again."
+        >
+          {virtualTourUnlocked && virtualTourUrl.trim() !== '' ? (
+            <Badge
+              className="h-4 border-warning/30 bg-warning/10 px-1.5 text-[10px] font-semibold tracking-wide text-warning uppercase"
             >
-              Use plan tour
-            </Button>
-          </div>
-        ) : null}
+              override
+            </Badge>
+          ) : null}
+        </FieldLabel>
+        <input
+          type="hidden"
+          name="virtual_tour_url"
+          value={virtualTourUnlocked ? virtualTourUrl : ''}
+        />
+        {!virtualTourUnlocked ? (
+          <Input
+            type="url"
+            value={planTour}
+            disabled
+            aria-label="Virtual Tour URL (from floor plan, locked)"
+          />
+        ) : (
+          <Input
+            type="url"
+            inputMode="url"
+            placeholder="https://…"
+            value={virtualTourUrl}
+            onChange={(e) => setVirtualTourUrl(e.target.value)}
+            autoFocus
+          />
+        )}
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id={virtualTourCheckboxId}
+            checked={virtualTourUnlocked}
+            onCheckedChange={(checked) => {
+              const on = checked === true;
+              setVirtualTourUnlocked(on);
+              if (!on) setVirtualTourUrl('');
+            }}
+          />
+          <Label
+            htmlFor={virtualTourCheckboxId}
+            className="text-xs font-normal text-muted-foreground"
+          >
+            {virtualTourUnlocked
+              ? 'Unlocked — home-specific tour overrides the floor plan'
+              : 'Unlock to override floor plan tour'}
+          </Label>
+        </div>
       </div>
       <ImageGalleryEditor
         entity="qmi"
@@ -152,7 +219,7 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
         onGalleryUrlsChange={setGalleryUrls}
         suggestions={view.floorPlanGallery.map((g) => g.url)}
         suggestionsLabel={`Photos from ${view.floorPlanName || 'the floor plan'}`}
-        help="Per-home photos in display order. Slots 2 and 3 also appear in the header (right column). Entry 1 is usually the elevation render."
+        help="Per-home photos in display order. Slots 2 and 3 also appear in the header (right column). Entry 1 is usually the elevation render — prefer picking the site render under MarkSystems → Site elevation render."
         compact
       />
     </div>
@@ -206,7 +273,7 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
 
           <Separator />
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 *:min-w-0">
             <Info label="Elevation" value={view.elevation || '—'} />
             <GenericField
               field="move_in_date"
@@ -214,7 +281,49 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
               widget="date"
               value={view.admin.moveInDate}
             />
-            <Info label="Slug" value={view.slug || '—'} mono />
+            <div className="grid min-w-0 gap-1.5 text-sm">
+              <FieldLabel
+                label="Slug"
+                help="URL path piece for this home (admin-owned). Locked by default — unlock only when you need to change it. Changing a published slug breaks shared links."
+              />
+              <input type="hidden" name="slug" value={slug} />
+              {slugUnlocked ? (
+                <Input
+                  value={slug}
+                  onChange={(e) => setSlug(e.target.value)}
+                  className="font-mono text-xs"
+                  spellCheck={false}
+                  autoFocus
+                  aria-label="Slug (unlocked)"
+                />
+              ) : (
+                <Input
+                  value={slug || '—'}
+                  disabled
+                  className="font-mono text-xs"
+                  aria-label="Slug (locked)"
+                />
+              )}
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id={slugCheckboxId}
+                  checked={slugUnlocked}
+                  onCheckedChange={(checked) => {
+                    const on = checked === true;
+                    setSlugUnlocked(on);
+                    if (!on) setSlug(view.slug);
+                  }}
+                />
+                <Label
+                  htmlFor={slugCheckboxId}
+                  className="text-xs font-normal text-muted-foreground"
+                >
+                  {slugUnlocked
+                    ? 'Unlocked — edit slug, then Save'
+                    : 'Unlock to edit'}
+                </Label>
+              </div>
+            </div>
             <Info label="Floor plan" value={view.isUnassigned ? 'Unassigned' : view.floorPlanName || '—'} />
             <Info label="Community" value={view.communityName || '—'} />
           </div>
@@ -223,8 +332,14 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
 
       <div className="space-y-4">
         <div id={sectionId('From MarkSystems')}>
-          <MarkSystemsSection title="MarkSystems">
+          <MarkSystemsSection title="MarkSystems" defaultOpen={view.elevationRenders.length > 0}>
             <div className="grid gap-4 sm:grid-cols-2">
+              <QmiElevationRenderPicker
+                options={view.elevationRenders}
+                selectedUrl={imageUrl}
+                onSelect={onSelectElevationRender}
+                floorPlanName={view.floorPlanName}
+              />
               {!view.isUnassigned ? (
                 <div className="sm:col-span-2">
                   <SyncedOverrideField {...view.relations.floorPlan} label="Floor Plan Assignment" />
@@ -237,9 +352,16 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
               <SyncedOverrideField {...view.syncedOverride.totalSquareFootage} />
               <SyncedOverrideField {...view.syncedOverride.elevation} />
               <SyncedOverrideField {...view.syncedOverride.lotNumber} />
-              <SyncedOverrideField {...view.syncedOverride.elevationType} />
-              <SyncedOverrideField {...view.syncedOverride.materialType} />
-              <SyncedOverrideField {...view.syncedOverride.isModelHome} />
+              <SyncedOverrideField
+                key={`elevation_type-${elevationPatchGen}`}
+                {...view.syncedOverride.elevationType}
+                overrideValue={elevationTypeOverride}
+              />
+              <SyncedOverrideField
+                key={`material_type-${elevationPatchGen}`}
+                {...view.syncedOverride.materialType}
+                overrideValue={materialTypeOverride}
+              />
               {!view.isUnassigned ? (
                 <>
                   <SyncedOverrideField {...view.relations.community} />
@@ -271,7 +393,7 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
             lotNumber:
               view.syncedOverride.lotNumber.overrideValue.trim() ||
               view.syncedOverride.lotNumber.syncedDisplay,
-            imageUrl: view.admin.imageUrl || view.admin.heroFallbackUrl,
+            imageUrl: imageUrl || view.admin.heroFallbackUrl,
           }}
         />
 
@@ -378,10 +500,11 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
         <QmiSiteHeader
           id={view.id}
           title={title}
-          imageUrl={view.admin.imageUrl}
+          imageUrl={imageUrl}
           heroFallbackUrl={view.admin.heroFallbackUrl}
           galleryUrls={galleryUrls}
           onGalleryUrlsChange={setGalleryUrls}
+          onImageUrlChange={setImageUrl}
         />
 
         <div className="mx-auto w-full max-w-screen-2xl px-2 md:px-4">
@@ -412,7 +535,7 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
 
 function Info({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="space-y-1">
+    <div className="min-w-0 space-y-1">
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className={cn('font-medium', mono && 'font-mono text-xs')}>{value}</p>
     </div>
