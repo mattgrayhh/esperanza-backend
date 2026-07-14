@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/attachment';
 import { Spinner } from '@/components/ui/spinner';
 import { ImageIcon, UploadIcon, RefreshCwIcon, XIcon, FileTextIcon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 const AIRTABLE_HOST = 'airtableusercontent.com';
 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'avif'];
@@ -231,22 +232,26 @@ export function ImageUploader({
                 <XIcon />
               </AttachmentAction>
             ) : null}
-            {!useVerticalImage || !hasFile ? (
-              <AttachmentAction
-                type="button"
-                aria-label={hasFile ? `Replace ${title}` : `Upload ${label}`}
-                disabled={pending}
-                onClick={() => fileRef.current?.click()}
-              >
-                {pending ? (
-                  <Spinner className="size-3.5" />
-                ) : hasFile ? (
-                  <RefreshCwIcon />
-                ) : (
-                  <UploadIcon />
-                )}
-              </AttachmentAction>
-            ) : null}
+            <AttachmentAction
+              type="button"
+              aria-label={
+                inheritedPreview
+                  ? `Upload override for ${label}`
+                  : hasFile
+                    ? `Replace ${title}`
+                    : `Upload ${label}`
+              }
+              disabled={pending}
+              onClick={() => fileRef.current?.click()}
+            >
+              {pending ? (
+                <Spinner className="size-3.5" />
+              ) : hasFile && !inheritedPreview ? (
+                <RefreshCwIcon />
+              ) : (
+                <UploadIcon />
+              )}
+            </AttachmentAction>
           </AttachmentActions>
 
           {hasFile ? (
@@ -280,6 +285,19 @@ export function ImageUploader({
         className="hidden"
       />
 
+      {inheritedPreview ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 w-fit"
+          disabled={pending}
+          onClick={() => fileRef.current?.click()}
+        >
+          <UploadIcon className="size-3.5" />
+          Upload / Replace to override
+        </Button>
+      ) : null}
     </div>
   );
 }

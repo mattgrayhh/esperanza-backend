@@ -103,7 +103,7 @@ Field `type` → widget mapping (`typeToWidget()`):
 | `rich` | `RichTextEditor` — universal TipTap WYSIWYG (headings, bullet/numbered lists, bold/italic, links, quotes, inline R2 images) for ALL rich fields |
 | `image` | `ImageUploader` — rail: full-width vertical preview (`compact`); main form: horizontal `sm` row |
 | `imageGallery` / `elevationGallery` | `ImageGalleryEditor` / elevation grid editor |
-| `syncedOverride` (QMI etc.) | `SyncedOverrideField` — shows the Snowflake `synced_` value + an override box |
+| `syncedOverride` (QMI etc.) | `SyncedOverrideField` — locked synced value + unlock/override box; `override` badge only when pinned (no SYNCED badge) |
 | bespoke: `hoaLinks`, `jsonBlocks`, `promoScopeTag`, `communityFloorPlans` | custom editors with their own save buttons |
 
 #### Rich-text editor (`RichTextEditor`)
@@ -130,13 +130,12 @@ visually — no markdown syntax. Notes:
     reseed `field_definitions` `--remote` → `/push-schema` (re-types `qmi.description`
     `string`→`formattedText`) → deploy → `/backfill?keys=qmi` (long timeout, ~356 homes).
   - **`qmi.floor_plan_image` (optional home override):** blank inherits the linked plan's
-    top-down layout (`floor_plans.floor_plan_image` via JOIN). Upload on the QMI media rail
-    only when the production home differs from the standard plan sketch — same override
-    pattern as description. framer-push emits `COALESCE(qmi override, plan default)`.
-    The uploader (`ImageUploader`) renders floor-plan/diagram fields **`object-contain`
-    (uncropped)** — the generic square `object-cover` chip crops wide layouts, which looked
-    like a broken/stale image and masked successful PNG swaps. The `isDiagram` branch
-    (field/label matches `floor_plan`) reuses the existing logo "contain" treatment. NB: a
+    top-down layout (`floor_plans.floor_plan_image` via JOIN). Compact media-rail preview
+    shows the plan image with **Upload / Replace to override** (chip action + outline
+    button) so you can pin a home-specific sketch without clearing the inherited preview
+    first. Blank on save inherits again; framer-push emits
+    `COALESCE(qmi override, plan default)`. The uploader renders floor-plan/diagram fields
+    **`object-contain` (uncropped)** — square `object-cover` crops wide layouts. NB: a
     `floor_plan_image` still stored as a **PDF** shows a file icon, not an image — that
     needs the brochure→PNG conversion (data fix), not a UI change.
   - **`qmi` photo gallery inherits master-plan photos:** the editable **Photo Gallery**
@@ -147,15 +146,33 @@ visually — no markdown syntax. Notes:
     — click to add/remove, or **Add all** — so no new column/migration is needed. Uploading
     actual home photos is unchanged. Blank gallery still falls back to `image_url`/plan on
     the site.
+  - **QMI MarkSystems → Site elevation render picker:** inside the collapsed **MarkSystems**
+    panel (`#section-from-marksystems`), marketing picks which linked-plan elevation
+    rendering (`floor_plans.elevation_gallery`) is this home's site **Main Image**
+    (`qmi.image_url`). Cards show thumbnail + title (stored elevation type, else derived
+    from the filename via `deriveElevationType`). Selecting a card writes `image_url` (same
+    field as the live-site header hero — blank still inherits plan/`fp_image` on the site;
+    `override` badge only when a render is selected). When the title/filename is a
+    canonical style+material (e.g. `Tuscan Brick` → style `Tuscan`, material `Brick`), the
+    picker also unlocks **Elevation Type** + **Material Type** SyncedOverrideFields on Save;
+    Farmhouse clears material. Gaps: Hardie (and other non-Brick/Stucco/Stone) filenames
+    don't derive; the free-text **Elevation** override is left alone (Snowflake strings
+    like `Kestrel - Traditional - Brick` aren't reconstructed from the render). Panel
+    auto-opens when the plan has elevation renders. Top-down **Floor Plan Image** (layout
+    sketch) stays in the media rail — separate from this exterior render pick.
   - **`qmi.nter_now` (self-tour link):** the Marketing section now has a **Self-Tour Link
-    (NterNow)** URL field beside the Self Tour Available toggle. The toggle only flags the
-    banner; this is the actual booking URL it opens. Plain admin column — saved via
-    `saveEntity` like any other.
-  - **`qmi.virtual_tour_url` (inherit-with-fallback):** per-home 3D/video tour. When the
-    home's own value is blank and the linked plan has a `floor_plans.virtual_tour_url`, the
-    media rail shows the plan tour with a **Use plan tour** button that fills it in (same
-    inherit UX as `floor_plan_image`). Kept per-spec (one-click inherit) rather than forced
-    re-entry.
+    (NterNow)** URL field beside the Show "Self Tour Available" Banner? toggle. The toggle
+    only flags the banner; this is the actual booking URL it opens. Plain admin column —
+    saved via `saveEntity` like any other.
+  - **`qmi.virtual_tour_url` (locked inherit / unlock override):** media rail shows the
+    linked plan’s `floor_plans.virtual_tour_url` locked by default (no badge while
+    inheriting). Unlock to set a home-specific URL (`override` badge only when pinned);
+    re-lock / clear + save writes blank and inherits the plan tour again — same pattern
+    as description / floor-plan image.
+  - **`qmi.slug` (locked / unlock edit):** Overview card shows the marketing-owned URL
+    slug locked by default (no badge — not Snowflake). Unlock to edit, then Save
+    via `saveEntity` (`slug`). Re-lock restores the loaded value without clearing. Move-In
+    Date’s clear control stays inside the date trigger so it cannot bleed onto Slug.
   - **`qmi.latitude` / `qmi.longitude` (Map Coordinates → Get Directions):** a **Map
     Coordinates** section on the detail page edits the per-home lat/long that drive the
     spec page's Get-Directions button + map pin (already served to the site; previously
@@ -168,12 +185,15 @@ visually — no markdown syntax. Notes:
     duplicated under Overview). Overview stats: beds / baths / Total SqFt / Living SqFt,
     then a second-row price box with pencil override (`QmiPriceOverrideStat` — same
     `price` submit contract as SyncedOverrideField; not duplicated under MarkSystems).
-    Floor Plan Assignment lives in the collapsed MarkSystems panel.
+    Floor Plan Assignment lives in the MarkSystems panel (below the Site elevation
+    render picker). **Model Home (`is_model_home`)** is not shown in that panel —
+    Snowflake-synced only; no admin override UI (DB columns unchanged).
   - **QMI listing card preview:** Marketing opens with a live-style listing card
-    (`QmiListingCardPreview`) above Incentive. Hover/focus Incentive, Availability Text,
-    Available Now, or Self Tour Available spotlights the matching banner (tan incentive,
-    gray/green availability, self-tour + house icon) while the rest of the image fades.
-    Edits update the preview live; Available Now forces a green **AVAILABLE NOW** banner.
+    (`QmiListingCardPreview`) above Incentive Banner Text. Hover/focus Incentive Banner
+    Text, Availability Text, Available Now, or Show "Self Tour Available" Banner?
+    spotlights the matching banner (tan incentive, gray/green availability, self-tour +
+    house icon) while the rest of the image fades. Edits update the preview live; Available
+    Now forces a green **AVAILABLE NOW** banner.
 - **Toolbar offers H1/H2/H3 + Body.** H1 is available because it was requested, but a Framer
   page already has its own page-title H1 — prefer H2/H3 for in-body section headings to avoid
   duplicate-H1 SEO.
@@ -212,6 +232,10 @@ after the D1 commit. `postWrite()`:
 - enqueues `env.FRAMER_QUEUE.send({collection, action:'upsert', id})` so framer-push
   re-reads the row and updates Framer;
 - for entities with brochures, marks PDFs stale via the render queue.
+
+**Exception:** unpublished draft creates (`createEntity` / `createCommunityDraft`) pass
+`{ sync: false }` — audit only. Empty drafts stay local until the operator saves or
+publishes; those paths still run the full sync fan-out.
 
 `actor` is the logged-in user's email from the Auth.js session.
 
@@ -344,6 +368,17 @@ present — targeting-only edits still save (runs before the empty-patch early-r
 The four scope columns (Cities / Communities / Floor Plans / QMIs) render as stacked
 accordion rows (`Collapsible` from `@base-ui/react`). Sections with active selections
 open by default; empty sections collapse. Count badges remain visible on closed headers.
+
+### Creating a new community
+
+The Communities list (and dashboard) **New** control posts `createCommunityDraft`
+(`createEntity('communities')` + redirect) and lands on `/communities/{id}` —
+no interstitial, no dedicated create page. Create is local/fast: D1 insert +
+`create` audit only (no Framer enqueue, cache purge, or PDF register). Site sync
+starts on the first save or publish. A thin `/communities/new` route only
+redirects to the list (stale bookmarks). Generic entities and blogs still use
+the confirm-then-create `/new` card so an accidental click does not litter empty
+rows.
 
 ### Community HOA links + floor plans save with the page Save
 

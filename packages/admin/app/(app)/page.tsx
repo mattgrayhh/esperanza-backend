@@ -8,8 +8,9 @@
 //
 // Reframed from "scoreboard" to "worklist". The page leads with a Needs-attention
 // band (what the operator should DO next), then a compact at-a-glance status, then
-// humanized recent activity + collection nav. It only READS — it does NOT touch
-// auth, server actions, the engine, or synced/override + promo-scope semantics.
+// humanized recent activity + collection nav. Mutations are limited to the
+// Communities "New" affordance (createCommunityDraft) in the collections jump
+// list; everything else is read-only.
 //
 // Readiness (the heart of the Needs-attention band) follows the team's real
 // publish gate for a Quick Move-In:
@@ -42,6 +43,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { getReadDb } from '@/lib/db';
+import { createCommunityDraft } from '@/lib/actions';
+import { CreateDraftIconButton } from '@/components/CreateDraftButton';
 import { ENTITY_LIST, type EntityKey } from '@/lib/entities';
 import {
   type AuditRow,
@@ -472,13 +475,19 @@ export default async function DashboardPage() {
                   >
                     {e.label}
                   </Link>
-                  <Link
-                    href={`/${e.segment}/new`}
-                    aria-label={`New ${e.label}`}
-                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color,background-color] duration-150 hover:bg-background hover:text-primary group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50"
-                  >
-                    <PlusIcon className="size-4" />
-                  </Link>
+                  {e.segment === 'communities' ? (
+                    <form action={createCommunityDraft}>
+                      <CreateDraftIconButton aria-label={`New ${e.label}`} />
+                    </form>
+                  ) : (
+                    <Link
+                      href={`/${e.segment}/new`}
+                      aria-label={`New ${e.label}`}
+                      className="flex size-8 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color,background-color] duration-150 hover:bg-background hover:text-primary group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50"
+                    >
+                      <PlusIcon className="size-4" />
+                    </Link>
+                  )}
                   <Link
                     href={`/${e.segment}`}
                     aria-label={`Open ${e.label}`}

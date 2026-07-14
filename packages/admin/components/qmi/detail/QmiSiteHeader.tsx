@@ -15,6 +15,7 @@ export function QmiSiteHeader({
   heroFallbackUrl,
   galleryUrls,
   onGalleryUrlsChange,
+  onImageUrlChange,
   className,
 }: {
   id: string;
@@ -24,6 +25,7 @@ export function QmiSiteHeader({
   heroFallbackUrl: string;
   galleryUrls: string[];
   onGalleryUrlsChange: (urls: string[]) => void;
+  onImageUrlChange?: (url: string) => void;
   className?: string;
 }) {
   const galleryUrlAt = useCallback(
@@ -69,6 +71,7 @@ export function QmiSiteHeader({
           label="Main Image"
           initialUrl={imageUrl}
           fallbackPreviewUrl={heroFallbackUrl}
+          onUrlChange={onImageUrlChange}
           className="min-h-[220px] md:col-span-2 md:min-h-[420px]"
         />
 

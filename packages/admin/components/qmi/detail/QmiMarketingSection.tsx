@@ -89,7 +89,7 @@ export function QmiMarketingSection({
 
         <div className="grid gap-1.5 text-sm" {...spotlightHandlers('incentive')}>
           <FieldLabel
-            label="Incentive"
+            label="Incentive Banner Text"
             help="Tan banner on the listing card (e.g. Unlock Your $20K Flex Discount Now!)."
           />
           <Textarea
@@ -134,7 +134,7 @@ export function QmiMarketingSection({
 
           <div className="grid gap-1.5 text-sm" {...spotlightHandlers('self_tour')}>
             <FieldLabel
-              label="Self Tour Available"
+              label='Show "Self Tour Available" Banner?'
               help="Shows the Self-Touring Available banner (with house icon) on the listing card."
             />
             <div className="flex h-8 items-center gap-2">

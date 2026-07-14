@@ -7,7 +7,12 @@
 // =============================================================================
 
 import { describe, it, expect } from 'vitest';
-import { deriveElevationType, parseTypedGallery, ELEVATION_TYPES } from '../lib/elevation-types';
+import {
+  deriveElevationType,
+  parseTypedGallery,
+  splitElevationLabel,
+  ELEVATION_TYPES,
+} from '../lib/elevation-types';
 
 describe('deriveElevationType', () => {
   it('composes style + material', () => {
@@ -47,6 +52,38 @@ describe('deriveElevationType', () => {
       const t = deriveElevationType(f)!;
       expect(ELEVATION_TYPES).toContain(t);
     }
+  });
+});
+
+describe('splitElevationLabel', () => {
+  it('splits style + material into MarkSystems columns', () => {
+    expect(splitElevationLabel('Tuscan Brick')).toEqual({
+      elevationType: 'Tuscan',
+      materialType: 'Brick',
+    });
+    expect(splitElevationLabel('Contemporary Stucco')).toEqual({
+      elevationType: 'Contemporary',
+      materialType: 'Stucco',
+    });
+  });
+
+  it('handles Farmhouse (no material) and slash labels', () => {
+    expect(splitElevationLabel('Farmhouse')).toEqual({
+      elevationType: 'Farmhouse',
+      materialType: null,
+    });
+    expect(splitElevationLabel('Tuscan / Stucco')).toEqual({
+      elevationType: 'Tuscan',
+      materialType: 'Stucco',
+    });
+  });
+
+  it('returns nulls when the label is not a canonical elevation', () => {
+    expect(splitElevationLabel('')).toEqual({ elevationType: null, materialType: null });
+    expect(splitElevationLabel('Custom Render')).toEqual({
+      elevationType: null,
+      materialType: null,
+    });
   });
 });
 

@@ -33,8 +33,8 @@ without it.
    own cached copy.
 3. **Wait one minute** and refresh again — pushes are fast but not literally
    instant.
-4. **Is the field synced (lock badge)?** If you edited upstream in
-   MarkSystems, it appears after the next 4-hour sync. If you need it now,
-   hit **Sync now** on the Dashboard, or use `Unlock to override`.
+4. **Is the field synced (locked)?** If you edited upstream in MarkSystems,
+   it appears after the next 4-hour sync. If you need it now, hit **Sync now**
+   on the Dashboard, or use `Unlock to override`.
 5. Still stuck after ~10 minutes? Tell a Full Admin — they can check the sync
    dashboard and re-push.

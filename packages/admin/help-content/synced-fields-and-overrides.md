@@ -8,10 +8,11 @@ summary: What the lock means, how to override a synced value, and how to undo it
 keywords: lock, unlock, override, snowflake, synced, revert, follow, close-out, closeout, homes from, price from, sold out
 ---
 
-Fields that Snowflake fills automatically show a `synced` badge and appear
-**locked** — the box shows the current synced value and can't be typed in.
-That's on purpose: as prices, square footage, or dates change in MarkSystems,
-these fields keep themselves up to date.
+Fields that Snowflake fills automatically appear **locked** — the box shows
+the current synced value and can't be typed in. That's on purpose: as prices,
+square footage, or dates change in MarkSystems, these fields keep themselves
+up to date. No badge while following Snowflake; an `override` badge appears
+only after you unlock and pin a value.
 
 ## Which fields are synced?
 

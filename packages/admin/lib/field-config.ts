@@ -237,7 +237,7 @@ const qmi: EntityFieldConfig = {
     { field: of('lot_number'), label: 'Lot Number', widget: 'syncedOverride', bucket: 'override', halfWidth: true },
     { field: of('elevation_type'), label: 'Elevation Type', widget: 'syncedOverride', bucket: 'override', halfWidth: true },
     { field: of('material_type'), label: 'Material Type', widget: 'syncedOverride', bucket: 'override', halfWidth: true },
-    { field: of('is_model_home'), label: 'Model Home', widget: 'syncedOverride', bucket: 'override', step: '1', halfWidth: true, help: '1 = model home, 0 = not. Blank follows Snowflake.' },
+    { field: of('is_model_home'), label: 'Model Home', widget: 'syncedOverride', bucket: 'override', step: '1', halfWidth: true, visibleInForm: false, help: '1 = model home, 0 = not. Blank follows Snowflake. Hidden in admin — Snowflake-only.' },
 
     // ── synced-only operational facts (read-only; no override pair) ──
     { field: 'synced_start_type', label: 'Start Type (synced)', widget: 'text', bucket: 'synced', halfWidth: true, help: 'SPEC vs Pre-Sold. Read-only synced value.' },

@@ -15,7 +15,7 @@ Opening a community now shows a page built around how that community actually ap
 
 **Stat cards.** Four read-only summaries pulled live: City, Starting Price, the number of Quick Move-In homes in the community, and the number of floor plans offered here. These are calculated on every load, so they always match reality.
 
-**Basic Information & Specs.** The fields that come from Snowflake — Starting Price, Living Sq Ft, Bedrooms, Bathrooms — each show their **sync status**. A field shows the synced value by default; tick the override to type your own. Blank override = use Snowflake; a value = pin your override. See [Synced fields and overrides](synced-fields-and-overrides) for the full rules. Name, Slug, Town, and Master Planned sit here too.
+**Basic Information & Specs.** The fields that come from Snowflake — Starting Price, Living Sq Ft, Bedrooms, Bathrooms — show the synced value locked by default. Tick unlock to type your own; an `override` badge appears only when a value is pinned. Blank / re-lock = follow Snowflake. See [Synced fields and overrides](synced-fields-and-overrides) for the full rules. Name, Slug, Town, and Master Planned sit here too.
 
 **Location.** This is a live preview of the community's pin exactly as it renders on the public map — the green community pin and the hover card (image, name, city, "From $price"). It uses the community's latitude/longitude. If the map shows an empty state, the community is missing coordinates — add Latitude and Longitude in the fields below to make the pin appear.
 

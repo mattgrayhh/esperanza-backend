@@ -7,6 +7,7 @@ import { notFound } from 'next/navigation';
 import { ENTITY_LIST } from '@/lib/entities';
 import { HELP_LINKS_BY_ENTITY } from '@/lib/help-links.generated';
 import { buildListView } from '@/lib/build-list-view';
+import { createCommunityDraft } from '@/lib/actions';
 import {
   DataTable,
   type DataTableColumn,
@@ -57,6 +58,7 @@ export default async function EntityListPage({
       truncated={view.truncated}
       groupByField={def.segment === 'communities' ? 'town' : undefined}
       groupByLabel={def.segment === 'communities' ? 'Town' : undefined}
+      createAction={def.segment === 'communities' ? createCommunityDraft : undefined}
     />
   );
 }
