@@ -19,6 +19,7 @@ import { PublishedToggle } from '@/components/fields/PublishedToggle';
 import { LOCATION_STATUS } from '@/lib/status';
 import { CopyableId } from './CopyableId';
 import { QmiAssignFloorPlan } from './QmiAssignFloorPlan';
+import { QmiElevationSelect } from './QmiElevationSelect';
 import { QmiSiteHeader } from './QmiSiteHeader';
 import { QmiPriceOverrideStat } from './QmiPriceOverrideStat';
 import { QmiMarketingSection } from './QmiMarketingSection';
@@ -111,6 +112,10 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
               : 'Upload only when this home’s layout differs from the standard plan sketch.'
         }
         compact
+      />
+      <QmiElevationSelect
+        options={view.admin.elevationOptions}
+        selection={view.admin.elevationSelection}
       />
       <div className="grid gap-1.5 text-sm">
         <FieldLabel
@@ -237,8 +242,11 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
               <SyncedOverrideField {...view.syncedOverride.totalSquareFootage} />
               <SyncedOverrideField {...view.syncedOverride.elevation} />
               <SyncedOverrideField {...view.syncedOverride.lotNumber} />
-              <SyncedOverrideField {...view.syncedOverride.elevationType} />
-              <SyncedOverrideField {...view.syncedOverride.materialType} />
+              {/* elevation_type + material_type are set together via the Elevation
+                  dropdown in the Media rail (QmiElevationSelect) — a single control that
+                  picks a gallery elevation and splits it into the two override columns.
+                  Rendering the raw SyncedOverrideField text inputs here too would submit
+                  the same field names twice. */}
               <SyncedOverrideField {...view.syncedOverride.isModelHome} />
               {!view.isUnassigned ? (
                 <>

@@ -47,6 +47,7 @@ import {
   type PromoTargetType,
 } from '@esperanza/db/promo';
 import { COMMUNITY_PLAN_PRICE_SQL } from '@esperanza/db/elevation-price';
+import { pickElevationImage, composeElevation } from '@esperanza/db/elevation-image';
 import { buildSiteSearchPayload } from './sitesearch.js';
 import * as Sentry from '@sentry/cloudflare';
 
@@ -338,7 +339,24 @@ export function serializeQmiRow(row: Row, resolved: ResolvedPromo | null): RawAi
   const gallery = parseGallery(row['photo_gallery_json']);
   if (gallery.length) fields['photo_gallery'] = gallery;
 
+  // Hero elevation image: when the home's effective elevation (the view already
+  // COALESCEs override→synced type + material) matches a typed entry in the plan's
+  // elevation gallery, serve THAT image as FP: Image so the hero shows the correct
+  // elevation instead of the plan's single default. image_url (emitted above) still
+  // wins on the consumer side; with no match fp_image is emitted verbatim — the
+  // precedence is image_url ?? elevationMatch ?? fp_image, zero regression.
+  const heroElevationUrl = pickElevationImage(
+    row['fp_elevation_gallery'],
+    composeElevation(asStr(row['elevation_type']), asStr(row['material_type']))
+  );
+
   for (const [col, label] of QMI_FP) {
+    if (col === 'fp_image' && heroElevationUrl) {
+      // ponytail: emit the matched url as a minimal attachment ({url}); the gallery
+      // stores plain R2 urls with no thumbnails, and consumers read [0].url.
+      fields[label] = [{ url: heroElevationUrl }];
+      continue;
+    }
     const arr = fpArray(row[col]);
     if (arr !== undefined) fields[label] = arr;
   }

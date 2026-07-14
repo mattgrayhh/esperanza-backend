@@ -22,6 +22,8 @@ import { eq, inArray } from 'drizzle-orm';
 import { getReadDb } from './db';
 import { qmi, floorPlans, communities, cities, promotions, promotionTargets } from '@esperanza/db';
 import { effectiveValue } from '@esperanza/db/override';
+import { pickElevationImage, composeElevation } from '@esperanza/db/elevation-image';
+import { parseTypedGallery } from './elevation-types';
 import { loadOptions, type SelectOption } from './select-options';
 import { deriveStatus } from './status';
 import { buildLiveSitePlacement, type LiveSitePlacement } from './live-site';
@@ -197,8 +199,15 @@ export interface QmiDetailView {
     floorPlanImageDefault: string;
     /** Home-level hero (`image_url`); blank → floor-plan rendering on the live site. */
     imageUrl: string;
-    /** First resolved gallery image — preview fallback for the main hero slot. */
+    /** Hero preview fallback: the plan image matching this home's elevation (if any),
+     *  else the first resolved gallery image. Mirrors the public precedence. */
     heroFallbackUrl: string;
+    /** Elevation dropdown options — the linked plan's gallery `type` labels
+     *  ("<Style> <Material>", deduped, non-empty). Empty when no plan / no gallery. */
+    elevationOptions: string[];
+    /** Current elevation selection: the composed effective (override||synced) elevation
+     *  when it matches one of `elevationOptions`, else '' (follows plan default). */
+    elevationSelection: string;
   };
 
   options: {
@@ -324,6 +333,27 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
   // De-dupe by url (fp_image may repeat in additional images).
   const seen = new Set<string>();
   const dedupedGallery = gallery.filter((g) => (seen.has(g.url) ? false : (seen.add(g.url), true)));
+
+  // Elevation → hero image. The plan's typed elevation gallery drives both the
+  // dropdown options and the hero-preview fallback. The home's effective elevation is
+  // composed from override||synced type + material (same COALESCE as v_public_qmi).
+  const effElevationType = s(effectiveValue(r.synced_elevation_type, r.override_elevation_type));
+  const effMaterialType = s(effectiveValue(r.synced_material_type, r.override_material_type));
+  const composedElevation = composeElevation(effElevationType, effMaterialType);
+  const elevationOptions = [
+    ...new Set(
+      parseTypedGallery(s(fp?.elevation_gallery))
+        .map((g) => g.type.trim())
+        .filter((t) => t !== '')
+    ),
+  ];
+  // Selection = the composed elevation IF it matches an option (case-insensitive), else ''.
+  const elevationSelection =
+    elevationOptions.find((o) => o.toLowerCase() === composedElevation.toLowerCase()) ?? '';
+  // Hero preview: prefer the plan image matching this home's elevation, then the first
+  // resolved gallery image (fp_image) — mirrors the public serializer's precedence.
+  const heroFallbackUrl =
+    pickElevationImage(s(fp?.elevation_gallery), composedElevation) ?? dedupedGallery[0]?.url ?? '';
 
   // Master-plan photos offered as selectable defaults in the editable gallery. Sourced
   // ONLY from the linked floor plan (clean R2 interior_photos_json first, then the
@@ -511,7 +541,9 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
       floorPlanImage: s(r.floor_plan_image),
       floorPlanImageDefault: s(fp?.floor_plan_image),
       imageUrl: s(r.image_url),
-      heroFallbackUrl: dedupedGallery[0]?.url ?? '',
+      heroFallbackUrl,
+      elevationOptions,
+      elevationSelection,
     },
 
     options: {

@@ -66,7 +66,11 @@ SELECT
   q.image_url, q.og_image_url, q.floor_plan_image, q.page_url, q.dynamic_pdf,
   q.featured_image, q.image_2, q.image_3, q.image_4, q.image_5,
   q.photo_gallery_json,    -- 0010: per-home gallery, JSON array of {url, alt}
-  q.description, q.upgrades, q.incentive, q.virtual_tour_url,
+  q.description, q.upgrades, q.incentive,
+  -- Virtual tour inherits the home's linked FLOOR PLAN tour when the home has none of its
+  -- own (per QA: the QMI should show the floor plan's tour). fp_virtual_tour is still
+  -- exposed below for the admin's explicit per-home override UI.
+  COALESCE(NULLIF(q.virtual_tour_url, ''), fp.virtual_tour_url) AS virtual_tour_url,
   q.mls_id, q.mls_number, q.year_built, q.lot_size_sqft,
   q.hers_score, q.arm_rate, q.promo_text, q.availability_text, q.nter_now, q.cities,
   q.posted, q.publish_date, q.last_modified_time,
@@ -87,6 +91,7 @@ SELECT
   fp.description            AS fp_description,
   fp.fp_image               AS fp_image,
   fp.fp_additional_images   AS fp_additional_images,
+  fp.elevation_gallery      AS fp_elevation_gallery,  -- typed [{url,type}] — QMI hero picks the image matching the home's elevation
   COALESCE(fp.override_starting_price, fp.synced_starting_price) AS fp_starting_price,
   fp.virtual_tour_url       AS fp_virtual_tour,
   fp.plan_viewer_url        AS fp_plan_viewer,
