@@ -204,7 +204,9 @@ export interface QmiDetailView {
     heroFallbackUrl: string;
     /** Elevation dropdown options — the linked plan's gallery `type` labels
      *  ("<Style> <Material>", deduped, non-empty). Empty when no plan / no gallery. */
-    elevationOptions: string[];
+    /** The linked plan's elevation renderings (deduped by type) — {url,type} so the
+     *  admin can show a visual picker (image + label). */
+    elevationOptions: { url: string; type: string }[];
     /** Current elevation selection: the composed effective (override||synced) elevation
      *  when it matches one of `elevationOptions`, else '' (follows plan default). */
     elevationSelection: string;
@@ -340,16 +342,18 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
   const effElevationType = s(effectiveValue(r.synced_elevation_type, r.override_elevation_type));
   const effMaterialType = s(effectiveValue(r.synced_material_type, r.override_material_type));
   const composedElevation = composeElevation(effElevationType, effMaterialType);
-  const elevationOptions = [
-    ...new Set(
-      parseTypedGallery(s(fp?.elevation_gallery))
-        .map((g) => g.type.trim())
-        .filter((t) => t !== '')
-    ),
-  ];
+  const seenElevType = new Set<string>();
+  const elevationOptions = parseTypedGallery(s(fp?.elevation_gallery))
+    .map((g) => ({ url: g.url, type: g.type.trim() }))
+    .filter((g) => {
+      const key = g.type.toLowerCase();
+      if (g.type === '' || !g.url || seenElevType.has(key)) return false;
+      seenElevType.add(key);
+      return true;
+    });
   // Selection = the composed elevation IF it matches an option (case-insensitive), else ''.
   const elevationSelection =
-    elevationOptions.find((o) => o.toLowerCase() === composedElevation.toLowerCase()) ?? '';
+    elevationOptions.find((o) => o.type.toLowerCase() === composedElevation.toLowerCase())?.type ?? '';
   // Hero preview: prefer the plan image matching this home's elevation, then the first
   // resolved gallery image (fp_image) — mirrors the public serializer's precedence.
   const heroFallbackUrl =

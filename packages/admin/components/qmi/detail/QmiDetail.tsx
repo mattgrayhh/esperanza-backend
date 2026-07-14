@@ -20,6 +20,7 @@ import { LOCATION_STATUS } from '@/lib/status';
 import { CopyableId } from './CopyableId';
 import { QmiAssignFloorPlan } from './QmiAssignFloorPlan';
 import { QmiElevationSelect } from './QmiElevationSelect';
+import { QmiTourField } from './QmiTourField';
 import { QmiSiteHeader } from './QmiSiteHeader';
 import { QmiPriceOverrideStat } from './QmiPriceOverrideStat';
 import { QmiMarketingSection } from './QmiMarketingSection';
@@ -27,8 +28,6 @@ import { ExpandableDescription } from './ExpandableDescription';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { FieldLabel } from '@/components/fields/FieldLabel';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -57,7 +56,6 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
   const [galleryUrls, setGalleryUrls] = useState(() => parseGalleryUrls(view.photoGalleryJson));
   // Virtual tour is a per-home field; when blank it can inherit the assigned plan's tour
   // (one click), mirroring how the Floor Plan Image falls back to the plan default.
-  const [virtualTourUrl, setVirtualTourUrl] = useState(view.admin.virtualTourUrl);
   const {
     pending,
     startTransition,
@@ -117,36 +115,10 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
         options={view.admin.elevationOptions}
         selection={view.admin.elevationSelection}
       />
-      <div className="grid gap-1.5 text-sm">
-        <FieldLabel
-          label="Virtual Tour URL"
-          help="Per-home 3D/video tour. Leave blank to inherit the floor plan's tour (use the button below)."
-        />
-        <Input
-          name="virtual_tour_url"
-          type="url"
-          inputMode="url"
-          placeholder="https://…"
-          value={virtualTourUrl}
-          onChange={(e) => setVirtualTourUrl(e.target.value)}
-        />
-        {virtualTourUrl.trim() === '' && view.admin.virtualTourUrlDefault.trim() ? (
-          <div className="flex items-center justify-between gap-2 rounded-md border border-dashed bg-muted/40 px-2 py-1.5">
-            <span className="min-w-0 truncate text-xs text-muted-foreground" title={view.admin.virtualTourUrlDefault}>
-              Plan tour: {view.admin.virtualTourUrlDefault}
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 shrink-0"
-              onClick={() => setVirtualTourUrl(view.admin.virtualTourUrlDefault)}
-            >
-              Use plan tour
-            </Button>
-          </div>
-        ) : null}
-      </div>
+      <QmiTourField
+        planTour={view.admin.virtualTourUrlDefault}
+        ownValue={view.admin.virtualTourUrl}
+      />
       <ImageGalleryEditor
         entity="qmi"
         id={view.id}
@@ -363,6 +335,26 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
             statusText={barStatusText}
             statusTone={barTone}
             title={titleWithStatus}
+            children={
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="shrink-0"
+                disabled={pending}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      'Discard unsaved changes and reload? Note: images you already replaced are saved immediately and will not revert.',
+                    )
+                  ) {
+                    window.location.reload();
+                  }
+                }}
+              >
+                Discard changes
+              </Button>
+            }
             footer={
               <div className="flex flex-wrap items-center gap-2">
                 <CopyableId label="Housemaster" value={view.housenumber} />

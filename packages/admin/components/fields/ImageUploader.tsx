@@ -231,22 +231,24 @@ export function ImageUploader({
                 <XIcon />
               </AttachmentAction>
             ) : null}
-            {!useVerticalImage || !hasFile ? (
-              <AttachmentAction
-                type="button"
-                aria-label={hasFile ? `Replace ${title}` : `Upload ${label}`}
-                disabled={pending}
-                onClick={() => fileRef.current?.click()}
-              >
-                {pending ? (
-                  <Spinner className="size-3.5" />
-                ) : hasFile ? (
-                  <RefreshCwIcon />
-                ) : (
-                  <UploadIcon />
-                )}
-              </AttachmentAction>
-            ) : null}
+            {/* Always offer Replace/Upload. Previously hidden in compact/vertical mode
+                whenever a preview existed (including an INHERITED plan default), which
+                left per-home floor-plan images with no way to be replaced — the operator
+                only saw an "open in new tab" link. */}
+            <AttachmentAction
+              type="button"
+              aria-label={hasFile ? `Replace ${title}` : `Upload ${label}`}
+              disabled={pending}
+              onClick={() => fileRef.current?.click()}
+            >
+              {pending ? (
+                <Spinner className="size-3.5" />
+              ) : hasFile ? (
+                <RefreshCwIcon />
+              ) : (
+                <UploadIcon />
+              )}
+            </AttachmentAction>
           </AttachmentActions>
 
           {hasFile ? (

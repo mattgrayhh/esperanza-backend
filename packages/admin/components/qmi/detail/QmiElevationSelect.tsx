@@ -1,34 +1,30 @@
 'use client';
 
 // =============================================================================
-// QmiElevationSelect — picks which ELEVATION this spec home is, from the linked
-// floor plan's typed elevation gallery. The choice drives the hero image (the
-// gallery entry whose `type` matches) both in the admin preview and on the site.
+// QmiElevationSelect — VISUAL picker for which ELEVATION this spec home is.
 //
-// Storage: no new column. The selected gallery `type` ("<Style> <Material>") is
-// split on the LAST space → override_elevation_type (style) + override_material_type
-// (material). Both submit under the existing override field names, so the normal
-// QMI Save persists them through the standard buildOverrideWrite path (actions.ts).
-// The blank "(match plan default)" option submits '' for both → clears the overrides
-// (the home follows its Snowflake-synced elevation again).
+// Shows the linked floor plan's elevation renderings as a thumbnail grid (image +
+// label). Selecting one sets the hero image (the gallery entry whose `type` matches)
+// on the live site and in the admin preview.
+//
+// Storage: no new column. The selected gallery `type` ("<Style> <Material>") is split
+// on the LAST space → override_elevation_type (style) + override_material_type
+// (material), submitted under the existing override field names, so the normal QMI
+// Save persists them via buildOverrideWrite (actions.ts). "Match plan default" submits
+// '' for both → clears the overrides (home follows its Snowflake-synced elevation).
 // =============================================================================
 
 import { useState } from 'react';
+import { CheckIcon } from 'lucide-react';
 import { FieldLabel } from '@/components/fields/FieldLabel';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 export function QmiElevationSelect({
   options,
   selection,
 }: {
-  /** The linked plan's gallery `type` labels (deduped, non-empty). */
-  options: string[];
+  /** The linked plan's elevation renderings (deduped by type). */
+  options: { url: string; type: string }[];
   /** Composed effective elevation when it matches an option, else '' (plan default). */
   selection: string;
 }) {
@@ -44,24 +40,62 @@ export function QmiElevationSelect({
     <div className="grid gap-1.5 text-sm">
       <FieldLabel
         label="Elevation"
-        help="Which elevation this home is — sets the hero image to the matching plan rendering. Choose “(match plan default)” to clear it and follow the synced elevation."
+        help="Pick the elevation this home was built as — the hero image on the live site changes to the matching plan rendering. “Match plan default” clears it and follows the synced elevation."
       />
-      {/* The submitted overrides — split from the picked gallery type. */}
+      {/* Submitted overrides — split from the picked gallery type. */}
       <input type="hidden" name="elevation_type" value={style} />
       <input type="hidden" name="material_type" value={material} />
-      <Select value={value} onValueChange={(v) => setValue((v as string) ?? '')}>
-        <SelectTrigger className="w-full">
-          <SelectValue placeholder="(match plan default)" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="">(match plan default)</SelectItem>
-          {options.map((o) => (
-            <SelectItem key={o} value={o}>
-              {o}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+
+      {options.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          This home’s floor plan has no elevation renderings to choose from.
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {options.map((o) => {
+            const selected = value.toLowerCase() === o.type.toLowerCase();
+            return (
+              <button
+                key={o.type}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => setValue(selected ? '' : o.type)}
+                className={cn(
+                  'group/elev relative overflow-hidden rounded-lg border text-left transition-colors',
+                  selected ? 'border-primary ring-2 ring-primary/40' : 'border-input hover:border-ring'
+                )}
+              >
+                <div className="relative aspect-[4/3] w-full bg-muted">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={o.url}
+                    alt={o.type}
+                    className="absolute inset-0 size-full object-cover"
+                    loading="lazy"
+                  />
+                  {selected ? (
+                    <span className="absolute right-1 top-1 inline-flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      <CheckIcon className="size-3.5" />
+                    </span>
+                  ) : null}
+                </div>
+                <span className="block truncate px-2 py-1 text-xs font-medium text-foreground">
+                  {o.type}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {value !== '' ? (
+        <button
+          type="button"
+          onClick={() => setValue('')}
+          className="mt-0.5 w-fit text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+        >
+          Match plan default
+        </button>
+      ) : null}
     </div>
   );
 }
