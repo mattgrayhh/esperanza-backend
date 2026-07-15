@@ -352,7 +352,7 @@ export function ImageGrid({
                 <DialogTitle>Delete asset?</DialogTitle>
                 <DialogDescription>
                   This removes <span className="font-medium">{confirmDelete.filename}</span> from the
-                  library and queues a Framer push. This can&rsquo;t be undone.
+                  library. This can&rsquo;t be undone.
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter className="gap-2">

@@ -4,7 +4,7 @@
 //
 // OpenNext-on-Workers has no runtime filesystem, so articles are compiled into
 // a typed module at build time. Markdown → HTML uses the SAME dependency-free
-// converter the site content uses (framer-push/src/markdown.ts) plus a
+// converter the site content uses (packages/admin/lib/markdown.ts) plus a
 // standalone-image pass (`![alt](url)` on its own line) so the later
 // screenshot slots need no code changes.
 //
@@ -18,7 +18,7 @@
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { markdownToHtml } from '../../framer-push/src/markdown';
+import { markdownToHtml } from '../lib/markdown';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONTENT_DIR = join(__dirname, '..', 'help-content');

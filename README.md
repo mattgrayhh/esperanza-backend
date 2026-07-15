@@ -26,16 +26,11 @@ are gone.
                                                  └───┬────┘   └─────────┬────────┘
                                                      │ read              │ every write:
                                           v_public_* │ (replicas+Cache)  │ audit_log +
-                                                     ▼                   │ enqueue
+                                                     ▼                   │ cache purge
                                             ┌────────────────┐           ▼
-  public site / XML feed ◄── code-comp ◄────┤ api (edge read)│   ┌──────────────────┐
-  (live image URLs from R2 /               └────────────────┘   │esperanza-framer- │
-   media.esperanzahomes.com)                                     │     queue        │
-                                                                 └───────┬──────────┘
-                                                                         │ consume
-                                                                         ▼
-                                                          framer-push ──► Framer site
-                                                          (cron lookback + upsert)
+  public site / XML feed ◄── code-comp ◄────┤ api (edge read)│      PDF re-render queue
+  (live image URLs from R2 /               └────────────────┘
+   media.esperanzahomes.com)
 ```
 
 **Stores**
@@ -50,8 +45,6 @@ are gone.
 **Queues**
 - **`esperanza-sync-queue`** — producer: `ingest` cron. consumer: `ingest` (writes only
   allow-listed synced columns; forces `published=0` on sold/removed only, never `=1`).
-- **`esperanza-framer-queue`** — producers: `admin` (on every write) + `framer-push`
-  (cron lookback). consumer: `framer-push` (full per-entity upsert into Framer).
 
 **Packages** (npm workspaces, `packages/*`)
 
@@ -61,8 +54,7 @@ are gone.
 | `ingest` | Snowflake→D1 cron diff + queue consumer | `DB`, `IMAGES`, `SYNC_QUEUE` (prod+cons) |
 | `renderings` | OneDrive (MS Graph)→R2, `floor_plans.synced_image_url` | `DB`, `IMAGES` |
 | `api` | Public read API (edge), promo resolution at read time | `DB`, `IMAGES` |
-| `framer-push` | D1→Framer push (cron lookback + queue consumer) | `DB`, `FRAMER_QUEUE` (prod+cons) |
-| `admin` | Next.js 15 admin, all 9 entities, behind Cloudflare Access | `DB`, `IMAGES`, `FRAMER_QUEUE` (prod) |
+| `admin` | Next.js 15 admin, all 9 entities, behind Cloudflare Access | `DB`, `IMAGES` |
 
 The 9 entities: **QMI, Communities, Cities, Floor Plans, Promotions, Collections,
 Images, Blogs, Testimonials.**
@@ -101,18 +93,16 @@ npx wrangler r2 bucket create esperanza-cms
 #   R2 → esperanza-cms → Settings → Public access → Custom Domains → cdn.esperanzahomes.com
 # (the worker var IMAGES_PUBLIC_BASE_URL must match the host you attach — see §4 note).
 
-# --- Queues: the two pipelines, each with a dead-letter queue ---
+# --- Queues: Snowflake→D1 sync pipeline + dead-letter queue ---
 npx wrangler queues create esperanza-sync-queue          # Snowflake→D1 sync (ingest)
 npx wrangler queues create esperanza-sync-queue-dlq      # DLQ — referenced by ingest consumer
-npx wrangler queues create esperanza-framer-queue        # D1→Framer push (admin producer, framer-push consumer)
-npx wrangler queues create esperanza-framer-queue-dlq    # DLQ — referenced by framer-push consumer
 ```
-The DLQs are **required** (not optional): both consumers name them in `wrangler.toml`
-(`esperanza-sync-queue-dlq`, `esperanza-framer-queue-dlq`) and a deploy fails if they
-don't exist. Each DLQ is an inspection bucket with **no consumer** by design.
+The DLQ is **required** (not optional): the ingest consumer names it in `wrangler.toml`
+(`esperanza-sync-queue-dlq`) and a deploy fails if it doesn't exist. The DLQ is an
+inspection bucket with **no consumer** by design.
 
 ### 2. Fill the `database_id` placeholders  ⚠️ REQUIRED before any deploy/migration
-`wrangler d1 create esperanza` printed a `database_id`. **All 6** `wrangler.toml` files
+`wrangler d1 create esperanza` printed a `database_id`. **All 5** `wrangler.toml` files
 ship with `database_id = "REPLACE_AFTER_PROVISION"`. Replace the placeholder with the
 real id in every one:
 ```
@@ -120,7 +110,6 @@ packages/db/wrangler.toml
 packages/ingest/wrangler.toml
 packages/renderings/wrangler.toml
 packages/api/wrangler.toml
-packages/framer-push/wrangler.toml
 packages/admin/wrangler.toml
 ```
 Verify none remain:
@@ -138,11 +127,6 @@ Worker. You're prompted for the value interactively; nothing is written to the r
 npx wrangler secret put SNOWFLAKE_PASSWORD       # Snowflake REST login password
 npx wrangler secret put AIRTABLE_PAT             # ONE-TIME for the Phase 2 import (§5); revoke after
 
-# framer-push  — from packages/framer-push
-npx wrangler secret put FRAMER_API_KEY           # Framer "Token" (Site Settings → General)
-npx wrangler secret put FRAMER_PROJECT_URL       # full project URL
-npx wrangler secret put WEBHOOK_TOKEN            # Bearer for POST /<collection>, /cron, /backfill
-
 # renderings  — from packages/renderings  (MS Graph / OneDrive app registration)
 npx wrangler secret put MS_GRAPH_TENANT_ID
 npx wrangler secret put MS_GRAPH_CLIENT_ID
@@ -153,9 +137,7 @@ npx wrangler secret put MS_GRAPH_CLIENT_SECRET
 #          Only non-secret [vars]: IMAGES_PUBLIC_BASE_URL (and optional CF_ACCESS_* for
 #          belt-and-suspenders JWT verification).
 ```
-Also set the per-Worker `FRAMER_COLLECTION_*` names on framer-push if the Framer
-collection display names differ from the defaults (commented in
-`packages/framer-push/wrangler.toml`). For local dev, copy each
+For local dev, copy each
 `.dev.vars.example` → `.dev.vars` in the package and fill values there (`.dev.vars` is
 gitignored). NEVER set `ADMIN_DEV_BYPASS`/`ADMIN_DEV_EMAIL` in `wrangler.toml` — they
 live only in admin `.dev.vars` so the edge auth gate is never bypassable when deployed.
@@ -235,7 +217,6 @@ trusts the `Cf-Access-Authenticated-User-Email` header Access injects (used for
 npm run -w @esperanza/api          deploy     # public edge read API (first-unconstrained replicas)
 npm run -w @esperanza/ingest       deploy     # Snowflake→D1 cron (0 */4 * * *) + sync-queue consumer
 npm run -w @esperanza/renderings   deploy     # OneDrive→R2 floor-plan renderings  ⚠ see note
-npm run -w @esperanza/framer-push  deploy     # D1→Framer cron lookback (*/5) + framer-queue consumer
 npm run -w @esperanza/admin        deploy     # runs `opennextjs-cloudflare build` THEN deploy (NOT wrangler deploy)
 ```
 - **admin** uses OpenNext: its `deploy` script is `opennextjs-cloudflare build &&
@@ -245,46 +226,20 @@ npm run -w @esperanza/admin        deploy     # runs `opennextjs-cloudflare buil
 - **⚠ renderings** is currently a scaffold (`package.json` + `wrangler.toml`, no `src/`).
   Its `deploy` (`wrangler deploy`) has no Worker entry to ship yet — implement the MS
   Graph→R2 fetch handler before this step, or skip it (floor-plan renderings won't sync
-  until then; nothing else depends on it for the cold-swap).
-
-### 8. Pre-cold-swap check — verify Framer field IDs match  ⚠ BEFORE flipping live
-Before pointing the live site at `framer-push`, confirm the Framer collection field IDs
-the push targets actually exist and match. Run the field-sync audit:
-```
-/audit-sync-fields
-```
-It diffs the live Airtable schema against the worker mappers and the Framer collection
-schema across all 9 collections and reports missing mappings, orphan Framer fields, and
-stale refs. **Resolve every mismatch before §9** — a field-ID drift means
-`framer-push` silently drops that field on upsert.
-
-### 9. Cold-swap — the Framer URL flip (Phase 8)
-Flip the **5 Framer code components** (the data-fetch components on the live site) from
-the legacy Airtable-sync endpoints to the Cloudflare `api` endpoints, and repoint the
-XML feed. Then:
-- **Keep the legacy crons** (`esperanza-data-sync`, `esperanza-sync`, the cache workers)
-  **deployed but DISABLED** — do not delete them. The flip is a URL change in 5 places.
-- **Revert step:** if anything looks wrong, change those same 5 component URLs back to
-  the legacy endpoints and re-enable the legacy crons — the flip is fully revertible
-  because no data was destroyed (D1 is now source of truth; Airtable is untouched until
-  decommission).
-- Once verified live-equivalent for a soak period, **decommission Airtable** (revoke the
-  PAT if not already, archive the base), update the vault architecture doc, and add a
-  Context Vault entry.
+  until then; nothing else depends on it for launch).
 
 ---
 
 ## Notes
-- **`database_id` placeholders must be filled after provisioning** (§2) — all 6
+- **`database_id` placeholders must be filled after provisioning** (§2) — all 5
   `wrangler.toml`s ship with `REPLACE_AFTER_PROVISION`.
 - **Migrations + views go local then remote** (§4); `views.sql` is idempotent.
-- **Both DLQs are required**, not optional (§1) — the consumers reference them by name.
-- `compatibility_date`, cron cadences (`ingest 0 */4 * * *`, `framer-push */5 * * * *`),
-  batch sizes, and DLQ names in the per-package `wrangler.toml`s are sane defaults — tune
-  per phase.
+- **The sync DLQ is required**, not optional (§1) — the ingest consumer references it by name.
+- `compatibility_date`, cron cadences (`ingest 0 */4 * * *`), batch sizes, and DLQ names
+  in the per-package `wrangler.toml`s are sane defaults — tune per phase.
 - Secrets live only in Cloudflare (`wrangler secret put`) or local `.dev.vars`
   (gitignored). The `*.dev.vars.example` files list names only, never values.
 - **The admin is the only write path** and every write: edits D1 on the PRIMARY session
-  (read-your-writes), inserts `audit_log`, and enqueues `esperanza-framer-queue`. QMI
-  Snowflake-set edits route through `@esperanza/db/override`; `togglePublished` is the
-  only `published=1` path; image uploads store only stable R2 URLs.
+  (read-your-writes), inserts `audit_log`, purges the public API cache, and may enqueue
+  PDF re-renders. QMI Snowflake-set edits route through `@esperanza/db/override`;
+  `togglePublished` is the only `published=1` path; image uploads store only stable R2 URLs.

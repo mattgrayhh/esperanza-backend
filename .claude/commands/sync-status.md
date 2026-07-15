@@ -1,8 +1,7 @@
 ---
-description: Show recent framer-push / ingest sync runs to confirm a push landed
+description: Show recent ingest sync runs from sync_log
 ---
 Call the `esperanza-ops` MCP tool `sync_status` (optionally filtered by `source` =
-`framer` | `ingest` | `snowflake`, default last 20 rows). Report the latest run's status,
-timestamp, duration, the per-collection counts, and any `error_message`. Remember: a push is
-only confirmed by a `sync_log` row, never by an HTTP code. If $ARGUMENTS names a collection,
-focus the summary on it.
+`ingest` | `snowflake`, default last 20 rows). Report the latest run's status,
+timestamp, duration, the per-collection counts, and any `error_message`. Historical
+rows with `source = 'framer'` may still appear from before Framer sync was retired.

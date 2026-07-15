@@ -12,8 +12,7 @@ Every record's edit page has a red **Delete** button in the top-right header,
 next to the Status control. Use it to permanently remove a record.
 
 Clicking **Delete** opens a confirmation showing the record's name. Confirming
-removes it from the database **and** from the live site (it's taken out of Framer
-too). This can't be undone.
+removes it from the database **and** from the live site. This can't be undone.
 
 ## Draft vs. Delete — pick the right one
 

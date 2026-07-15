@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { McpAgent } from 'agents/mcp';
 import { z } from 'zod';
 import { getRecord, listRecords, recentChanges, syncStatus } from './reads';
-import { backfill, pushSchema, triggerIngest, rebuildPdf } from './ops';
+import { triggerIngest, rebuildPdf } from './ops';
 import { writeAudit } from './audit';
 import type { Tier } from './tokens';
 import type { Env } from './index';
@@ -108,14 +108,6 @@ export class OpsMcpAgent extends McpAgent<Env, unknown, OpsProps> {
       await audit(name, r.ok ? 'ok' : 'error', args, r.detail.slice(0, 500));
       return ok(r);
     };
-
-    this.server.tool('backfill', { keys: z.array(z.string()).min(1) }, ({ keys }) =>
-      runTier2('backfill', { keys }, () => backfill(this.env, keys)),
-    );
-
-    this.server.tool('push_schema', { collection: z.string() }, ({ collection }) =>
-      runTier2('push_schema', { collection }, () => pushSchema(this.env, collection)),
-    );
 
     this.server.tool('trigger_ingest', {}, () =>
       runTier2('trigger_ingest', {}, () => triggerIngest(this.env)),

@@ -55,42 +55,8 @@ export interface D1Like {
   batch(statements: unknown[]): Promise<unknown[]>;
 }
 
-// =============================================================================
-// Framer-push hand-off (event-driven D1 → Framer). After a successful synced
-// D1 write the consumer enqueues onto esperanza-framer-queue using the EXACT
-// shape framer-push's consumer expects (FramerSyncMessage in
-// packages/framer-push/src/types.ts): { collection, action:'upsert', id }.
-// The message carries NO field values — framer-push re-reads the full row from
-// D1 by id. We only ever emit 'upsert' (an unpublish re-reads as published=0 →
-// framer-push pushes it with draft:true, which hides the page). This type is
-// declared locally (ingest does not depend on framer-push) but is identical to
-// the contract enforced there.
-// =============================================================================
-
-/** A subset of the framer-push CollectionKey union — the three ingest can touch. */
-export type FramerCollectionKey = 'qmi' | 'communities' | 'floor_plans';
-
-/** The framer-push queue message shape (id-only; framer-push re-reads the row). */
-export interface FramerSyncMessage {
-  collection: FramerCollectionKey;
-  action: 'upsert';
-  id: string;
-}
-
-/** Cloudflare Queues producer binding (the subset we use). */
-export interface FramerQueueProducer {
-  send(body: unknown): Promise<void>;
-  sendBatch(messages: { body: unknown }[]): Promise<void>;
-}
-
 export interface ConsumerEnv {
   DB: D1Like;
-  /**
-   * Producer binding for esperanza-framer-queue. Optional so unit tests that
-   * exercise only the D1 write path can omit it; in production index.ts's Env
-   * always binds it (wrangler.toml [[queues.producers]] FRAMER_QUEUE).
-   */
-  FRAMER_QUEUE?: FramerQueueProducer;
   /**
    * Public base of the esperanza-pdf worker (e.g.
    * https://esperanza-pdf.<sub>.workers.dev). When set, a synced QMI create
@@ -112,9 +78,7 @@ export function deriveSlug(address: string): string {
 const nowIso = () => new Date().toISOString();
 
 /**
- * Result of applying one message. Counters feed sync_log aggregation; `framer`
- * carries the Framer-push messages to enqueue for the rows this write touched
- * (only populated after a successful D1 write — see each apply* function).
+ * Result of applying one message. Counters feed sync_log aggregation.
  */
 export interface ApplyResult {
   created: number;
@@ -123,8 +87,6 @@ export interface ApplyResult {
   communities: number;
   floorPlans: number;
   priceUpdated: number;
-  /** Framer-push hand-off messages for the row(s) written by this message. */
-  framer: FramerSyncMessage[];
 }
 
 const emptyResult = (): ApplyResult => ({
@@ -134,13 +96,11 @@ const emptyResult = (): ApplyResult => ({
   communities: 0,
   floorPlans: 0,
   priceUpdated: 0,
-  framer: [],
 });
 
 /**
  * Apply a single message. Exported so tests can drive it against a better-sqlite3
- * DB via a thin D1Like adapter. Returns a small result for sync_log aggregation
- * plus the Framer-push messages to enqueue for the affected row(s).
+ * DB via a thin D1Like adapter. Returns a small result for sync_log aggregation.
  */
 export async function applyMessage(
   env: ConsumerEnv,
@@ -226,7 +186,6 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
     result.created = 1;
     // Event-driven push: the new (draft) home flows to Framer immediately and
     // surfaces as draft:true (hidden) until admin publishes — which is correct.
-    result.framer.push({ collection: 'qmi', action: 'upsert', id });
     // Self-register the Dynamic PDF: create a not_built pdf_renders row + backfill
     // qmi.dynamic_pdf. The PDF renders on first fetch (serve.ts cold-render path),
     // the same lazy mechanism seed-renders relies on — no render-queue binding here.
@@ -305,7 +264,6 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
     .run();
   result.updated = 1;
   // Event-driven push: the changed synced values flow to Framer immediately.
-  result.framer.push({ collection: 'qmi', action: 'upsert', id: msg.qmiId });
   return result;
 }
 
@@ -321,7 +279,6 @@ async function applyQmiUnpublish(env: ConsumerEnv, msg: QmiUnpublishMessage): Pr
   result.unpublished = 1;
   // Event-driven push: framer-push re-reads the row, sees published=0, and pushes
   // it with draft:true (soft-delete — the page is hidden). Always 'upsert'.
-  result.framer.push({ collection: 'qmi', action: 'upsert', id: msg.qmiId });
   return result;
 }
 
@@ -341,7 +298,6 @@ async function applyCommunityUpsert(env: ConsumerEnv, msg: CommunityUpsertMessag
     .run();
   result.communities = 1;
   // Event-driven push: the changed square-footage range flows to Framer.
-  result.framer.push({ collection: 'communities', action: 'upsert', id: msg.communityId });
   return result;
 }
 
@@ -361,7 +317,6 @@ async function applyFloorPlanUpsert(env: ConsumerEnv, msg: FloorPlanUpsertMessag
     .run();
   result.floorPlans = 1;
   // Event-driven push: the changed synced plan values flow to Framer.
-  result.framer.push({ collection: 'floor_plans', action: 'upsert', id: msg.floorPlanId });
   return result;
 }
 
@@ -468,8 +423,6 @@ export async function handleQueueBatch(
   const agg = { created: 0, updated: 0, unpublished: 0, communities: 0, floorPlans: 0, priceUpdated: 0 };
   let errors = 0;
   let lastError: string | null = null;
-  // Framer-push hand-off messages accumulated ONLY from successful D1 writes.
-  const framerOut: FramerSyncMessage[] = [];
 
   for (const m of batch.messages) {
     try {
@@ -480,24 +433,12 @@ export async function handleQueueBatch(
       agg.communities += r.communities;
       agg.floorPlans += r.floorPlans;
       agg.priceUpdated += r.priceUpdated;
-      // Enqueue the Framer push only after the D1 write succeeded (applyMessage
-      // returned without throwing). A throwing message lands in the catch below
-      // and contributes NO framer hand-off.
-      framerOut.push(...r.framer);
       m.ack();
     } catch (err) {
       errors++;
       lastError = err instanceof Error ? err.message : String(err);
       m.retry(); // independent retry → DLQ after max_retries
     }
-  }
-
-  // Event-driven D1 → Framer: push the changed rows onto esperanza-framer-queue.
-  // framer-push's consumer re-reads each row by id and upserts it into Framer.
-  // Best-effort: a transport failure here must not fail the ingest write (the
-  // nightly framer-push lookback backstop re-covers any dropped row).
-  if (framerOut.length > 0) {
-    await enqueueFramer(env, framerOut);
   }
 
   await writeSyncLog(env, {
@@ -513,29 +454,7 @@ export async function handleQueueBatch(
     communitiesUpdated: agg.communities,
     floorPlansUpdated: agg.floorPlans,
     pricesUpdated: agg.priceUpdated,
-    notes: `consumer batch of ${batch.messages.length} message(s); framer-push enqueued ${framerOut.length}`,
+    notes: `consumer batch of ${batch.messages.length} message(s)`,
     errorMessage: lastError,
   });
-}
-
-/**
- * Enqueue Framer-push hand-off messages in chunks (Queues sendBatch cap is
- * 100/256KB; chunk at 100). No-op when FRAMER_QUEUE is unbound (unit tests). A
- * send failure is swallowed (logged) so it never poisons the ingest write — the
- * nightly framer-push lookback re-covers anything dropped here.
- */
-export async function enqueueFramer(env: ConsumerEnv, messages: FramerSyncMessage[]): Promise<void> {
-  const q = env.FRAMER_QUEUE;
-  if (!q || messages.length === 0) return;
-  const CHUNK = 100;
-  try {
-    for (let i = 0; i < messages.length; i += CHUNK) {
-      const slice = messages.slice(i, i + CHUNK).map((body) => ({ body }));
-      await q.sendBatch(slice);
-    }
-  } catch (err) {
-    // Don't fail the batch on a framer-queue transport error — the rows are
-    // already in D1 and the nightly lookback backstop will re-enqueue them.
-    console.error('framer-push enqueue failed (backstop will recover):', err);
-  }
 }

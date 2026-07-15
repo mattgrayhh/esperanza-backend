@@ -11,7 +11,7 @@ keywords: users, access, rbac, permissions, account, invite
 There are three account roles:
 
 - **Full Admin** — everything: all content, user management, the Field
-  Builder, Framer field types, and data-feed settings.
+  Builder, and data-feed settings.
 - **Marketing Admin** — all content editing and publishing, plus management of
   General Marketing users. No data-feed or system settings.
 - **General Marketing** — day-to-day content work: create and edit homes,
