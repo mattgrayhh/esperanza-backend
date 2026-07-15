@@ -39,8 +39,10 @@ const nextConfig: NextConfig = {
 
 // Initialise the Cloudflare dev context (bindings) for `next dev`. Awaited at module
 // load; harmless/short-circuits outside dev.
+// Default: remote bindings (production D1/R2) when logged in via `wrangler login`.
+// Set LOCAL_D1=1 to use the emulated local D1 instead (no Cloudflare auth needed).
 void initOpenNextCloudflareForDev({
-  remoteBindings: true,
+  remoteBindings: process.env.LOCAL_D1 !== '1',
 });
 
 export default nextConfig;

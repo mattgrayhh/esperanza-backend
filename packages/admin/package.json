@@ -6,6 +6,7 @@
   "description": "Next.js 15 admin (OpenNext-on-Workers) covering all 9 entities. Auth.js v5 (Credentials + JWT) login on workers.dev. Edits D1, uploads images to R2, logs audit_log, and enqueues esperanza-framer-queue on every write.",
   "scripts": {
     "dev": "next dev",
+    "dev:local": "LOCAL_D1=1 next dev",
     "build": "next build",
     "build:cf": "opennextjs-cloudflare build",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
