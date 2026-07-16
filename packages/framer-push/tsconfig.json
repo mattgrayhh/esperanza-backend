@@ -1,8 +1,0 @@
-{
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "noEmit": true,
-    "types": ["@cloudflare/workers-types", "node", "better-sqlite3"]
-  },
-  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
-}

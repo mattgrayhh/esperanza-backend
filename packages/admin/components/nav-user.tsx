@@ -105,10 +105,6 @@ export function NavUser({
 										<SlidersHorizontalIcon />
 										Field settings
 									</DropdownMenuItem>
-									<DropdownMenuItem render={<Link href="/settings/framer-types" />}>
-										<BlocksIcon />
-										Framer field types
-									</DropdownMenuItem>
 									<DropdownMenuItem render={<Link href="/settings/users" />}>
 										<UsersIcon />
 										Users

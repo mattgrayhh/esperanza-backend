@@ -8,7 +8,7 @@
 //      deleteFieldDefinition / reorderFieldDefinitions against a real better-sqlite3 DB
 //      (the full additive migration chain), with the Cloudflare/Next/auth boundary mocked.
 //      Validates: Full-Admin gate, system-field immutability (no delete/retype), key
-//      uniqueness + reserved-name rejection, audit_log attribution, and NO Framer enqueue.
+//      uniqueness + reserved-name rejection, audit_log attribution.
 //
 // Harness mirrors test/custom-fields.test.ts.
 // =============================================================================
@@ -33,7 +33,6 @@ const VIEWS_SQL = readFileSync(join(__dirname, '..', '..', 'db', 'views.sql'), '
 interface Harness {
   sqlite: Database.Database;
   db: BetterSQLite3Database<typeof schema>;
-  queue: Array<{ collection: string; action: string; id: string }>;
 }
 let H: Harness;
 const ACTOR = 'matt@hazard.house';
@@ -46,7 +45,7 @@ function freshHarness(): Harness {
   sqlite.exec(INIT_SQL);
   sqlite.exec(VIEWS_SQL);
   const db = drizzle(sqlite, { schema });
-  return { sqlite, db, queue: [] };
+  return { sqlite, db };
 }
 
 vi.mock('../lib/db', () => ({
@@ -60,15 +59,7 @@ vi.mock('../lib/auth', () => ({
 }));
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('@opennextjs/cloudflare', () => ({
-  getCloudflareContext: () => ({
-    env: {
-      FRAMER_QUEUE: {
-        send: async (msg: { collection: string; action: string; id: string }) => {
-          H.queue.push(msg);
-        },
-      },
-    },
-  }),
+  getCloudflareContext: () => ({ env: {} }),
 }));
 
 // Import AFTER mocks.
@@ -186,7 +177,7 @@ describe('field-builder pure helpers', () => {
 // createFieldDefinition
 // =============================================================================
 describe('createFieldDefinition', () => {
-  it('creates a custom field with a generated key, audits it, and does NOT enqueue Framer', async () => {
+  it('creates a custom field with a generated key and audits it', async () => {
     const res = await createFieldDefinition({
       entity: 'collections',
       label: 'Marketing Note',
@@ -206,9 +197,6 @@ describe('createFieldDefinition', () => {
     expect(a[0]!.entity).toBe('field_definitions:collections');
     expect(a[0]!.action).toBe('field_create');
     expect(a[0]!.actor).toBe(ACTOR);
-
-    // Framer schema sync is Phase C — NOTHING enqueued.
-    expect(H.queue).toEqual([]);
   });
 
   it('generates a unique key when the label collides with an existing field', async () => {

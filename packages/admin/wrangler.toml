@@ -1,6 +1,5 @@
 # packages/admin — Next.js 15 admin (OpenNext-on-Workers).
-# Covers all 9 entities. Every write edits D1, uploads images to R2, logs audit_log,
-# and enqueues esperanza-framer-queue.
+# Covers all 9 entities. Every write edits D1, uploads images to R2, and logs audit_log.
 #
 # AUTH: This admin runs on its workers.dev URL (the esperanzahomes.com zone is NOT on
 # this Cloudflare account, so the old Cloudflare Access gate is gone). It authenticates
@@ -39,12 +38,6 @@ migrations_dir = "../db/migrations"
 binding = "IMAGES"
 bucket_name = "esperanza-cms"
 
-# Producer: every admin write enqueues a Framer push ({collection,action,id}).
-# Binding name FRAMER_QUEUE matches the framer-push contract (see packages/framer-push).
-[[queues.producers]]
-binding = "FRAMER_QUEUE"
-queue = "esperanza-framer-queue"
-
 # Producer: enqueue affected PDF renders on every admin write + all renders on theme publish.
 # The esperanza-pdf worker consumes this queue at max_concurrency=2.
 [[queues.producers]]
@@ -57,17 +50,6 @@ queue = "esperanza-pdf-render"
 [[services]]
 binding = "PDF"
 service = "esperanza-pdf"
-
-# Service binding to the framer-push worker. The applyFramerTypes action (Settings →
-# Framer Field Types) calls its POST /schema route via this binding (Authorization:
-# Bearer WEBHOOK_TOKEN). When the binding is present the request never leaves
-# Cloudflare's network. The Worker still authenticates the Bearer token on /schema, so
-# WEBHOOK_TOKEN must be set as an admin secret (it matches framer-push's WEBHOOK_TOKEN).
-# If the binding is absent (e.g. a partial deploy), the action falls back to
-# FRAMER_PUSH_URL + WEBHOOK_TOKEN over the public internet.
-[[services]]
-binding = "FRAMER_PUSH"
-service = "esperanza-framer-push"
 
 # Service binding to the ingest worker. The triggerIngestSync action (dashboard
 # "Sync now" button) calls its POST /run route via this binding (Authorization:
@@ -107,9 +89,6 @@ service = "rhodes-availability"
 IMAGES_PUBLIC_BASE_URL = "https://img.hazardhouse.ai"
 # PDF links resolve through the esperanza-pdf WORKER route, not the raw R2 bucket.
 PDF_PUBLIC_BASE_URL = "https://esperanza-pdf.round-base-ed8c.workers.dev"
-# Public fallback for framer-push POST /schema when the FRAMER_PUSH service binding is
-# unavailable. The action prefers the binding; this URL + WEBHOOK_TOKEN is the backstop.
-FRAMER_PUSH_URL = "https://esperanza-framer-push.round-base-ed8c.workers.dev"
 # Public fallback for ingest POST /run (dashboard "Sync now") when the INGEST service
 # binding is unavailable. The action prefers the binding; this URL + INGEST_TRIGGER_TOKEN
 # is the backstop.
@@ -119,7 +98,7 @@ INGEST_URL = "https://esperanza-ingest.round-base-ed8c.workers.dev"
 # RHODES_ADMIN_KEY is the backstop.
 RHODES_API_URL = "https://rhodes-availability.round-base-ed8c.workers.dev"
 # Public api worker — saveSiteSettings purges /api/public/settings?purge=1 here after a
-# save so the Framer calculators pick the new Mortgage Rate up immediately (the 5-minute
+# save so the public site calculators pick the new Mortgage Rate up immediately (the 5-minute
 # edge TTL is the backstop if the purge fails).
 API_PUBLIC_URL = "https://esperanza-api.round-base-ed8c.workers.dev"
 # MailLayer transactional-email endpoint. lib/maillayer.ts emails a generated password
@@ -142,13 +121,6 @@ MAILLAYER_API_URL = "https://mailer.hazardhouse.ai/api/transactional/send"
 #                          openssl rand -base64 32
 #                          wrangler secret put PDF_PREVIEW_SECRET --config packages/admin/wrangler.toml
 #                        (locally, put PDF_PREVIEW_SECRET=... in packages/admin/.dev.vars).
-#
-#   WEBHOOK_TOKEN — Bearer token the applyFramerTypes action sends to framer-push
-#                   POST /schema (over the FRAMER_PUSH service binding, or the public
-#                   FRAMER_PUSH_URL fallback). Must equal the framer-push worker's
-#                   WEBHOOK_TOKEN secret. Set with:
-#                     wrangler secret put WEBHOOK_TOKEN --config packages/admin/wrangler.toml
-#                   (locally, put WEBHOOK_TOKEN=... in packages/admin/.dev.vars).
 #
 #   INGEST_TRIGGER_TOKEN — Bearer token the triggerIngestSync action (dashboard
 #                   "Sync now") sends to ingest POST /run (over the INGEST service

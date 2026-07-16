@@ -5,7 +5,7 @@
 //
 // Fires the triggerIngestSync server action (ingest POST /run: the same
 // Snowflake→D1 reconciliation the 4-hour cron runs, on demand). Admin edits
-// already reach the website in seconds via the framer queue — this button is for
+// already reach the website quickly via API cache purge — this button is for
 // pulling MARK SYSTEMS changes through without waiting for the next cron tick.
 // The run is fire-to-completion server-side (typically tens of seconds: Snowflake
 // login + diff + queue drain), so we show a spinner, then a settled state.

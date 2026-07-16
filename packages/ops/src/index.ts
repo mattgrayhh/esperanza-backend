@@ -4,11 +4,9 @@ import { OpsMcpAgent, type OpsProps } from './mcp';
 
 export interface Env {
   DB: D1Database;
-  FRAMER_PUSH: Fetcher;
   INGEST: Fetcher;
   PDF: Fetcher;
   RENDER_Q: Queue;
-  WEBHOOK_TOKEN: string;
   INGEST_TRIGGER_TOKEN: string;
   MCP_AGENT: DurableObjectNamespace<OpsMcpAgent>;
 }

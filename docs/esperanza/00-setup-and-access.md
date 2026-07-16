@@ -15,8 +15,8 @@ Everything runs on **Cloudflare**. You only need to understand five primitives:
 | **Worker** | A small serverless program that runs at Cloudflare's edge, triggered by an HTTP request, a cron timer, or a queue message. Like a tiny always-on Node service. | We have 6 workers (5 in the monorepo + the XML feed). |
 | **D1** | A serverless **SQLite** database. Normal SQL. Has some hard limits (e.g. **100 columns per table**). | One database, named `esperanza`. The source of truth for the whole site. |
 | **R2** | Object storage, like Amazon S3. We store images and generated PDFs here. | One bucket, `esperanza-cms`, served over a public CDN URL. |
-| **Queues** | A message queue. A "producer" worker drops a message; a "consumer" worker processes it later, with retries. | Used to move work from ingest → D1 and from D1 → Framer without blocking. |
-| **Cron Triggers** | A schedule attached to a worker (standard cron syntax). | ingest runs every 4h; framer-push reconciles nightly. |
+| **Queues** | A message queue. A "producer" worker drops a message; a "consumer" worker processes it later, with retries. | Used to move Snowflake sync work into D1 without blocking the cron. |
+| **Cron Triggers** | A schedule attached to a worker (standard cron syntax). | ingest runs every 4h. |
 
 You manage all of this with one CLI tool: **`wrangler`** (Cloudflare's official CLI).
 Almost every operational command in this packet is a `wrangler` command.
@@ -76,7 +76,6 @@ esperanza-cf/
 │   │                 and seed/maintenance scripts. NOT a deployed worker.
 │   ├── ingest/       Worker `esperanza-ingest` — pulls Snowflake → D1 (cron).      → doc 02
 │   ├── admin/        Worker `esperanza-admin` — the Next.js CMS marketing uses.    → doc 03
-│   ├── framer-push/  Worker `esperanza-framer-push` — pushes D1 → Framer.          → doc 04
 │   ├── pdf/          Worker `esperanza-pdf` — renders PDFs with a headless browser. → doc 05
 │   ├── api/          Worker `esperanza-api` — edge read API over the public views.
 │   └── renderings/   DESCOPED. OneDrive→R2 floor-plan rendering importer. Not deployed.
@@ -104,7 +103,6 @@ cd packages/admin
 cat > .dev.vars <<'EOF'
 AUTH_SECRET=<openssl rand -base64 32>
 PDF_PREVIEW_SECRET=<openssl rand -base64 32>
-WEBHOOK_TOKEN=<get from framer-push worker / Matt>
 INGEST_TRIGGER_TOKEN=<get from ingest worker / Matt>
 MAILLAYER_API_KEY=<from MailLayer, only needed for password emails>
 ADMIN_DEV_EMAIL=you@example.com   # local-only login bypass; never set in prod
@@ -141,14 +139,14 @@ There are two kinds of secrets, and they're stored in two different places:
 | **CI/CD** | GitHub → Settings → Secrets → Actions | only `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` live here |
 
 Production runtime secrets (`AUTH_SECRET`, `MAILLAYER_API_KEY`, `PDF_PREVIEW_SECRET`,
-`WEBHOOK_TOKEN`, `INGEST_TRIGGER_TOKEN`, `SNOWFLAKE_PASSWORD`, `FRAMER_API_KEY`) are set
+`INGEST_TRIGGER_TOKEN`, `SNOWFLAKE_PASSWORD`) are set
 with `wrangler secret put` **on the relevant worker** and persist across deploys — they
 are NOT in the repo and NOT in CI.
 
 ```bash
-# Example: rotate the framer-push webhook token
-cd packages/framer-push
-npx wrangler secret put WEBHOOK_TOKEN     # paste the new value when prompted
+# Example: rotate the ingest trigger token
+cd packages/ingest
+npx wrangler secret put INGEST_TRIGGER_TOKEN     # paste the new value when prompted
 ```
 
 > 🔑 On the shared machine, the working values are kept locally (and out of git) in
@@ -180,7 +178,6 @@ The five deployable workers:
 | `packages/admin` | `esperanza-admin` | `npm run deploy` (OpenNext build + deploy) |
 | `packages/api` | `esperanza-api` | `wrangler deploy` |
 | `packages/ingest` | `esperanza-ingest` | `wrangler deploy` |
-| `packages/framer-push` | `esperanza-framer-push` | `wrangler deploy` |
 | `packages/pdf` | `esperanza-pdf` | `wrangler deploy` |
 
 To force a redeploy with no code change, use the workflow's **"Run workflow"** button in
@@ -208,4 +205,4 @@ the GitHub Actions tab (it has an option to "Deploy ALL workers").
       everything else.
 
 ---
-**Next:** [01 — Data Flow: Snowflake → D1 → Framer](./01-data-flow.md)
+**Next:** [01 — Data Flow: Snowflake → D1 → Public Site](./01-data-flow.md)

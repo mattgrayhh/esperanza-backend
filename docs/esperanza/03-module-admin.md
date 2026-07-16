@@ -4,8 +4,8 @@
 (App Router) deployed to Cloudflare via **OpenNext**.
 
 This is the CMS marketing uses to edit all nine content entities. It's the **only write
-path** into D1 for human-authored content. Every write it makes (a) records an audit-log
-row and (b) enqueues a Framer push.
+path** into D1 for human-authored content. Every write it makes records an audit-log row,
+purges the public API cache for the affected entity, and may enqueue PDF re-renders.
 
 > Running it locally and the env/secrets gotchas are in
 > [doc 00 §5–6](./00-setup-and-access.md). This doc is about how it works and how to change
@@ -213,8 +213,8 @@ A new field is **two changes**, code + data:
    ```
    Without this row, the field **will not appear** in the live admin even though your code
    is deployed. (This is the #1 "I added a field but can't see it" gotcha.)
-3. If the field should reach the website, also map it in framer-push and create the Framer
-   field (doc 04).
+3. If the field should reach the website, also expose it through the public API
+   (and wire the frontend to read it).
 
 To add a brand-new field **type** (not just a field), touch `lib/field-builder.ts`
 (`FIELD_TYPES`), `lib/field-config-source.ts` (`typeToWidget`), and the form handling in
@@ -222,20 +222,19 @@ To add a brand-new field **type** (not just a field), touch `lib/field-builder.t
 
 ---
 
-## On every write: audit log + Framer enqueue
+## On every write: audit log + cache purge
 
 All writes go through Server Actions in **`lib/actions.ts`**, which call `postWrite()`
 after the D1 commit. `postWrite()`:
 - inserts `audit_log` rows — `{entity, entityId, field, action, oldValue, newValue, actor,
   created_at}` — chunked at **≤14 rows per INSERT** (D1 bind-parameter limit;
   `lib/audit-chunk.ts`);
-- enqueues `env.FRAMER_QUEUE.send({collection, action:'upsert', id})` so framer-push
-  re-reads the row and updates Framer;
+- purges the public API edge cache for the affected entity (best-effort);
 - for entities with brochures, marks PDFs stale via the render queue.
 
 **Exception:** unpublished draft creates (`createEntity` / `createCommunityDraft`) pass
 `{ sync: false }` — audit only. Empty drafts stay local until the operator saves or
-publishes; those paths still run the full sync fan-out.
+publishes; those paths still run the full side-effect fan-out.
 
 `actor` is the logged-in user's email from the Auth.js session.
 
@@ -246,7 +245,7 @@ publishes; those paths still run the full sync fan-out.
 Operator worklist, not a scoreboard. Layout (top → bottom):
 
 1. **Needs attention** — actionable tiles only (homes ready to publish, drafts in the
-   readiness funnel, Framer sync failures). Empty state is an explicit “All clear.”
+   readiness funnel). Empty state is an explicit “All clear.”
 2. **At a glance** — QMI published/ready/in-progress bar + compact community and
    promotion counts.
 3. **Recent activity** + **All collections** jump list.
@@ -269,7 +268,7 @@ then grouped components with a 90-day uptime bar each.
 | Group | Components (placeholders today) |
 |---|---|
 | Snowflake / MarkSystems | Snowflake, MarkSystems |
-| Cloudflare | `esperanza-admin`, `esperanza-ingest`, `esperanza-framer-push`, `esperanza-api`, `esperanza-pdf`, `esperanza-ops`, `esperanza-xml-feed`, `rhodes-availability`, D1 `esperanza`, R2 `esperanza-cms` |
+| Cloudflare | `esperanza-admin`, `esperanza-ingest`, `esperanza-api`, `esperanza-pdf`, `esperanza-ops`, `esperanza-xml-feed`, `rhodes-availability`, D1 `esperanza`, R2 `esperanza-cms` |
 | Website | `esperanzahomes.com` (future: ping every few minutes) |
 | Site services | Lotvue, HubSpot, Mapbox |
 
@@ -390,4 +389,4 @@ multi-select combobox. The collapsible **Utilities** subsection groups gas, inte
 water, electric, and **Security Details**; HOA links stay in their own panel below the form.
 
 ---
-**Next:** [04 — Module: framer-push (D1 → Framer)](./04-module-framer-push.md)
+**Next:** [05 — Module: PDF Generator](./05-module-pdf.md)

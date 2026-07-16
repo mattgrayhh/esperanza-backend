@@ -6,8 +6,7 @@
 // BOTH a `text` and a `select` custom field — without touching real-column write logic.
 //
 //   WRITE: saveEntity() routes the custom field's FormData entry into custom_fields
-//          (merged, not a column), audits it, enqueues the framer push, and stamps
-//          updated_at. A real-column edit in the SAME submit still writes its column.
+//          (merged, not a column), audits it, and stamps updated_at. A real-column edit in the SAME submit still writes its column.
 //   READ:  buildEditView() resolves the custom field's value back from custom_fields
 //          (not the row column), with widget routing (text → text, select → select with
 //          {value,label} optionItems from options_json).
@@ -39,7 +38,6 @@ const VIEWS_SQL = readFileSync(join(__dirname, '..', '..', 'db', 'views.sql'), '
 interface Harness {
   sqlite: Database.Database;
   db: BetterSQLite3Database<typeof schema>;
-  queue: Array<{ collection: string; action: string; id: string }>;
 }
 let H: Harness;
 const ACTOR = 'matt@hazard.house';
@@ -50,7 +48,7 @@ function freshHarness(): Harness {
   sqlite.exec(INIT_SQL);
   sqlite.exec(VIEWS_SQL);
   const db = drizzle(sqlite, { schema });
-  return { sqlite, db, queue: [] };
+  return { sqlite, db };
 }
 
 vi.mock('../lib/db', () => ({
@@ -61,15 +59,7 @@ vi.mock('../lib/db', () => ({
 vi.mock('../lib/auth', () => ({ getCurrentUser: async () => ACTOR }));
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('@opennextjs/cloudflare', () => ({
-  getCloudflareContext: () => ({
-    env: {
-      FRAMER_QUEUE: {
-        send: async (msg: { collection: string; action: string; id: string }) => {
-          H.queue.push(msg);
-        },
-      },
-    },
-  }),
+  getCloudflareContext: () => ({ env: {} }),
 }));
 
 // Import AFTER mocks (vi.mock is hoisted).
@@ -221,7 +211,7 @@ describe('custom-field VALUE round-trip through custom_fields JSON', () => {
     H.sqlite.prepare(`INSERT INTO collections (id, title) VALUES ('c1', 'Spring Collection')`).run();
   });
 
-  it('saveEntity merges a text + select custom value into custom_fields (with audit + enqueue)', async () => {
+  it('saveEntity merges a text + select custom value into custom_fields (with audit)', async () => {
     const res = await saveEntity(
       'collections',
       'c1',
@@ -246,9 +236,6 @@ describe('custom-field VALUE round-trip through custom_fields JSON', () => {
     expect(note.new_value).toBe('Push hard in Q2');
     expect(note.actor).toBe(ACTOR);
     expect(audits.some((a) => a.field === 'lending_tier' && a.new_value === 'preferred')).toBe(true);
-
-    // a single framer push was enqueued for the changed record.
-    expect(H.queue).toEqual([{ collection: 'collections', action: 'upsert', id: 'c1' }]);
   });
 
   it('buildEditView resolves the custom value FROM custom_fields (not a column)', async () => {
@@ -276,7 +263,6 @@ describe('custom-field VALUE round-trip through custom_fields JSON', () => {
   it('a partial save MERGES — it preserves a sibling custom value it did not submit', async () => {
     // first set both
     await saveEntity('collections', 'c1', form({ marketing_note: 'First', lending_tier: 'preferred' }));
-    H.queue.length = 0;
     // now submit ONLY marketing_note — lending_tier must survive
     await saveEntity('collections', 'c1', form({ marketing_note: 'Second' }));
     expect(JSON.parse(customBlob('c1')!)).toEqual({
@@ -321,7 +307,6 @@ describe('custom-field VALUE round-trip through custom_fields JSON', () => {
   it('a no-op custom save does not spam audit_log or change the blob', async () => {
     await saveEntity('collections', 'c1', form({ marketing_note: 'X' }));
     const before = auditRows('collections', 'c1').length;
-    H.queue.length = 0;
     const res = await saveEntity('collections', 'c1', form({ marketing_note: 'X' }));
     expect(res).toEqual({ ok: true });
     expect(auditRows('collections', 'c1').length).toBe(before); // no new audit

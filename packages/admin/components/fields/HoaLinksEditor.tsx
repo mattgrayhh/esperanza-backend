@@ -83,7 +83,7 @@ export function HoaLinksEditor({
         ) : null}
       </div>
       {links.length >= MAX ? (
-        <span className="text-xs text-muted-foreground">Max {MAX} links are pushed to Framer.</span>
+        <span className="text-xs text-muted-foreground">Max {MAX} links are shown on the site.</span>
       ) : null}
     </div>
   );
