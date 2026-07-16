@@ -665,9 +665,6 @@ export const adminUsers = sqliteTable('admin_users', {
 //                    url·image·select) or a verbatim bespoke widget name.
 //   system         — 1 = locked/synced (Snowflake-fed); reorder/relabel/group/hide
 //                    allowed, delete/retype not.
-//   framerFieldId/framerType — RETAINED-BUT-UNUSED columns. Framer was retired
-//                    2026-07-06; nothing reads these now. Kept as inert columns
-//                    (dropping them would need a live-DB migration).
 //
 // UNIQUE(entity, key) makes the seed idempotent (upsert on the natural key).
 // =============================================================================
@@ -688,8 +685,6 @@ export const fieldDefinitions = sqliteTable(
     visibleInForm: integer('visible_in_form', { mode: 'boolean' }).notNull().default(true),
     visibleInList: integer('visible_in_list', { mode: 'boolean' }).notNull().default(false),
     halfWidth: integer('half_width', { mode: 'boolean' }).notNull().default(false),
-    framerFieldId: text('framer_field_id'),
-    framerType: text('framer_type'),
     // 1 = user-added field whose value lives in the entity's custom_fields JSON
     // (key == JSON key). 0 = maps a real column / bespoke widget.
     custom: integer('custom', { mode: 'boolean' }).notNull().default(false),

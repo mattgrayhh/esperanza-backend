@@ -362,8 +362,7 @@ const communities: EntityFieldConfig = {
     { field: 'features_download_url', label: 'Features Download (PDF)', widget: 'image', bucket: 'admin' },
     { field: 'resources_download_url', label: 'Resources Download (PDF)', widget: 'image', bucket: 'admin' },
     // Auto-filled dynamic-PDF link (ensurePdfRender). Hidden from the form (computed,
-    // not hand-edited); the row exists only so its framer_type seeds as 'link'
-    // and applyTypeOverrides coerces the emitted URL to a link.
+    // not hand-edited).
     { field: 'brochure_pdf_url', label: 'Brochure PDF', widget: 'text', bucket: 'admin', visibleInForm: false },
     { field: 'office_phone', label: 'Office Phone', widget: 'text', bucket: 'admin' },
     { field: 'office_hours', label: 'Office Hours', widget: 'text', bucket: 'admin' },
@@ -570,10 +569,7 @@ const promotions: EntityFieldConfig = {
     // Engine-derived target-id CSVs the public API exposes so a location page can filter
     // promos by `<x>_ids Contains {id}`. The promoScopeTag widget above OWNS editing;
     // these are read-only projections of promotion_targets (group_concat by type in
-    // the public API mapper). Hidden from the form; text widget → framer_type 'string'
-    // so /push-schema CREATES the matching string field (a promoScopeTag field
-    // resolves to NULL and pushes no schema, so without these the mapper's *_ids were
-    // silently dropped by addItems). qmi is the majority target type in prod.
+    // the public API mapper). Hidden from the form. qmi is the majority target type in prod.
     { field: 'community_ids', label: 'Community IDs (derived)', widget: 'text', bucket: 'target', visibleInForm: false },
     { field: 'floor_plan_ids', label: 'Floor Plan IDs (derived)', widget: 'text', bucket: 'target', visibleInForm: false },
     { field: 'qmi_ids', label: 'QMI IDs (derived)', widget: 'text', bucket: 'target', visibleInForm: false },

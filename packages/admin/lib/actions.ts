@@ -61,8 +61,6 @@ import {
   generateFieldKey,
   normalizeOptions,
   reservedKeysForEntity,
-  FIELD_TYPE_META,
-  type FieldType,
 } from './field-builder';
 import { chunk, AUDIT_ROWS_PER_INSERT } from './audit-chunk';
 
@@ -1634,8 +1632,6 @@ export async function createFieldDefinition(
     visibleInForm: input.visibleInForm ?? true,
     visibleInList: Boolean(input.visibleInList),
     halfWidth: Boolean(input.halfWidth),
-    framerFieldId: null,
-    framerType: FIELD_TYPE_META[type as FieldType].framerType,
   };
 
   await db.insert(fieldDefinitions).values(row);
@@ -1736,7 +1732,6 @@ export async function updateFieldDefinition(input: UpdateFieldInput): Promise<Ac
       return { ok: false, error: `Invalid field type: ${input.type}` };
     }
     patch.type = input.type;
-    patch.framerType = FIELD_TYPE_META[input.type as FieldType].framerType;
     effectiveType = input.type;
     changed.push('type');
   }
