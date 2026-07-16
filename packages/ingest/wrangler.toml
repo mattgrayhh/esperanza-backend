@@ -17,7 +17,7 @@ binding = "DB"
 database_name = "esperanza"
 database_id = "023ea995-0abc-4165-a1e1-6e2373fc43e9"
 
-# Shared R2 bucket (used by the one-time Airtable import to migrate attachment-only images).
+# Shared R2 bucket (image storage; consumer rehosts synced attachment images to R2).
 [[r2_buckets]]
 binding = "IMAGES"
 bucket_name = "esperanza-cms"
@@ -26,15 +26,6 @@ bucket_name = "esperanza-cms"
 [[queues.producers]]
 binding = "SYNC_QUEUE"
 queue = "esperanza-sync-queue"
-
-# Producer: the queue CONSUMER (after a successful synced D1 write) enqueues a
-# Framer-push message { collection, action:'upsert', id } here so published-home
-# Snowflake updates flow to Framer immediately (event-driven), instead of waiting
-# for the framer-push lookback. framer-push drains this same queue and upserts the
-# row into Framer. New Draft homes push as draft:true (hidden) — which is correct.
-[[queues.producers]]
-binding = "FRAMER_QUEUE"
-queue = "esperanza-framer-queue"
 
 # Consumer: this same Worker also drains esperanza-sync-queue and applies the
 # synced columns. Per-message ack/retry; a message that still fails after
@@ -71,4 +62,3 @@ PDF_PUBLIC_BASE_URL = "https://esperanza-pdf.round-base-ed8c.workers.dev"
 
 # Secrets (set via `wrangler secret put`):
 #   SNOWFLAKE_PASSWORD   — Snowflake REST login password
-#   AIRTABLE_PAT         — one-time Airtable->D1 import only (not used by the cron/consumer)

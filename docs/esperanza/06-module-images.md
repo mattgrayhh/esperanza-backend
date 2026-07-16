@@ -32,10 +32,9 @@ objects in gallery JSON). Uploads happen through the admin's `uploadImage` /
 ## ★ The retired host: `media.esperanzahomes.com`
 
 The legacy site served images from `media.esperanzahomes.com`. **That host is dead and
-fully retired from D1 and Framer** (no references remain in the data). All images are now
+fully retired from D1** (no references remain in the data). All images are now
 R2-hosted. If you ever see a `media.esperanzahomes.com` URL, it's a leftover/dead link —
-re-host the asset to R2 and update the record. (A couple of orphaned/unemitted Framer media
-references may still exist but aren't served.)
+re-host the asset to R2 and update the record.
 
 ---
 
@@ -54,21 +53,20 @@ always **download and re-upload to R2**, then store only the stable R2 `{url, fi
 This part surprises people, so here's the honest state:
 
 - **Cloudflare Images / a compression proxy (`img.hazardhouse.ai`) was built but is
-  disabled / passthrough** for the public + Framer path. It's a no-op.
-- **Why disabled:** on the Framer path it was net-negative. Framer **re-hosts** every image
-  into its own CDN when it ingests the URL, so an upstream transform mostly gets discarded;
-  worse, Framer's fetcher pulled ~JPEG instead of AVIF and the proxy broke some ingests.
-  So compressing at the edge bought nothing and caused failures.
+  disabled / passthrough** for the public path. It's a no-op.
+- **Why disabled:** at the edge it bought little in practice and broke some fetches, so it
+  was left as a passthrough.
 - **The one place resizing IS used:** inside the **PDF worker** (`/img`, doc 05), purely so
   brochures embed downsized images. That's internal, not the site pipeline.
 - **The real win (TODO, not yet built):** **compress at upload time** in the admin using
   `sharp` — shrink images once when marketing uploads them, store the optimized version in
-  R2, and let both Framer and PDFs consume that. There's a `sharp`-based `derive-renditions`
+  R2, and let both the site and PDFs consume that. There's a `sharp`-based `derive-renditions`
   script in the PDF package used as a one-off, but no runtime upload-time pipeline yet.
 
 **Bottom line for a new dev:** don't expect an active compression layer. Images are served
-from R2 as uploaded; Framer re-hosts them. If image weight becomes a problem, the
-sanctioned direction is compress-at-upload with `sharp`, not re-enabling the edge proxy.
+from R2 as uploaded, directly to the static frontend and `esperanza-api`. If image weight
+becomes a problem, the sanctioned direction is compress-at-upload with `sharp`, not
+re-enabling the edge proxy.
 
 ---
 

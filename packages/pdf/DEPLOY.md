@@ -66,7 +66,7 @@ The theme editor's live preview iframe resolves through the admin's `PDF` servic
 ## Notes / things to verify
 - **Brand assets (Phase 0):** until you upload fonts/logos and set them in the theme (via `/settings/pdf-theme` or a theme seed), PDFs render with fallback fonts and the text wordmark — structurally correct, not brand-perfect.
 - **R2 prefix** for renditions (step 7) is an assumption — confirm with `wrangler r2 object list`.
-- **Framer community link:** `qmi.dynamic_pdf` + `floor_plans.brochure_pdf_url` already flow to Framer; `communities.brochure_pdf_url` needs the Phase-4 framer-push field addition to appear on the Framer community record (it's reachable by URL regardless).
+- **Brochure PDF links:** `qmi.dynamic_pdf`, `floor_plans.brochure_pdf_url`, and `communities.brochure_pdf_url` are all served from D1 via the public API and are reachable by URL for the frontend to link.
 - **Rollback:** these are additive (new worker, new tables, new nullable column, new admin routes). Nothing existing is mutated; deleting the `esperanza-pdf` worker + ignoring the new admin routes reverts cleanly.
 
 ## Browser Rendering: account tier, reuse & diagnostics (READ THIS if you see 429s)

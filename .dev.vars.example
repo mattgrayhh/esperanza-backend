@@ -6,17 +6,10 @@
 # --- Snowflake (ingest) ---
 SNOWFLAKE_PASSWORD=
 
-# --- Framer push (framer-push) ---
-FRAMER_API_KEY=
-FRAMER_PROJECT_URL=
-
 # --- Microsoft Graph / OneDrive renderings (renderings) ---
 MS_GRAPH_TENANT_ID=
 MS_GRAPH_CLIENT_ID=
 MS_GRAPH_CLIENT_SECRET=
-
-# --- Airtable one-time import (ingest, import script only) ---
-AIRTABLE_PAT=
 
 # --- MailLayer (admin — emails generated passwords on user create/reset) ---
 # The enabled Esperanza MailLayer template's `txn_...` key. Best-effort: if unset, the

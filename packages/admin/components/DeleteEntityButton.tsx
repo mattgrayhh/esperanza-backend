@@ -67,8 +67,8 @@ export function DeleteEntityButton({
         <DialogHeader>
           <DialogTitle>Delete “{displayName}”?</DialogTitle>
           <DialogDescription>
-            This permanently removes the record and takes it off the live site (it’s
-            removed from Framer too). This can’t be undone.
+            This permanently removes the record and takes it off the live site.
+            This can’t be undone.
             {synced ? (
               <>
                 {' '}

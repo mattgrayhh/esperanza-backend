@@ -424,11 +424,11 @@ export function buildFieldView(
   }
 
   // TARGETED WYSIWYG upgrade: the BLOG `content` field renders with the true TipTap
-  // editor (BlogContentEditor → Framer-safe HTML + inline R2 image upload) instead of the
+  // editor (BlogContentEditor → safe HTML + inline R2 image upload) instead of the
   // markdown RichTextField. We DON'T add a 'wysiwyg' value to the shared `Widget` union
   // (lib/field-config.ts) because packages/db's seed has an exhaustive switch over it and
   // is owned elsewhere; instead we map the FieldView widget here. The static config keeps
-  // `richtext` (→ seeded type 'rich' → Framer formattedText, which is correct for the
+  // `richtext` (→ seeded type 'rich' → formattedText, which is correct for the
   // stored HTML). Other 'richtext' fields (communities.description, etc.) are unchanged.
   const isBlogContent = key === 'blogs' && f.field === 'content';
 

@@ -1,4 +1,4 @@
-# 01 — Data Flow: Snowflake → D1 → Framer
+# 01 — Data Flow: Snowflake → D1 → public site
 
 This is the most important concept in the whole system. Once the data flow clicks, every
 module makes sense. Read this before the module docs.
@@ -12,15 +12,14 @@ module makes sense. Read this before the module docs.
    ───────────────                ─────────────                  ─────────────────────
 
    Snowflake  ─┐                 ┌──────────────────┐
-   (pricing &  │  esperanza-     │                  │   esperanza-framer-push
-    availab.)  ├─ ingest ──────► │   D1: esperanza  ├─► (D1 → Framer) ──► Framer site
-              ┌┘  (cron 4h)      │                  │                    (what visitors see)
+   (pricing &  │  esperanza-     │                  │   esperanza-api ──► esperanza-frontend
+    availab.)  ├─ ingest ──────► │   D1: esperanza  ├─► (edge read API)    (static site —
+              ┌┘  (cron 4h)      │                  │                       what visitors see)
    Marketing ─┘  admin panel     │  SOURCE OF TRUTH │
    (humans)      (writes)        └──────────────────┘
-                                    │   │   │
-                                    │   │   └─► esperanza-xml-feed  → Zillow/Realtor/etc.
-                                    │   └─────► esperanza-pdf        → brochures & lists
-                                    └─────────► esperanza-api        → edge read API
+                                    │   │
+                                    │   └─► esperanza-xml-feed  → Zillow/Realtor/etc.
+                                    └─────► esperanza-pdf        → brochures & lists
 ```
 
 1. **Source** — two inputs write into D1:
@@ -29,8 +28,10 @@ module makes sense. Read this before the module docs.
    - **Marketing people** edit everything else through the **admin panel**.
 2. **Truth** — **D1** (`esperanza`) is the single source of truth. Every reader downstream
    pulls from D1.
-3. **Presentation** — several consumers read D1: `framer-push` (the public site),
-   `xml-feed` (listing syndication), `pdf` (brochures), and `api` (a read API).
+3. **Presentation** — the consumers read D1: `api` (the edge read API the public
+   `esperanza-frontend` site fetches at runtime), `xml-feed` (listing syndication), and
+   `pdf` (brochures). There is no separate copy of the site content — the frontend reads
+   D1 live through the api.
 
 ---
 
@@ -85,10 +86,10 @@ priority first:
    preferred since 0025 — see `communityPriceFromSql` in ingest).
 
 The resolution is computed live (nothing derived is stored on `communities`). The
-three code sites (`framer-push` `selectById` + `selectAll`, the `pdf` list query)
-share `communityPriceFromExpr()` from `@esperanza/db/elevation-price`;
+code sites that compute it (the `api` reads and the `pdf` list query) share
+`communityPriceFromExpr()` from `@esperanza/db/elevation-price`;
 `packages/db/views.sql` (`v_public_communities`) keeps a literal copy — keep it
-identical. The elevation label is internal-only (never pushed to Framer).
+identical. The elevation label is internal-only (never shown on the public site).
 
 **Per-plan, per-community prices** follow the same rule: `GET
 /api/public/floorplans` serves `communityPrices` from `COMMUNITY_PLAN_PRICE_SQL`
@@ -104,12 +105,11 @@ synced)` shortcuts** (those skip close-out and show a stale, lower number). Conc
 - **Admin community detail** (stats card *and* the map-pin preview) — reads
   `price_from` straight from `v_public_communities` (`packages/admin/lib/community-detail.ts`),
   so the admin never shows a different number than the live site.
-- **City "Homes from"** — the Framer *Cities* collection pushes `price_from` =
-  `MIN(v_public_communities.price_from)` across that city's **published** communities
-  (`CITY_COUNTS_SQL` in `framer-push`). Because it reads the view, the close-out logic is
-  applied exactly once and the city figure can never drift from the community cards.
-- **`close_out` flag** — the boolean itself is pushed to the Framer *Community* collection
-  (for badging / conditional layout); the price effect is already in `price_from`.
+- **City "Homes from"** — the city `price_from` = `MIN(v_public_communities.price_from)`
+  across that city's **published** communities. Because it reads the view, the close-out
+  logic is applied exactly once and the city figure can never drift from the community cards.
+- **`close_out` flag** — the boolean is exposed on the community (for badging / conditional
+  layout); the price effect is already in `price_from`.
 
 > ⚠ The **city-page neighborhood map** (`cities.neighborhoods_map_json`, currently on the
 > unmerged `feat/city-neighborhoods-map` branch) builds each pin's `priceFrom` from
@@ -171,7 +171,7 @@ The public views resolve them with `COALESCE(override_<field>, synced_<field>)` 
 |---|---|
 | `field_definitions` | Drives the admin forms (see below). One row per editable field. |
 | `audit_log` | Every admin write appends a row: who changed what field, old → new value. |
-| `sync_log` | One row per ingest run and per framer-push batch. **Your main observability tool.** |
+| `sync_log` | One row per ingest run. **Your main observability tool.** |
 | `pdf_renders` / `pdf_themes` / `pdf_render_log` | PDF generation state (doc 05). |
 | `admin_users` | Admin panel logins (PBKDF2-hashed passwords). |
 | `promotion_targets` | Which entities a promotion applies to. |
@@ -183,9 +183,9 @@ For each publishable entity there's a view — `v_public_qmi`, `v_public_communi
 - filter to `published = 1`,
 - join in lookups (e.g. a QMI's floor-plan details) that don't fit in the base table.
 
-**Downstream readers query the views, not the raw tables.** The `api` worker and the
-`xml-feed` worker both read `v_public_*`. (framer-push reads a mix — see doc 04.) The views
-are defined in `packages/db/views.sql`.
+**Downstream readers query the views, not the raw tables.** The `api` worker (which the
+public site fetches), the `xml-feed` worker, and the `pdf` renderer all read `v_public_*`.
+The views are defined in `packages/db/views.sql`.
 
 ---
 
@@ -205,19 +205,19 @@ a static built-in config instead of an empty form.)
 
 ---
 
-## How D1 reaches Framer (preview of doc 04)
+## How D1 reaches the public site
 
-Framer is a **copy** of D1, not a second source of truth. Two paths keep it in sync:
+There's no copy to keep in sync — the public site reads D1 **live**:
 
-1. **Event-driven (primary):** every admin write and every ingest change **enqueues a
-   message** onto `esperanza-framer-queue` (`{collection, action, id}`). The `framer-push`
-   worker consumes it, re-reads the full row from D1, and upserts it into the Framer CMS.
-2. **Nightly backstop:** a cron in `framer-push` re-pushes anything changed in the last
-   ~25 hours, catching any missed events.
+1. The static `esperanza-frontend` site fetches `esperanza-api` (`/api/public/*`) at
+   runtime for its dynamic content (Quick-Move-Ins, communities, detail pages, settings).
+2. `esperanza-api` serves the `v_public_*` views (published rows only, with the
+   `override`/`synced` resolution) from D1 at the edge, cached briefly.
+3. Admin writes purge the api's edge cache (`?purge=1`) so an edit shows within moments
+   rather than after the cache TTL.
 
-Plus a **manual** path (`POST /backfill`) you'll use after deploying mapping changes.
-This is covered in detail — including the field-type rules that trip people up — in
-[doc 04](./04-module-framer-push.md).
+So a saved/published edit is live as soon as the cache clears — nothing to push or
+backfill. See [doc 03](./03-module-admin.md) for the admin write path.
 
 ---
 

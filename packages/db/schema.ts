@@ -231,7 +231,7 @@ export const communities = sqliteTable(
     masterPlanned: integer('master_planned', { mode: 'boolean' }).notNull().default(false),
     comingSoon: integer('coming_soon', { mode: 'boolean' }).notNull().default(false),
     // close-out: no QMIs left → price_from uses the lowest published OFFERED plan
-    // (see v_public_communities / migration 0018). Admin-owned, not pushed to Framer.
+    // (see v_public_communities / migration 0018). Admin-owned.
     closeOut: integer('close_out', { mode: 'boolean' }).notNull().default(false),
     // 0019 (generalized in 0025): the PRICE SOURCE elevation selector. When set (a
     // "Type / Material" label, e.g. "Traditional / Brick"), "homes from" AND each
@@ -336,7 +336,7 @@ export const cities = sqliteTable(
     heroDescription: text('hero_description'),
     nationalRecognition: text('national_recognition'),
     incentive: text('incentive'),
-    // admin-owned single image, surfaced to Framer as `where_we_build_image` (0017).
+    // admin-owned single image, surfaced to the public site as `where_we_build_image` (0017).
     whereWeBuildImageUrl: text('where_we_build_image_url'),
 
     cityCopyBlocksJson: text('city_copy_blocks_json'),
@@ -394,7 +394,7 @@ export const floorPlans = sqliteTable(
     imageUrl: text('image_url'),
     heroImage2: text('hero_image_2'),
     heroImage3: text('hero_image_3'),
-    // 0008: top-down layout PNG (R2). Shared per plan; JOINed onto QMI + Framer.
+    // 0008: top-down layout PNG (R2). Shared per plan; JOINed onto QMI + the public projection.
     floorPlanImage: text('floor_plan_image'),
     // FP:* lookup sources carrying attachment-object JSON (feed v_public_qmi's
     // fp_image / fp_additional_images via the floor-plan JOIN). STABLE urls only.
@@ -454,7 +454,7 @@ export const promotions = sqliteTable(
     ctaLabel: text('cta_label'),
     ctaUrl: text('cta_url'),
     imageUrl: text('image_url'), // STABLE R2 url
-    pdfUrl: text('pdf_url'), // STABLE R2 url of an optional promo PDF (Framer link)
+    pdfUrl: text('pdf_url'), // STABLE R2 url of an optional promo PDF (public link)
     rateOverride: text('rate_override'), // TEXT; NULL/'' → inherit site_settings.incentive_rate
     // Per-surface visibility toggles (migration 0021). Independent of `published`
     // AND of promotion_targets; the two compose (surface = WHERE, targets = WHICH).
@@ -547,7 +547,8 @@ export const images = sqliteTable('images', {
 // Snowflake DM_FLOOR_PLAN and REPLACED wholesale on each ingest run (not a
 // queue/diff target). Read by the close-out price_from resolution: when a
 // community's close_out_elevation label matches, "homes from" = MIN(sales_price)
-// among the community's offered published plans for that label. Not pushed to Framer.
+// among the community's offered published plans for that label. Internal price
+// lookup only; not surfaced to the public site directly.
 export const communityElevationPrices = sqliteTable('community_elevation_prices', {
   // synthetic key: `${communityId}:${floorPlanId}:${elevationLabel}`
   id: text('id').primaryKey(),
@@ -655,8 +656,8 @@ export const adminUsers = sqliteTable('admin_users', {
 // FIELD_DEFINITIONS — the Field Builder registry (migration 0002_field_builder.sql).
 //
 // One row per admin field, per entity: the single source of truth for admin form/
-// list rendering and (Phase C) the Framer Managed-collection schema. Seeded from
-// today's packages/admin/lib/field-config.ts so Phase A is behavior-identical.
+// list rendering. Seeded from today's packages/admin/lib/field-config.ts so Phase A
+// is behavior-identical.
 //
 //   key            — physical column (admin/synced/publish), QmiOverridableField
 //                    name (override), or the synthetic config key (bespoke widgets).
@@ -664,7 +665,9 @@ export const adminUsers = sqliteTable('admin_users', {
 //                    url·image·select) or a verbatim bespoke widget name.
 //   system         — 1 = locked/synced (Snowflake-fed); reorder/relabel/group/hide
 //                    allowed, delete/retype not.
-//   framerFieldId/framerType — populated in Phase C when setFields syncs the schema.
+//   framerFieldId/framerType — RETAINED-BUT-UNUSED columns. Framer was retired
+//                    2026-07-06; nothing reads these now. Kept as inert columns
+//                    (dropping them would need a live-DB migration).
 //
 // UNIQUE(entity, key) makes the seed idempotent (upsert on the natural key).
 // =============================================================================
@@ -688,7 +691,7 @@ export const fieldDefinitions = sqliteTable(
     framerFieldId: text('framer_field_id'),
     framerType: text('framer_type'),
     // 1 = user-added field whose value lives in the entity's custom_fields JSON
-    // (key == JSON key == Framer field id). 0 = maps a real column / bespoke widget.
+    // (key == JSON key). 0 = maps a real column / bespoke widget.
     custom: integer('custom', { mode: 'boolean' }).notNull().default(false),
     createdAt: text('created_at').default(nowIso),
     updatedAt: text('updated_at').default(nowIso),

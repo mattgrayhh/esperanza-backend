@@ -9,52 +9,28 @@
 
 import type { D1Database, R2Bucket, Queue, Fetcher, Service } from '@cloudflare/workers-types';
 
-/** Message enqueued onto esperanza-framer-queue (matches framer-push types.ts). */
-export interface FramerSyncMessage {
-  collection:
-    | 'floor_plans'
-    | 'qmi'
-    | 'communities'
-    | 'collections'
-    | 'images'
-    | 'blogs'
-    | 'promotions'
-    | 'cities'
-    | 'testimonials';
-  action: 'upsert' | 'delete';
-  id: string;
-}
-
 declare global {
   interface CloudflareEnv {
     /** D1 — the shared `esperanza` database. Admin uses withSession("first-primary"). */
     DB: D1Database;
     /** R2 — image uploads. Key = <entity>/<id>/<filename>. */
     IMAGES: R2Bucket;
-    /** Producer for esperanza-framer-queue. */
-    FRAMER_QUEUE: Queue<FramerSyncMessage>;
     /** Producer for esperanza-pdf-render — enqueues affected PDF re-renders on edit + all on theme publish. */
     RENDER_Q?: Queue<{ type: string; slug: string; reason: string }>;
     /** OpenNext static assets. */
     ASSETS: Fetcher;
     /** Service binding to the esperanza-pdf worker (preview proxy). */
     PDF: Service;
-    /** Service binding to the esperanza-framer-push worker (applyFramerTypes → POST /schema). */
-    FRAMER_PUSH?: Service;
 
     // --- vars ---
     IMAGES_PUBLIC_BASE_URL: string;
     PDF_PUBLIC_BASE_URL?: string;
-    /** Public framer-push URL — fallback for POST /schema when FRAMER_PUSH binding is absent. */
-    FRAMER_PUSH_URL?: string;
 
     // --- secrets (wrangler secret put) ---
     /** Auth.js v5 JWT signing secret. REQUIRED in production. */
     AUTH_SECRET?: string;
     /** Shared HMAC secret for PDF preview tokens. Must match esperanza-pdf PDF_PREVIEW_SECRET. */
     PDF_PREVIEW_SECRET?: string;
-    /** Bearer token for framer-push POST /schema. Must match framer-push WEBHOOK_TOKEN. */
-    WEBHOOK_TOKEN?: string;
 
     // --- local-only (.dev.vars) ---
     /** Local dev login bypass — attributes writes to this email under `next dev`.

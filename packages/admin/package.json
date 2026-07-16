@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Next.js 15 admin (OpenNext-on-Workers) covering all 9 entities. Auth.js v5 (Credentials + JWT) login on workers.dev. Edits D1, uploads images to R2, logs audit_log, and enqueues esperanza-framer-queue on every write.",
+  "description": "Next.js 15 admin (OpenNext-on-Workers) covering all 9 entities. Auth.js v5 (Credentials + JWT) login on workers.dev. Edits D1, uploads images to R2, and logs audit_log on every write.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

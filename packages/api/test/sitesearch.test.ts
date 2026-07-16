@@ -79,7 +79,7 @@ describe('buildIndex — serializer logic', () => {
     const lot = out.find((r) => r.type === 'lot number')!;
     expect(qmi.label).toBe('1000 W Star Flower St at Rogers Coves');
     expect(lot.label).toBe('Lot 151 — Rogers Coves');
-    // QMI page slugs are dash→underscore normalized (matches the live Framer URL).
+    // QMI page slugs are dash→underscore normalized (matches the live page URL).
     expect(qmi.href).toBe('/new-homes/available/1000_w_star_flower_st');
     expect(lot.href).toBe(qmi.href); // same destination, exactly like O'Neil
   });
@@ -206,7 +206,7 @@ describe('SITESEARCH_SQL against the real public views', () => {
     expect(out.some((r) => r.href.includes('hidden-qmi'))).toBe(false);
 
     // The one published QMI yields exactly two records (address + lot), with the
-    // dash→underscore normalized slug that matches the live Framer page URL.
+    // dash→underscore normalized slug that matches the live page URL.
     const qmiRecords = out.filter((r) => r.href === '/new-homes/available/1000_w_star_flower_st');
     expect(qmiRecords.map((r) => r.type).sort()).toEqual(['lot number', 'quick move in']);
 

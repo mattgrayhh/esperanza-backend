@@ -5,16 +5,10 @@
 // WHY: the live D1 `blogs.content` is the plain-text flattening produced at
 // Airtable import — every heading, link, inline image and embed was stripped.
 // The original rich bodies still exist on the legacy O'Neil site
-// (www.esperanzahomes.com/blog/<slug>/). This script rebuilds Framer-compatible
-// HTML from that markup (sanitize-blog-html.ts), re-hosts inline images to R2,
-// lifts the post's vimeo embed into `video_url`, and writes both back to D1 so
-// framer-push can emit blogs.content as `formattedText` (rich text).
-//
-// ORDERING (IMPORTANT): run this only AFTER the framer-push `htmlFt` change is
-// deployed and the Framer `blogs.content` field has been flipped to formattedText
-// (POST /schema). If D1 content holds HTML while the field is still `string`, the
-// nightly 25h reconcile would push raw tags to the live site. See the runbook in
-// docs/blog-rich-text-activation.md.
+// (www.esperanzahomes.com/blog/<slug>/). This script rebuilds rich HTML for
+// `blogs.content` from that markup (sanitize-blog-html.ts), re-hosts inline
+// images to R2, lifts the post's vimeo embed into `video_url`, and writes both
+// back to D1. The api serves blogs.content as rich text.
 //
 // USAGE (from packages/db):
 //   npx tsx scripts/backfill-blog-content.ts [options]

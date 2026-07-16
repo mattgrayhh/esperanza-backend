@@ -1,14 +1,14 @@
 {
-  "name": "esperanza-cf",
+  "name": "esperanza-backend",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Pure-Cloudflare CMS stack for Esperanza Homes (D1 + R2 + Workers/Queues/Cron + Next.js admin). Replaces Airtable.",
+  "description": "Cloudflare CMS stack for Esperanza Homes (D1 + R2 + Workers/Queues/Cron + Next.js admin). Source of truth for the public site.",
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
-    "typecheck": "tsc --noEmit -p packages/db/tsconfig.json && tsc --noEmit -p packages/db/scripts/tsconfig.json && tsc --noEmit -p packages/ingest/tsconfig.json && tsc --noEmit -p packages/api/tsconfig.json && tsc --noEmit -p packages/framer-push/tsconfig.json && tsc --noEmit -p packages/admin/tsconfig.json",
+    "typecheck": "tsc --noEmit -p packages/db/tsconfig.json && tsc --noEmit -p packages/db/scripts/tsconfig.json && tsc --noEmit -p packages/ingest/tsconfig.json && tsc --noEmit -p packages/api/tsconfig.json && tsc --noEmit -p packages/admin/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",

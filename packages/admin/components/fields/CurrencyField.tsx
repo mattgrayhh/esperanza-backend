@@ -12,7 +12,7 @@
 //     input carries the canonical numeric string the form submits.
 //   * On focus we show the raw number (easy to edit); on blur we re-group for display.
 //   * We never store the `$`/commas — only the parsed number — so the column stays a
-//     real number and Framer (number) + the public API read it unchanged.
+//     real number and the public API reads it unchanged.
 // =============================================================================
 
 import { useState } from 'react';

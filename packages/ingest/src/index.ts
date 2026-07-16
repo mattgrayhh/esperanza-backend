@@ -48,12 +48,6 @@ import { handleQueueBatch, writeSyncLog, type ConsumerEnv, type D1Like } from '.
 export interface Env extends SnowflakeEnv, ConsumerEnv {
   DB: D1Like;
   SYNC_QUEUE: { send(body: unknown): Promise<void>; sendBatch(messages: { body: unknown }[]): Promise<void> };
-  /**
-   * Producer binding for esperanza-framer-queue. After the consumer applies a
-   * synced D1 write it enqueues a Framer-push message here so the change reaches
-   * Framer immediately (event-driven). Bound in wrangler.toml [[queues.producers]].
-   */
-  FRAMER_QUEUE: { send(body: unknown): Promise<void>; sendBatch(messages: { body: unknown }[]): Promise<void> };
   /** Optional Bearer secret gating the manual `POST /run` reconciliation trigger. */
   INGEST_TRIGGER_TOKEN?: string;
 }
@@ -174,7 +168,7 @@ export default {
 
   // ── MANUAL TRIGGER: POST /run (Bearer INGEST_TRIGGER_TOKEN) runs the same
   //    Snowflake→D1 reconciliation as the cron, on demand (e.g. cutover/backfill).
-  //    Mirrors framer-push's POST /cron. Any other path → 404. No token set → 403.
+  //    Bearer-gated. Any other path → 404. No token set → 403.
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
     if (req.method === 'POST' && url.pathname === '/run') {
@@ -255,15 +249,10 @@ export async function runIngest(
     // a plan is "offered" in every community that prices it (a cep row), so union that
     // into floor_plans.communities / community_ids / community_count. Additive — never
     // drops a manual pick — so community pages + the plan-list PDF list every priced
-    // plan without waiting on the admin picker. Push each changed plan to Framer.
+    // plan without waiting on the admin picker.
     let membershipChanged: string[] = [];
     try {
       membershipChanged = await syncCommunityMembership(env.DB, elevationRows, new Date().toISOString());
-      for (let i = 0; i < membershipChanged.length; i += 100) {
-        await env.FRAMER_QUEUE.sendBatch(
-          membershipChanged.slice(i, i + 100).map((id) => ({ body: { collection: 'floor_plans', action: 'upsert', id } }))
-        );
-      }
     } catch (e) {
       // Non-fatal: a membership-derivation failure must not fail the whole sync
       // (prices are already written; next run retries). Surface it in the logs.

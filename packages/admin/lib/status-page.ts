@@ -152,9 +152,6 @@ export function getStatusSnapshot(): StatusSnapshot {
 				component("cf-ingest", "esperanza-ingest", {
 					description: "Snowflake → D1 cron + queue consumer.",
 				}),
-				component("cf-framer-push", "esperanza-framer-push", {
-					description: "D1 → Framer CMS sync.",
-				}),
 				component("cf-api", "esperanza-api", {
 					description: "Public read API over v_public_* views.",
 				}),
@@ -184,7 +181,7 @@ export function getStatusSnapshot(): StatusSnapshot {
 			description: "Public site reachability (placeholder ping every few minutes).",
 			components: [
 				component("site-esperanza", "esperanzahomes.com", {
-					description: "Public marketing site (Framer).",
+					description: "Public marketing site (static frontend on Cloudflare).",
 				}),
 			],
 		},

@@ -50,7 +50,6 @@ vi.mock('@opennextjs/cloudflare', () => ({
         },
       },
       IMAGES_PUBLIC_BASE_URL: 'https://media.test.local',
-      FRAMER_QUEUE: { send: async () => {} },
     },
   }),
 }));

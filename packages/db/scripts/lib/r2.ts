@@ -20,7 +20,9 @@ import { execFileSync } from 'node:child_process';
 import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { FORBIDDEN_IMAGE_HOST } from './coerce.js';
+
+// Signed/expiring image host we must never persist to D1 (guard, still enforced here).
+export const FORBIDDEN_IMAGE_HOST = 'airtableusercontent.com';
 
 export const DEFAULT_BUCKET = 'esperanza-cms';
 // The stable public asset host is the R2 bucket's public domain. It was formerly

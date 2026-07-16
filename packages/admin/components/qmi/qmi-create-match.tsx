@@ -6,7 +6,7 @@
 // the suggested floor plan, optionally override synced specs, then "Save & render".
 //
 // Save reuses the existing write path via matchAndRenderQmi (→ saveEntity → override
-// helper + audit + Framer push + pdf_renders ensure + RENDER_Q enqueue), then flags the
+// helper + audit + pdf_renders ensure + RENDER_Q enqueue), then flags the
 // brochure render 'pending'. It does NOT publish. After a save the matched house drops
 // out of the picker (it's no longer unmatched) and lands in "Just matched", where its
 // PDF status polls Pending → link. The picker advances to the next house so you can

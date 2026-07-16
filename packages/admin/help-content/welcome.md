@@ -5,7 +5,7 @@ category: Getting Started
 categorySort: 10
 sort: 10
 summary: How the admin, Snowflake, and esperanzahomes.com fit together.
-keywords: overview, intro, start, website, snowflake, framer
+keywords: overview, intro, start, website, snowflake
 ---
 
 This admin is the single place the marketing team manages everything that

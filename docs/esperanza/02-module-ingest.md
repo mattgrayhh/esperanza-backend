@@ -27,10 +27,9 @@ Every run (`runIngest()`):
    values. Only genuine changes produce work — no churn.
 4. **Enqueues** one message per changed record onto `esperanza-sync-queue`.
 5. The **same worker's queue consumer** drains that queue and applies the changes to D1
-   through the **synced-columns allowlist** (below).
-6. After each successful D1 write, the consumer **enqueues a Framer push** onto
-   `esperanza-framer-queue` so the change propagates to the site.
-7. Writes a row to `sync_log` summarizing the run.
+   through the **synced-columns allowlist** (below). The D1 write *is* the job's output —
+   the public site reads the updated data at request time via `esperanza-api`.
+6. Writes a row to `sync_log` summarizing the run.
 
 > The producer (diff) and consumer (apply) are split across a queue so a big run can't time
 > out, and so failures retry per-record instead of failing the whole batch.
@@ -42,10 +41,8 @@ Every run (`runIngest()`):
 | Worker | Trigger | Cron | What it does |
 |---|---|---|---|
 | `esperanza-ingest` | cron | `0 */4 * * *` (**every 4 hours**) | Diff Snowflake vs D1, enqueue per-record changes. |
-| `esperanza-framer-push` | cron | `0 9 * * *` (**daily 09:00 UTC**) | Backstop: re-push anything changed in the last ~25h (`CRON_LOOKBACK_MINUTES=1500`). |
 
-So pricing/availability is at most ~4 hours stale. The Framer cron is just a safety net —
-the *primary* path to Framer is event-driven (enqueued immediately on every write).
+So pricing/availability is at most ~4 hours stale.
 
 ### Running it on demand
 You don't have to wait for the cron. Trigger a run manually:
@@ -136,10 +133,9 @@ The allowlists (abridged):
 | Binding | Resource | Role |
 |---|---|---|
 | `DB` | D1 `esperanza` | read state + write synced columns |
-| `IMAGES` | R2 `esperanza-cms` | (one-time Airtable image import only) |
+| `IMAGES` | R2 `esperanza-cms` | R2 image bucket binding |
 | `SYNC_QUEUE` (producer) | `esperanza-sync-queue` | cron → per-record sync messages |
 | consumer | `esperanza-sync-queue` (DLQ: `esperanza-sync-queue-dlq`) | apply to D1 (batch 10, 3 retries) |
-| `FRAMER_QUEUE` (producer) | `esperanza-framer-queue` | enqueue Framer push after each D1 write |
 
 Secret: `SNOWFLAKE_PASSWORD` · Manual-trigger secret: `INGEST_TRIGGER_TOKEN`.
 
@@ -153,7 +149,7 @@ Secret: `SNOWFLAKE_PASSWORD` · Manual-trigger secret: `INGEST_TRIGGER_TOKEN`.
 | Entry: cron handler, queue consumer, `/run` endpoint | `src/index.ts` |
 | Snowflake login + the four SQL queries + row parsing | `src/snowflake.ts` |
 | Diff logic + message shapes + mass-unpublish guard | `src/diff.ts` |
-| Apply step (write to D1, derive availability, enqueue Framer) | `src/consumer.ts` |
+| Apply step (write to D1, derive availability) | `src/consumer.ts` |
 | **The allowlist** (add a new synced column here) | `src/synced.ts` |
 | Availability-text derivation | `src/availability.ts` |
 
@@ -161,7 +157,7 @@ Secret: `SNOWFLAKE_PASSWORD` · Manual-trigger secret: `INGEST_TRIGGER_TOKEN`.
 `synced_<x>` column to the D1 schema + migration, (2) read it in `src/snowflake.ts`,
 (3) include it in the diff in `src/diff.ts`, (4) **add it to the allowlist in
 `src/synced.ts`** (or the apply step will reject it), (5) if it should reach the site, add
-the override pairing in the view and the Framer mapper (doc 04).
+the override pairing in the public view (doc 01) so `esperanza-api` serves it.
 
 ---
 

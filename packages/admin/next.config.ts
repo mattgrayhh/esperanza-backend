@@ -3,7 +3,7 @@
 //
 // `initOpenNextCloudflareForDev()` wires `next dev` up to a wrangler getPlatformProxy
 // so that getCloudflareContext().env exposes the SAME bindings locally (DB, IMAGES,
-// FRAMER_QUEUE, ASSETS, vars) that the deployed Worker gets. It is a no-op at build
+// RENDER_Q, ASSETS, vars) that the deployed Worker gets. It is a no-op at build
 // time and in production — see @opennextjs/cloudflare cloudflare-context.ts.
 // =============================================================================
 

@@ -27,7 +27,7 @@ export interface BlogRow {
 //    app/blogs/[id]/page.tsx (which reuses the generic EntityEditForm), shadowing
 //    the dynamic /[entity]/[id] editor for blogs. It saves through the same server
 //    actions (saveEntity / togglePublished / uploadImage), so the write path,
-//    audit_log, and FRAMER_QUEUE behaviour are unchanged. ───────────────────────
+//    audit_log behaviour is unchanged. ───────────────────────
 export const SEGMENT = "blogs"
 export const editHref = (id: string) => `/${SEGMENT}/${id}`
 export const newHref = `/${SEGMENT}/new`

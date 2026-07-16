@@ -1,48 +1,38 @@
 import { describe, it, expect } from 'vitest';
-import { backfill, pushSchema, triggerIngest, rebuildPdf } from '../src/ops';
+import { triggerIngest, rebuildPdf } from '../src/ops';
 
-function fakeEnv() {
+function fakeIngestEnv() {
   const calls: { url: string; init?: RequestInit }[] = [];
-  const FRAMER_PUSH = {
-    async fetch(input: RequestInfo, init?: RequestInit) {
-      const url = typeof input === 'string' ? input : (input as Request).url;
-      calls.push({ url, init });
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
-    },
-  };
-  return { env: { FRAMER_PUSH, WEBHOOK_TOKEN: 'tok' } as never, calls };
-}
-
-function fakeEnvWithDb() {
-  const calls: { url: string; init?: RequestInit }[] = [];
-  const FRAMER_PUSH = {
+  const INGEST = {
     async fetch(input: RequestInfo, init?: RequestInit) {
       const url = typeof input === 'string' ? input : (input as Request).url;
       calls.push({ url, init });
       return new Response('ok', { status: 200 });
     },
   };
-  const DB = { prepare: () => ({ bind: () => ({ all: async () => ({ results: [] }) }) }) };
-  return { env: { FRAMER_PUSH, WEBHOOK_TOKEN: 'tok', DB } as never, calls };
+  return { env: { INGEST, INGEST_TRIGGER_TOKEN: 'tok' } as never, calls };
+}
+
+function fakeRenderEnv() {
+  const sent: unknown[] = [];
+  const RENDER_Q = { async send(msg: unknown) { sent.push(msg); } };
+  return { env: { RENDER_Q } as never, sent };
 }
 
 describe('tier-2 ops', () => {
-  it('backfill calls framer-push /backfill with the keys and bearer', async () => {
-    const { env, calls } = fakeEnv();
-    const r = await backfill(env, ['qmi', 'communities']);
+  it('triggerIngest calls ingest /run via POST with the bearer', async () => {
+    const { env, calls } = fakeIngestEnv();
+    const r = await triggerIngest(env);
     expect(r.ok).toBe(true);
-    expect(calls[0]!.url).toContain('/backfill');
-    expect(calls[0]!.url).toContain('keys=qmi%2Ccommunities');
+    expect(calls[0]!.url).toContain('/run');
+    expect(calls[0]!.init!.method).toBe('POST');
     expect((calls[0]!.init!.headers as Record<string, string>).Authorization).toBe('Bearer tok');
   });
 
-  it('pushSchema calls framer-push /schema via POST with collection in body', async () => {
-    const { env, calls } = fakeEnvWithDb();
-    const r = await pushSchema(env, 'communities');
+  it('rebuildPdf enqueues a list render on RENDER_Q', async () => {
+    const { env, sent } = fakeRenderEnv();
+    const r = await rebuildPdf(env, 'all-plans');
     expect(r.ok).toBe(true);
-    expect(calls[0]!.url).toContain('/schema');
-    expect(calls[0]!.init!.method).toBe('POST');
-    const body = JSON.parse(calls[0]!.init!.body as string);
-    expect(body.collection).toBe('communities');
+    expect(sent).toEqual([{ type: 'list', slug: 'all-plans', reason: 'ops-rebuild' }]);
   });
 });

@@ -44,7 +44,7 @@ export interface FieldTypeMeta {
   label: string;
   /** does this type carry a {value,label} options list (select)? */
   hasOptions: boolean;
-  /** the Framer field type this maps to (recorded for Phase C; not synced here). */
+  /** the CMS field type this maps to (recorded for Phase C; not synced here). */
   framerType: string;
 }
 

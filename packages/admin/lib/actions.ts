@@ -6,10 +6,9 @@
 // Every mutation in the admin goes through one of these actions. Each one obeys the
 // cross-package write contract:
 //   (1) write D1 via the PRIMARY session (read-your-writes — see lib/db.ts),
-//   (2) insert an audit_log row (actor = Cloudflare Access identity),
-//   (3) enqueue an esperanza-framer-queue message {collection, action:'upsert', id}
-//       for the changed record so framer-push re-pushes it
-//       (skipped for unpublished draft creates — see createEntity `{ sync: false }`).
+//   (2) insert an audit_log row (actor = Cloudflare Access identity).
+// D1 is the source of truth; the public read path (esperanza-api + the static site)
+// reads it directly, so no publish/push step is needed.
 //
 // QMI synced-field edits route through @esperanza/db/override (buildOverrideWrite /
 // buildOverrideAudit). Plain fields are written directly. The publish toggle is the
@@ -65,16 +64,10 @@ import {
   FIELD_TYPE_META,
   type FieldType,
 } from './field-builder';
-import { isSettableFramerType } from './framer-types';
-import {
-  postSchema,
-  type SchemaFieldRequest,
-  type SchemaFieldResult,
-} from './framer-push-client';
 import { chunk, AUDIT_ROWS_PER_INSERT } from './audit-chunk';
 
 // =============================================================================
-// Shared post-write step: audit_log rows + enqueue framer push.
+// Shared post-write step: audit_log rows + public-cache purge + PDF refresh.
 // =============================================================================
 
 interface AuditInput {
@@ -117,13 +110,12 @@ async function purgePublicCache(apiBaseUrl: string | undefined, collection: stri
 }
 
 /**
- * Insert audit rows and (optionally) fan out site sync side effects. Call AFTER the
- * D1 write committed. `collection` must be a framer-push CollectionKey (== EntityKey).
- * Idempotent enqueue: the consumer re-reads the full row by id.
+ * Insert audit rows and (optionally) fan out site side effects. Call AFTER the
+ * D1 write committed. `collection` is an EntityKey.
  *
- * Pass `{ sync: false }` for unpublished draft creates — audit only. Framer queue,
- * public-cache purge, and PDF register/re-render are skipped until a real save or
- * publish (those paths leave sync at the default true).
+ * Pass `{ sync: false }` for unpublished draft creates — audit only. Public-cache
+ * purge and PDF register/re-render are skipped until a real save or publish (those
+ * paths leave sync at the default true).
  */
 async function postWrite(
   db: Db,
@@ -153,16 +145,6 @@ async function postWrite(
   if (opts?.sync === false) return;
 
   const env = getCloudflareContext().env;
-  // Framer is retired; the queue binding may be dead or its consumer gone. A failed
-  // enqueue must never reject the caller's save — the row (and, for uploads, the R2
-  // object) is already persisted before postWrite runs. This unguarded send was
-  // surfacing to operators as "an unexpected response was received from the server."
-  try {
-    await env.FRAMER_QUEUE.send({ collection, action: 'upsert', id });
-  } catch {
-    /* framer retired — best-effort enqueue */
-  }
-
   // Purge the public api edge cache for this entity (+ promo-coupled dependents)
   // so the edit shows before the TTL instead of after it. Best-effort.
   try {
@@ -228,10 +210,10 @@ const toStr = (v: unknown): string | null => (v === null || v === undefined ? nu
 // =============================================================================
 // createEntity — insert a fresh admin-created record with a generated id and return it.
 // New records start unpublished/draft (the publish toggle is the only path to live).
-// Audits a `create` row only — no Framer enqueue, cache purge, or PDF work until the
-// operator saves content or publishes (saveEntity / setStatus / togglePublished).
+// Audits a `create` row only — no cache purge or PDF work until the operator saves
+// content or publishes (saveEntity / setStatus / togglePublished).
 // The generated id is prefixed `adm` to distinguish admin-created rows from the
-// Airtable-seeded `rec` ids; the framer upsert key is just the id, so any value works.
+// legacy `rec` ids inherited at migration.
 // =============================================================================
 
 export async function createEntity(
@@ -287,7 +269,7 @@ export async function createCommunityDraft(_formData?: FormData): Promise<void> 
 }
 
 // Belt-and-suspenders sanitize for rich-text HTML. The RichTextEditor (TipTap
-// StarterKit + Link + Image) already restricts output to the Framer-safe node/mark set,
+// StarterKit + Link + Image) already restricts output to a safe node/mark set,
 // so this is a SECOND line of defense against anything that slips in (e.g. a future
 // paste-handler regression). Minimal + dependency-free (the Worker has no DOM): drop
 // <script>/<style>/<iframe> blocks entirely and strip inline on*= event handlers. Not a
@@ -423,7 +405,7 @@ export async function saveEntity(
     }
     // Belt-and-suspenders: scrub rich-text HTML before it's written. ALL rich fields now
     // store WYSIWYG HTML (RichTextEditor), so sanitize any HTML-bearing string value (the
-    // editor already constrains output to the Framer-safe tag subset; this strips any
+    // editor already constrains output to a safe tag subset; this strips any
     // <script>/<style>/<iframe>/on*= that could slip through). No-op on plain text.
     const cleanValue =
       typeof rawValue === 'string' && /<[a-z][\s\S]*>/i.test(rawValue)
@@ -532,11 +514,11 @@ export async function saveEntity(
 }
 
 // =============================================================================
-// deleteEntity — hard-delete one record (any entity) and remove it from Framer.
+// deleteEntity — hard-delete one record (any entity) from D1.
 //
-// Mirrors deleteImageAsset: delete the D1 row, then postWrite a `delete` audit.
-// postWrite enqueues an `upsert`; the consumer re-reads the (now-missing) row and
-// treats a missing row as a removeItems() — so the item leaves Framer too.
+// Mirrors deleteImageAsset: delete the D1 row, then postWrite a `delete` audit
+// (+ public-cache purge). The public read path reads D1 directly, so the row
+// disappears from the site once the cache TTL/purge clears.
 //
 // NOTE (synced entities): qmi/communities/floor_plans are sourced from Snowflake.
 // Deleting the D1 row here does NOT stop the next sync from re-inserting it — the
@@ -582,9 +564,9 @@ export async function deleteEntity(
 // =============================================================================
 // matchAndRenderQmi — assign a floor plan (+ optional synced-field overrides) to an
 // unmatched draft and kick off the brochure PDF render. Reuses saveEntity for the
-// write, so floor_plan_id routes through buildOverrideWrite, gets audited, enqueues
-// the Framer push, and (via postWrite) ensures the pdf_renders row + enqueues a render
-// — all unchanged. Then it flags that render 'pending' so the UI shows in-flight
+// write, so floor_plan_id routes through buildOverrideWrite, gets audited, and (via
+// postWrite) ensures the pdf_renders row + enqueues a render — all unchanged. Then
+// it flags that render 'pending' so the UI shows in-flight
 // status. It does NOT publish; that stays the dedicated togglePublished step.
 // =============================================================================
 export async function matchAndRenderQmi(
@@ -747,8 +729,8 @@ export async function togglePublished(
 // toggleActive — promotions' publish gate. Migration 0005 RENAMED the gate column
 // `active` → `published` (uniform with every other entity); this writes that column.
 // Kept as a distinct entry point for backward compatibility with the promotions
-// toggle wiring; published=false → framer draft:true. Same audit contract as
-// togglePublished.
+// toggle wiring; published=false hides it from the public read path. Same audit
+// contract as togglePublished.
 // =============================================================================
 
 export async function toggleActive(
@@ -854,7 +836,7 @@ export async function setStatus(
 
 // =============================================================================
 // setTestimonialStatus — testimonials' publish gate is a select, not a boolean.
-// status === 'Draft' → framer draft:true; empty/other → live. Audit action mirrors
+// status === 'Draft' → hidden from the public read path; empty/other → live. Audit action mirrors
 // the publish/unpublish contract (publish when leaving Draft, unpublish when entering).
 // =============================================================================
 
@@ -970,7 +952,7 @@ export async function savePromotionTargets(
   await db.delete(promotionTargets).where(eq(promotionTargets.promotionId, promoId));
   if (rows.length > 0) await db.insert(promotionTargets).values(rows);
 
-  // Touch the promotion so the framer lookback/queue sees it changed.
+  // Touch the promotion so its updated_at reflects the target change (cache purge + audit).
   await db.update(promotions).set({ updatedAt: at }).where(eq(promotions.id, promoId));
 
   const summary =
@@ -999,11 +981,11 @@ export async function savePromotionTargets(
 // saveCommunityFloorPlans — set which floor plans are offered in one community.
 //
 // The relationship is denormalized on the floor-plan side (floor_plans.communities
-// CSV of community NAMES + community_count) — what framer-push and the public API
-// consume. Editing from the community page therefore rewrites that CSV on each
-// AFFECTED floor-plan row: add this community's name to newly-selected plans,
-// strip it from deselected ones, leave unchanged plans alone (no churn). Each
-// changed plan is audited and enqueued to Framer via postWrite('floor_plans', …).
+// CSV of community NAMES + community_count) — what the public API consumes. Editing
+// from the community page therefore rewrites that CSV on each AFFECTED floor-plan
+// row: add this community's name to newly-selected plans, strip it from deselected
+// ones, leave unchanged plans alone (no churn). Each changed plan is audited via
+// postWrite('floor_plans', …).
 // =============================================================================
 
 export async function saveCommunityFloorPlans(
@@ -1044,7 +1026,7 @@ export async function saveCommunityFloorPlans(
   for (const p of plans) {
     const isMember = selected.has(p.id);
     // Maintain BOTH denormalized CSVs in lockstep: names (for linking / display)
-    // and rec-IDs (Framer's "Contains" source of truth). applyMembership is token-
+    // and rec-IDs (the id-based membership source of truth). applyMembership is token-
     // agnostic; communityId comes verbatim from communities.id on add AND remove,
     // so its case-insensitive match is always byte-identical (safe for rec-IDs).
     const nameRes = applyMembership(p.communities, communityName, isMember);
@@ -1141,7 +1123,7 @@ export async function uploadImage(
     .where(eq(idColumn(def.table), id));
 
   // The image (R2) and column (D1) are already persisted above. postWrite only fans out
-  // best-effort side effects (audit, cache purge, PDF re-render, retired-Framer enqueue).
+  // best-effort side effects (audit, cache purge, PDF re-render).
   // Never let those reject the upload — that failure was reported as "an unexpected
   // response was received from the server" while the image had actually saved.
   try {
@@ -1256,7 +1238,7 @@ function sanitizeFilename(name: string): string {
 }
 
 // =============================================================================
-// JSON-column editors — emit the EXACT shapes framer-push/src/collections.ts expects.
+// JSON-column editors — emit the EXACT shapes the public API (esperanza-api) expects.
 //
 //   cities.city_copy_blocks_json  → flat { key -> value } object
 //   cities.city_venue_blocks_json → flat { key -> value } object
@@ -1376,9 +1358,9 @@ export async function saveCommunityHoaLinks(
 //   (1) INSERT a fresh `images` row (id prefixed `adm`, like createEntity),
 //   (2) PUT the file to R2 IMAGES at images/<id>/<filename>,
 //   (3) UPDATE the row's file_url to the stable r2.dev url,
-//   (4) audit_log (create + upload_image) + FRAMER_QUEUE enqueue, then revalidate.
+//   (4) audit_log (create + upload_image) + public-cache purge, then revalidate.
 // It obeys every write-contract clause: getCurrentUser() attribution, getDb()
-// first-primary session, postWrite() audit+enqueue, and it REJECTS airtable urls.
+// first-primary session, postWrite() audit+purge, and it REJECTS airtable urls.
 // =============================================================================
 
 export async function createImageAsset(
@@ -1429,7 +1411,7 @@ export async function createImageAsset(
     httpMetadata: { contentType: file.type || 'application/octet-stream' },
   });
 
-  // (3)+(4) audit (create + upload_image) and enqueue one Framer push.
+  // (3)+(4) audit (create + upload_image) and purge the public cache.
   await postWrite(db, 'images', id, [
     {
       entity: 'images',
@@ -1457,7 +1439,7 @@ export async function createImageAsset(
 
 // =============================================================================
 // deleteImageAsset — remove an images library row (and its R2 object, best-effort).
-// Audits a `delete` row and enqueues the Framer push so the consumer removes it.
+// Audits a `delete` row and purges the public cache.
 // =============================================================================
 
 export async function deleteImageAsset(
@@ -1509,10 +1491,9 @@ export async function deleteImageAsset(
 }
 
 // =============================================================================
-// FIELD BUILDER (Phase B) — field_definitions CRUD + reorder.
+// FIELD BUILDER — field_definitions CRUD + reorder.
 //
-// These ADD to the write path; they DO NOT enqueue a Framer push (Framer schema sync
-// is Phase C). Each obeys the in-repo write conventions:
+// These ADD to the write path. Each obeys the in-repo write conventions:
 //   (1) gate on the Auth.js session role === 'admin' (Full-Admin only; isAdmin()),
 //   (2) attribute via getCurrentUser() and write an audit_log row for the change,
 //   (3) write D1 via the PRIMARY session (getDb → read-your-writes).
@@ -1900,256 +1881,15 @@ export async function reorderFieldDefinitions(
 }
 
 // =============================================================================
-// FRAMER FIELD TYPES (Phase C) — applyFramerTypes.
-//
-// The Settings → Framer Field Types tab stages two kinds of change per entity:
-//   • RETYPE an existing field (change its field_definitions.framer_type), and/or
-//   • ADD a new custom field (key/label/admin-type/framer-type).
-// "Apply N changes to Framer" commits the whole batch here. For each affected
-// collection we:
-//   1. For ADDED fields: INSERT the field_definitions row FIRST (custom=1,
-//      visible_in_form=1, the given admin type + framer_type) so the entity's D1 edit
-//      page immediately renders the input (value ↔ custom_fields[key]).
-//   2. Call framer-push POST /schema (service binding or token) with the affected
-//      collection's fields to re-type/create the Framer fields + re-push the collection.
-//   3. On a successful per-field result (retyped/created/unchanged), update
-//      field_definitions.framer_type to the applied value + stamp framer_field_id (==
-//      the key, the framer-push convention).
-// Full-Admin gated (this is a data-feed/schema surface). Returns per-field results.
-// =============================================================================
-
-export interface ApplyTypeChange {
-  /** the field_definitions key (snake_case). For an added field this is the new key. */
-  key: string;
-  /** the target Framer CMS type (must be a settable framer-push type). */
-  framerType: string;
-  /** present ONLY for an ADDED field — its admin field-builder type + label. */
-  add?: { adminType: string; label: string };
-}
-
-export interface ApplyTypeFieldResult {
-  key: string;
-  /** how the registry row resolved (added inserts a row; existing just updates type). */
-  status: 'applied' | 'created' | 'unchanged' | 'error';
-  /** the Framer /schema action for this field, when reached. */
-  framerAction?: SchemaFieldResult['action'];
-  framerType?: string;
-  error?: string;
-}
-
-export interface ApplyTypeEntityResult {
-  entity: string;
-  /** the Framer collection name reported by /schema (when reached). */
-  collectionName?: string;
-  deploymentId?: string | null;
-  fields: ApplyTypeFieldResult[];
-  error?: string;
-}
-
-/**
- * Apply a batch of Framer-type changes (re-types + added fields), grouped per entity.
- * `batch` is keyed by EntityKey → the changes for that entity. Order within the action:
- * insert added rows first (so the D1 edit page renders them), then call /schema, then
- * advance field_definitions.framer_type for the fields the worker accepted.
- */
-export async function applyFramerTypes(
-  batch: Record<string, ApplyTypeChange[]>
-): Promise<{ ok: true; results: ApplyTypeEntityResult[] } | { ok: false; error: string }> {
-  const gate = await requireAdmin();
-  if (!gate.ok) return gate;
-  const { actor } = gate;
-
-  const { db } = getDb();
-  const env = getCloudflareContext().env as unknown as {
-    FRAMER_PUSH?: { fetch: (req: Request) => Promise<Response> };
-    FRAMER_PUSH_URL?: string;
-    WEBHOOK_TOKEN?: string;
-  };
-
-  const results: ApplyTypeEntityResult[] = [];
-
-  for (const [entityRaw, changes] of Object.entries(batch)) {
-    const def = getEntity(entityRaw);
-    if (!def) {
-      results.push({ entity: entityRaw, fields: [], error: `Unknown entity: ${entityRaw}` });
-      continue;
-    }
-    if (!Array.isArray(changes) || changes.length === 0) continue;
-    const entity = def.key;
-    const entityResult: ApplyTypeEntityResult = { entity, fields: [] };
-
-    // Per-field bookkeeping: validate types, insert added rows, build the /schema request.
-    const existing = (await db
-      .select()
-      .from(fieldDefinitions)
-      .where(eq(fieldDefinitions.entity, entity))
-      .orderBy(asc(fieldDefinitions.sort))) as FieldDefinition[];
-    const byKey = new Map(existing.map((r) => [r.key, r]));
-    const taken = reservedKeysForEntity(entity);
-    for (const r of existing) taken.add(r.key);
-    let maxSort = existing.reduce((m, r) => Math.max(m, r.sort), -1);
-
-    const schemaReqs: SchemaFieldRequest[] = [];
-    // Track which keys we attempted to apply (to advance framer_type after /schema).
-    const attempted = new Map<string, ApplyTypeFieldResult>();
-
-    for (const ch of changes) {
-      const key = (ch.key ?? '').trim();
-      const framerType = (ch.framerType ?? '').trim();
-      const fr: ApplyTypeFieldResult = { key, status: 'error', framerType };
-
-      if (!key) {
-        fr.error = 'missing key';
-        entityResult.fields.push(fr);
-        continue;
-      }
-      if (!isSettableFramerType(framerType)) {
-        fr.error = `“${framerType}” is not a Framer type that can be applied`;
-        entityResult.fields.push(fr);
-        continue;
-      }
-
-      if (ch.add) {
-        // ADD a new custom field — insert the registry row FIRST.
-        const adminType = String(ch.add.adminType ?? '');
-        const label = String(ch.add.label ?? '').trim();
-        if (!isFieldType(adminType)) {
-          fr.error = `invalid admin type: ${adminType}`;
-          entityResult.fields.push(fr);
-          continue;
-        }
-        if (label === '') {
-          fr.error = 'label is required';
-          entityResult.fields.push(fr);
-          continue;
-        }
-        if (!isValidKeyShape(key)) {
-          fr.error = `invalid key “${key}” — use lower snake_case`;
-          entityResult.fields.push(fr);
-          continue;
-        }
-        if (taken.has(key)) {
-          fr.error = `key “${key}” is reserved or already in use`;
-          entityResult.fields.push(fr);
-          continue;
-        }
-        maxSort += 1;
-        const id = `${entity}__${key}`;
-        const row: NewFieldDefinition = {
-          id,
-          entity,
-          key,
-          label,
-          help: null,
-          groupLabel: null,
-          sort: maxSort,
-          type: adminType,
-          optionsJson: adminType === 'select' ? '[]' : null,
-          required: false,
-          system: false,
-          visibleInForm: true, // so the entity edit page renders it immediately
-          visibleInList: false,
-          halfWidth: false,
-          framerFieldId: null,
-          framerType, // provisional; confirmed/advanced after /schema succeeds
-          custom: true, // value lives in custom_fields[key]
-        };
-        await db.insert(fieldDefinitions).values(row);
-        await postFieldWrite(db, entity, key, 'field_create', null, `${adminType}:${label}`, actor);
-        taken.add(key);
-        fr.status = 'created';
-        attempted.set(key, fr);
-        schemaReqs.push({ key, framer_type: framerType, label });
-        entityResult.fields.push(fr);
-        continue;
-      }
-
-      // RETYPE an existing field.
-      const cur = byKey.get(key);
-      if (!cur) {
-        fr.error = `field “${key}” not found for ${def.label}`;
-        entityResult.fields.push(fr);
-        continue;
-      }
-      fr.status = 'applied';
-      attempted.set(key, fr);
-      schemaReqs.push({ key, framer_type: framerType, label: cur.label ?? key });
-      entityResult.fields.push(fr);
-    }
-
-    // Nothing valid to send → record the entity result and move on.
-    if (schemaReqs.length === 0) {
-      results.push(entityResult);
-      continue;
-    }
-
-    // Call framer-push /schema for this collection (re-type/create + re-push).
-    let schema;
-    try {
-      schema = await postSchema(env, entity, schemaReqs);
-    } catch (e) {
-      const error = e instanceof Error ? e.message : 'framer-push /schema failed';
-      entityResult.error = error;
-      // Mark every attempted field errored; do NOT advance framer_type.
-      for (const fr of attempted.values()) {
-        fr.status = 'error';
-        fr.error = error;
-      }
-      results.push(entityResult);
-      continue;
-    }
-
-    entityResult.collectionName = schema.collectionName;
-    entityResult.deploymentId = schema.deploymentId ?? null;
-    if (schema.error) entityResult.error = schema.error;
-
-    // Advance field_definitions.framer_type (+ framer_field_id) for accepted fields.
-    const schemaByKey = new Map((schema.fields ?? []).map((f) => [f.key, f]));
-    const at = new Date().toISOString();
-    for (const [key, fr] of attempted) {
-      const sf = schemaByKey.get(key);
-      fr.framerAction = sf?.action;
-      if (!sf || sf.action === 'error') {
-        fr.status = 'error';
-        fr.error = sf?.detail ?? schema.error ?? 'field not applied by Framer';
-        continue;
-      }
-      // retyped | created | unchanged → persist the configured type + the live field id.
-      await db
-        .update(fieldDefinitions)
-        .set({ framerType: fr.framerType ?? null, framerFieldId: key, updatedAt: at })
-        .where(and(eq(fieldDefinitions.entity, entity), eq(fieldDefinitions.key, key)));
-      await postFieldWrite(
-        db,
-        entity,
-        key,
-        'framer_type_set',
-        null,
-        `${fr.framerType} (${sf.action})`,
-        actor
-      );
-      if (fr.status !== 'created') fr.status = sf.action === 'unchanged' ? 'unchanged' : 'applied';
-    }
-
-    results.push(entityResult);
-    revalidatePath(`/${def.segment}`);
-  }
-
-  revalidatePath('/settings/framer-types');
-  revalidatePath('/settings/fields');
-  return { ok: true, results };
-}
-
-// =============================================================================
 // SYNC NOW — triggerIngestSync.
 //
 // Dashboard "Sync now" button (client feedback 2026-06-10: editors wanted a
 // manual trigger instead of waiting on the schedule). Calls the ingest worker's
 // POST /run (lib/ingest-client.ts), which runs the same Snowflake→D1
-// reconciliation as the 4-hour cron. The D1→Framer hop needs no trigger: every
-// ingest write and admin save already enqueues a framer push that lands within
-// seconds. Any signed-in editor may run it — it's the same reconciliation the
-// cron runs unattended, just sooner.
+// reconciliation as the 4-hour cron. The public read path reads D1 directly (via
+// esperanza-api), so a synced write is live as soon as the cache TTL clears — no
+// extra publish step. Any signed-in editor may run it — it's the same
+// reconciliation the cron runs unattended, just sooner.
 // =============================================================================
 
 export async function triggerIngestSync(): Promise<
@@ -2178,8 +1918,8 @@ export async function triggerIngestSync(): Promise<
 // SITE SETTINGS — saveSiteSettings (migration 0013).
 //
 // Company-wide values the marketing team adjusts on a schedule — today that's
-// the Mortgage Rate (%), reviewed biweekly, which the Framer mortgage
-// calculators on community / QMI / financing pages fetch from the api worker's
+// the Mortgage Rate (%), reviewed biweekly, which the mortgage calculators on
+// community / QMI / financing pages fetch from the api worker's
 // GET /api/public/settings. Saving here updates D1, writes an audit_log row per
 // changed key, and purges the api worker's edge cache so the new rate is live
 // site-wide within moments (calculators fetch on page load).

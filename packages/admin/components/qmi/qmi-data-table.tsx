@@ -107,7 +107,7 @@ export interface QmiDataTableProps {
 //    screen (app/qmi/[id]/page.tsx), which takes precedence over the dynamic
 //    app/[entity]/[id] editor for QMI only. It still saves through the same server
 //    actions (saveEntity / togglePublished / uploadImage), so the write path,
-//    audit_log, and FRAMER_QUEUE behaviour are unchanged. ───────────────────────
+//    audit_log behaviour is unchanged. ───────────────────────
 const SEGMENT = "qmi"
 const editHref = (id: string) => `/${SEGMENT}/${id}`
 

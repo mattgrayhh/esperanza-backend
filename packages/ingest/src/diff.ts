@@ -106,7 +106,7 @@ export interface ExistingQmi {
   mark_job_number: string | null;
 }
 
-/** Existing community synced values (change detection — avoid queue/framer churn). */
+/** Existing community synced values (change detection — avoid needless queue churn). */
 export interface ExistingCommunity {
   id: string;
   synced_square_footage_range: string | null;
@@ -495,7 +495,7 @@ export function diff(
   }
 
   // Communities: sqft range + bed/bath ranges + price_from (0007), with change
-  // detection so an unchanged community emits NO message (no queue/framer churn).
+  // detection so an unchanged community emits NO message (no needless queue churn).
   for (const c of snowflakeCommunities) {
     const key = c.communityName.toLowerCase();
     const id = lookups.communityByName.get(key);

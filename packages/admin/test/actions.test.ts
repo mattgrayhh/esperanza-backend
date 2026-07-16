@@ -8,7 +8,7 @@
 //           validates the actual UPDATE/INSERT/DELETE the actions emit.
 //   - Boundary modules are mocked: ./db (returns our sqlite-backed Drizzle client),
 //     ./auth (fixed actor), next/cache (revalidatePath no-op), and
-//     @opennextjs/cloudflare (env.FRAMER_QUEUE.send captured for the enqueue assertion).
+//     @opennextjs/cloudflare (a minimal env for postWrite's best-effort side effects).
 //
 // Coverage (per task):
 //   (a) a QMI synced-field save routes through override.ts (override_* + stamps) and
@@ -46,7 +46,6 @@ const VIEWS_SQL = readFileSync(join(__dirname, '..', '..', 'db', 'views.sql'), '
 interface Harness {
   sqlite: Database.Database;
   db: BetterSQLite3Database<typeof schema>;
-  queue: Array<{ collection: string; action: string; id: string }>;
 }
 let H: Harness;
 
@@ -58,7 +57,7 @@ function freshHarness(): Harness {
   sqlite.exec(INIT_SQL);
   sqlite.exec(VIEWS_SQL);
   const db = drizzle(sqlite, { schema });
-  return { sqlite, db, queue: [] };
+  return { sqlite, db };
 }
 
 // --- boundary mocks ----------------------------------------------------------
@@ -78,17 +77,11 @@ vi.mock('../lib/auth', () => ({
 // next/cache: revalidatePath is a no-op in tests.
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 
-// @opennextjs/cloudflare: env.FRAMER_QUEUE.send captures the enqueue payloads.
+// @opennextjs/cloudflare: postWrite reads env for best-effort side effects
+// (public-cache purge, PDF invalidation). None are bound in the test, so each
+// path short-circuits — a minimal empty env is enough.
 vi.mock('@opennextjs/cloudflare', () => ({
-  getCloudflareContext: () => ({
-    env: {
-      FRAMER_QUEUE: {
-        send: async (msg: { collection: string; action: string; id: string }) => {
-          H.queue.push(msg);
-        },
-      },
-    },
-  }),
+  getCloudflareContext: () => ({ env: {} }),
 }));
 
 // Import AFTER the mocks are registered (vi.mock is hoisted, so this is safe).
@@ -160,16 +153,12 @@ describe('saveEntity — QMI override routing (via @esperanza/db/override)', () 
     expect(audits[0]!.new_value).toBe('299000');
     expect(audits[0]!.actor).toBe(ACTOR); // who set it (audit_log, not a column stamp)
     expect(audits[0]!.at).toBeTruthy(); // when it was set
-
-    // enqueued a single framer push for the changed record
-    expect(H.queue).toEqual([{ collection: 'qmi', action: 'upsert', id: 'q1' }]);
   });
 
   it('blanking the input REVERTS to synced (override_* → NULL), audits override_revert', async () => {
     // first pin an override
     await saveEntity('qmi', 'q1', form({ price: '299000' }));
     expect(effectivePrice('q1')).toBe(299000);
-    H.queue.length = 0; // reset enqueue capture
 
     // now submit a BLANK price → revert
     const res = await saveEntity('qmi', 'q1', form({ price: '' }));
@@ -190,7 +179,6 @@ describe('saveEntity — QMI override routing (via @esperanza/db/override)', () 
     expect(last.field).toBe('price');
     expect(last.new_value).toBeNull();
     expect(last.actor).toBe(ACTOR); // who reverted is recorded (audit_log)
-    expect(H.queue).toEqual([{ collection: 'qmi', action: 'upsert', id: 'q1' }]);
   });
 
   it('a plain admin column on QMI writes the column directly (no override pair)', async () => {
@@ -238,12 +226,10 @@ describe('togglePublished — the only path that sets published=1', () => {
     expect(audits[0]!.field).toBe('published');
     expect(audits[0]!.old_value).toBe('0');
     expect(audits[0]!.new_value).toBe('1');
-    expect(H.queue).toEqual([{ collection: 'qmi', action: 'upsert', id: 'q1' }]);
   });
 
   it('togglePublished(false) sets published=0 and audits action=unpublish', async () => {
     await togglePublished('qmi', 'q1', true);
-    H.queue.length = 0;
     const res = await togglePublished('qmi', 'q1', false);
     expect(res).toEqual({ ok: true });
     const row = H.sqlite.prepare('SELECT published FROM qmi WHERE id = ?').get('q1') as {
@@ -277,7 +263,6 @@ describe('savePromotionTargets — replace-all promotion_targets honoring the CH
     const res = await savePromotionTargets('p1', { type: 'global' });
     expect(res).toEqual({ ok: true });
     expect(targetsFor('p1')).toEqual([{ target_type: 'global', target_id: null }]);
-    expect(H.queue).toEqual([{ collection: 'promotions', action: 'upsert', id: 'p1' }]);
   });
 
   it('community scope writes one {community, recId} row per selection (target_id NOT NULL)', async () => {
@@ -417,7 +402,7 @@ describe('saveEntity community side widgets', () => {
 });
 
 // =============================================================================
-// deleteEntity — hard-delete a record + enqueue removal from Framer.
+// deleteEntity — hard-delete a record and clear its dependents.
 // =============================================================================
 describe('deleteEntity', () => {
   beforeEach(() => {
@@ -429,15 +414,13 @@ describe('deleteEntity', () => {
       .run();
   });
 
-  it('removes the row, clears its targets, and enqueues a Framer push', async () => {
+  it('removes the row and clears its targets', async () => {
     const res = await deleteEntity('promotions', 'p1');
     expect(res).toEqual({ ok: true });
     expect(H.sqlite.prepare('SELECT id FROM promotions WHERE id = ?').get('p1')).toBeUndefined();
     expect(
       H.sqlite.prepare('SELECT * FROM promotion_targets WHERE promotion_id = ?').all('p1')
     ).toHaveLength(0);
-    // postWrite enqueues an upsert; the consumer removes the missing row from Framer.
-    expect(H.queue).toContainEqual({ collection: 'promotions', action: 'upsert', id: 'p1' });
     expect(auditRows('promotions', 'p1').some((a) => a['action'] === 'delete')).toBe(true);
   });
 
@@ -472,7 +455,7 @@ describe('schema wiring sanity', () => {
 // =============================================================================
 // saveCommunityFloorPlans — set which floor plans are offered in one community.
 // Writes the relationship onto floor_plans.communities (CSV) + community_count and
-// enqueues a Framer push per AFFECTED plan; unchanged plans are left alone.
+// audits each AFFECTED plan; unchanged plans are left alone.
 // =============================================================================
 describe('saveCommunityFloorPlans', () => {
   beforeEach(() => {
@@ -505,8 +488,7 @@ describe('saveCommunityFloorPlans', () => {
     expect(fp('fpKept')).toEqual({ communities: 'Aquero', community_count: 1, community_ids: 'cAquero' }); // unchanged
     expect(fp('fpBirch')).toEqual({ communities: 'Cielo Vista', community_count: 1, community_ids: null }); // untouched
 
-    // one framer push for the single changed plan; audit row records the add
-    expect(H.queue).toEqual([{ collection: 'floor_plans', action: 'upsert', id: 'fpMarz' }]);
+    // audit row records the add for the single changed plan
     const audits = auditRows('floor_plans', 'fpMarz');
     expect(audits.at(-1)!.action).toBe('community_added');
   });

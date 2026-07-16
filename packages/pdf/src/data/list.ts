@@ -282,7 +282,7 @@ export async function loadListData(
   if (isCommunity) {
     // Community "Plan List" = every published floor plan offered in this community.
     // floor_plans.community_ids is a CSV of community rec-ids (migration 0016) — the same
-    // linkage the Framer community page filters on with `community_ids Contains {id}`.
+    // linkage the public community page filters on (`community_ids` contains `{id}`).
     // The CSV is ", "-joined (comma-SPACE), so strip spaces before anchoring on ",id," —
     // otherwise only the FIRST id in each plan's list ever matches (see line 236).
     // Per-plan price = THIS community's elevation price source (pinned elevation >

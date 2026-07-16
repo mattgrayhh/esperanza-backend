@@ -4,7 +4,7 @@
 // A floor plan is "offered" in a community when Snowflake prices it there (a cep
 // row exists). That relationship also lives, denormalized, on the floor-plan row
 // as `communities` (CSV of community NAMES) + `community_ids` (CSV of rec-IDs) +
-// `community_count` — the fields framer-push, the public API, the community-page
+// `community_count` — the fields the public API, the community-page
 // "Contains" filter, and the PDF plan-list all read. The admin community-page
 // editor keeps those in lockstep for MANUAL picks, but nothing kept them current
 // with Snowflake pricing, so communities priced-but-never-hand-picked showed no
@@ -106,7 +106,7 @@ export function deriveMembershipUpdates(
     const count = ids.length;
 
     // Compare against the CURRENT values, normalized the same way, so a row that's
-    // already correct (steady state) is skipped — no write, no Framer push.
+    // already correct (steady state) is skipped — no write.
     const curIds = parseCsv(p.community_ids).sort(byLower).join(', ');
     const curNames = parseCsv(p.communities).sort(byLower).join(', ');
     if (communityIds === curIds && communitiesCsv === curNames && (p.community_count ?? 0) === count) continue;
@@ -118,8 +118,8 @@ export function deriveMembershipUpdates(
 
 /**
  * Orchestration: load current membership + the community table, derive updates
- * from the cep pairs, write the changed rows, and return their ids so the caller
- * can enqueue Framer upserts. Returns [] when nothing changed.
+ * from the cep pairs, write the changed rows, and return their ids. Returns []
+ * when nothing changed.
  */
 export async function syncCommunityMembership(
   db: D1Like,

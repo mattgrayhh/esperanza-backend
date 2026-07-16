@@ -1,14 +1,14 @@
 // =============================================================================
-// esperanza-cf — legacy blog HTML → Framer rich-text-subset HTML.
+// esperanza-cf — legacy blog HTML → a safe rich-text HTML subset.
 //
 // The legacy O'Neil site (www.esperanzahomes.com/blog/<slug>/) still serves the
 // original rich blog bodies inside a `.blog-wysiwyg` container; the D1 `content`
 // column only holds the plain-text flattening produced at Airtable import. This
-// sanitizer rebuilds Framer-compatible HTML from the legacy markup so the rich
-// content (headings, links, inline images) can be re-stored in D1 and pushed to
-// Framer as a `formattedText` field (see framer-push `htmlFt`).
+// sanitizer rebuilds a safe HTML subset from the legacy markup so the rich
+// content (headings, links, inline images) can be re-stored in D1 as
+// blogs.content rich text.
 //
-// Output is restricted to the tags Framer rich text accepts:
+// Output is restricted to the allowed rich-text tags:
 //   h2, h3, h4, p, strong, em, a, ul, ol, li, blockquote, br, img
 //
 // Transforms:
@@ -29,7 +29,7 @@
 import { parse, type HTMLElement, type Node } from 'node-html-parser';
 
 export interface SanitizedBlog {
-  /** Framer-subset HTML for blogs.content (formattedText). */
+  /** Allowed-tag rich-text HTML subset for blogs.content. */
   html: string;
   /** Every <img> src encountered, in document order, for R2 re-hosting. */
   images: string[];
