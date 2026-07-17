@@ -63,3 +63,10 @@ PDF_PUBLIC_BASE_URL = "https://esperanza-pdf.round-base-ed8c.workers.dev"
 # Secrets (set via `wrangler secret put`):
 #   SNOWFLAKE_PASSWORD   — Snowflake REST login password
 #   AIRTABLE_PAT         — one-time Airtable->D1 import only (not used by the cron/consumer)
+
+# Workers Logs — capture 100% of invocations (head_sampling_rate=1) so every
+# request/error/console.log is queryable in the dashboard + `wrangler tail`. This is
+# what makes intermittent D1 blips (and their Next.js error digests) diagnosable.
+[observability]
+enabled = true
+head_sampling_rate = 1

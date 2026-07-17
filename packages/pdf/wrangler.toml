@@ -48,3 +48,10 @@ max_concurrency = 1
 # legacy crons are disabled at cutover. Uncomment + deploy ONLY after a slot is freed.
 # [triggers]
 # crons = ["0 7 * * *"]
+
+# Workers Logs — capture 100% of invocations (head_sampling_rate=1) so every
+# request/error/console.log is queryable in the dashboard + `wrangler tail`. This is
+# what makes intermittent D1 blips (and their Next.js error digests) diagnosable.
+[observability]
+enabled = true
+head_sampling_rate = 1

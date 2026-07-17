@@ -31,3 +31,10 @@ new_sqlite_classes = ["OpsMcpAgent"]
 
 # Secrets (set via `wrangler secret put`, never inline):
 #   INGEST_TRIGGER_TOKEN — bearer for ingest trigger
+
+# Workers Logs — capture 100% of invocations (head_sampling_rate=1) so every
+# request/error/console.log is queryable in the dashboard + `wrangler tail`. This is
+# what makes intermittent D1 blips (and their Next.js error digests) diagnosable.
+[observability]
+enabled = true
+head_sampling_rate = 1

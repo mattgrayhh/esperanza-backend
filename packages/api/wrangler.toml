@@ -50,3 +50,10 @@ bucket_name = "esperanza-cms"
 #   wrangler secret put SENTRY_DSN --name esperanza-api   # paste the esperanza-backend DSN
 # Unset -> Sentry is a no-op (see withSentry `enabled` in src/index.ts). The DSN belongs
 # to the `esperanza-backend` project in the hazard-house Sentry org.
+
+# Workers Logs — capture 100% of invocations (head_sampling_rate=1) so every
+# request/error/console.log is queryable in the dashboard + `wrangler tail`. This is
+# what makes intermittent D1 blips (and their Next.js error digests) diagnosable.
+[observability]
+enabled = true
+head_sampling_rate = 1

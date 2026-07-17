@@ -21,3 +21,10 @@ binding = "IMAGES"
 bucket_name = "esperanza-cms"
 
 # Secrets (set via `wrangler secret put`): MS_GRAPH_TENANT_ID, MS_GRAPH_CLIENT_ID, MS_GRAPH_CLIENT_SECRET.
+
+# Workers Logs — capture 100% of invocations (head_sampling_rate=1) so every
+# request/error/console.log is queryable in the dashboard + `wrangler tail`. This is
+# what makes intermittent D1 blips (and their Next.js error digests) diagnosable.
+[observability]
+enabled = true
+head_sampling_rate = 1
