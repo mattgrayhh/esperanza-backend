@@ -61,6 +61,11 @@ export interface Env {
   /** Sentry DSN for backend error monitoring. Set via `wrangler secret put SENTRY_DSN`.
    *  Unset -> Sentry is disabled (no-op), so local/dev/test runs stay clean. */
   SENTRY_DSN?: string;
+  /** Shared secret gating the /api/preview/qmi draft passthrough. Set (via
+   *  `wrangler secret put PREVIEW_SECRET`) ONLY on this Worker and the staging frontend
+   *  Worker. UNSET on any public/prod path -> the preview route 404s, so drafts can
+   *  never leak. See docs/esperanza/03-module-admin.md (draft preview). */
+  PREVIEW_SECRET?: string;
 }
 
 // -----------------------------------------------------------------------------
@@ -799,7 +804,8 @@ async function loadPromoContext(session: D1DatabaseSession): Promise<PromoContex
 // =============================================================================
 async function buildPayload(
   entity: string,
-  session: D1DatabaseSession
+  session: D1DatabaseSession,
+  opts: { preview?: boolean } = {}
 ): Promise<Record<string, unknown>> {
   const now = new Date().toISOString().slice(0, 10);
   const ts = Date.now();
@@ -811,10 +817,16 @@ async function buildPayload(
       // record-envelope datum the view doesn't carry, so we read q.created_at from
       // the base table (aliased created_time) alongside it. (The legacy /qmi worker
       // emitted Airtable's createdTime verbatim; the importer persists it here.)
+      //
+      // preview: read the ungated v_preview_qmi (published + drafts) instead of the
+      // publish-gated v_public_qmi. Reachable ONLY via the secret-gated /api/preview/qmi
+      // route below — the public path always passes opts.preview=false. Both views have
+      // identical columns, so serializeQmiRow is unchanged.
+      const qmiView = opts.preview ? 'v_preview_qmi' : 'v_public_qmi';
       const res = await session
         .prepare(
           `SELECT v.*, q.created_at AS created_time
-             FROM v_public_qmi v JOIN qmi q ON q.id = v.id`
+             FROM ${qmiView} v JOIN qmi q ON q.id = v.id`
         )
         .all();
       const rows = (res.results ?? []) as unknown as Row[];
@@ -1002,6 +1014,23 @@ function corsHeaders(env: Env, requestOrigin: string | null): Headers {
 }
 
 // =============================================================================
+/** Constant-time string compare for the preview secret — avoids leaking the secret
+ *  via response-timing on a `===` short-circuit. (Length is not secret.) */
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/** The draft-preview route is authorized ONLY when a secret is configured on this Worker
+ *  AND the caller's header matches it (constant-time). An UNSET secret (i.e. prod, where
+ *  PREVIEW_SECRET is never provisioned) or any mismatch/absent header → false → 404, so
+ *  drafts can never leak on a public deployment. Pure, so the gate is unit-tested. */
+export function previewAuthorized(secret: string | undefined, provided: string | null): boolean {
+  return Boolean(secret) && Boolean(provided) && safeEqual(provided as string, secret as string);
+}
+
 // Worker entry — routes /api/public/<entity>, Cache API wrap, D1 read session.
 // =============================================================================
 const apiHandler = {
@@ -1012,6 +1041,34 @@ const apiHandler = {
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: cors });
+    }
+
+    // ── Draft-preview passthrough (staging only) ──────────────────────────────
+    // The ONLY route that bypasses the publish gate: returns published AND drafted
+    // homes from v_preview_qmi. Gated by a secret header that ONLY the staging Worker
+    // attaches; env.PREVIEW_SECRET is UNSET on prod, so an unset secret (or any
+    // mismatch) 404s and drafts can never leak publicly. Never cached (no-store) so a
+    // just-edited draft previews immediately.
+    if (request.method === 'GET' && url.pathname === '/api/preview/qmi') {
+      if (!previewAuthorized(env.PREVIEW_SECRET, request.headers.get('X-Esperanza-Preview'))) {
+        return new Response('Not found', { status: 404, headers: cors });
+      }
+      try {
+        const session = env.DB.withSession('first-unconstrained');
+        const payload = await buildPayload('qmi', session, { preview: true });
+        const out = new Response(JSON.stringify(payload), { status: 200 });
+        out.headers.set('Content-Type', 'application/json');
+        out.headers.set('Cache-Control', 'no-store');
+        for (const [k, v] of cors) out.headers.set(k, v);
+        return out;
+      } catch (err) {
+        Sentry.captureException(err);
+        const detail = err instanceof Error ? err.message : String(err);
+        const out = new Response(JSON.stringify({ error: 'upstream_failure', detail }), { status: 502 });
+        out.headers.set('Content-Type', 'application/json');
+        for (const [k, v] of cors) out.headers.set(k, v);
+        return out;
+      }
     }
 
     const match = url.pathname.match(/^\/api\/public\/([a-z]+)\/?$/);
