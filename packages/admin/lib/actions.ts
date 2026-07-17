@@ -8,6 +8,8 @@
 //   (1) write D1 via the PRIMARY session (read-your-writes — see lib/db.ts),
 //   (2) insert an audit_log row (actor = Cloudflare Access identity),
 //   (3) purge the public API edge cache and enqueue PDF re-renders (best-effort).
+// D1 is the source of truth; the public read path (esperanza-api + the static site)
+// reads it directly, so no publish/push step is needed.
 //
 // Unpublished draft creates skip side effects — see createEntity `{ sync: false }`.
 //
@@ -62,13 +64,11 @@ import {
   generateFieldKey,
   normalizeOptions,
   reservedKeysForEntity,
-  FIELD_TYPE_META,
-  type FieldType,
 } from './field-builder';
 import { chunk, AUDIT_ROWS_PER_INSERT } from './audit-chunk';
 
 // =============================================================================
-// Shared post-write step: audit_log rows + public cache / PDF side effects.
+// Shared post-write step: audit_log rows + public-cache purge + PDF refresh.
 // =============================================================================
 
 interface AuditInput {
@@ -111,11 +111,12 @@ async function purgePublicCache(apiBaseUrl: string | undefined, collection: stri
 }
 
 /**
- * Insert audit rows and (optionally) fan out site sync side effects. Call AFTER the
+ * Insert audit rows and (optionally) fan out site side effects. Call AFTER the
  * D1 write committed. `collection` is the EntityKey for cache/PDF fan-out.
  *
  * Pass `{ sync: false }` for unpublished draft creates — audit only. Public-cache
- * purge and PDF register/re-render are skipped until a real save or publish.
+ * purge and PDF register/re-render are skipped until a real save or publish (those
+ * paths leave sync at the default true).
  */
 async function postWrite(
   db: Db,
@@ -145,7 +146,6 @@ async function postWrite(
   if (opts?.sync === false) return;
 
   const env = getCloudflareContext().env;
-
   // Purge the public api edge cache for this entity (+ promo-coupled dependents)
   // so the edit shows before the TTL instead of after it. Best-effort.
   try {
@@ -211,10 +211,10 @@ const toStr = (v: unknown): string | null => (v === null || v === undefined ? nu
 // =============================================================================
 // createEntity — insert a fresh admin-created record with a generated id and return it.
 // New records start unpublished/draft (the publish toggle is the only path to live).
-// Audits a `create` row only — no Framer enqueue, cache purge, or PDF work until the
-// operator saves content or publishes (saveEntity / setStatus / togglePublished).
+// Audits a `create` row only — no cache purge or PDF work until the operator saves
+// content or publishes (saveEntity / setStatus / togglePublished).
 // The generated id is prefixed `adm` to distinguish admin-created rows from the
-// Airtable-seeded `rec` ids; the framer upsert key is just the id, so any value works.
+// legacy `rec` ids inherited at migration.
 // =============================================================================
 
 export async function createEntity(
@@ -270,7 +270,7 @@ export async function createCommunityDraft(_formData?: FormData): Promise<void> 
 }
 
 // Belt-and-suspenders sanitize for rich-text HTML. The RichTextEditor (TipTap
-// StarterKit + Link + Image) already restricts output to the Framer-safe node/mark set,
+// StarterKit + Link + Image) already restricts output to a safe node/mark set,
 // so this is a SECOND line of defense against anything that slips in (e.g. a future
 // paste-handler regression). Minimal + dependency-free (the Worker has no DOM): drop
 // <script>/<style>/<iframe> blocks entirely and strip inline on*= event handlers. Not a
@@ -406,7 +406,7 @@ export async function saveEntity(
     }
     // Belt-and-suspenders: scrub rich-text HTML before it's written. ALL rich fields now
     // store WYSIWYG HTML (RichTextEditor), so sanitize any HTML-bearing string value (the
-    // editor already constrains output to the Framer-safe tag subset; this strips any
+    // editor already constrains output to a safe tag subset; this strips any
     // <script>/<style>/<iframe>/on*= that could slip through). No-op on plain text.
     const cleanValue =
       typeof rawValue === 'string' && /<[a-z][\s\S]*>/i.test(rawValue)
@@ -515,11 +515,11 @@ export async function saveEntity(
 }
 
 // =============================================================================
-// deleteEntity — hard-delete one record (any entity) and remove it from Framer.
+// deleteEntity — hard-delete one record (any entity) from D1.
 //
-// Mirrors deleteImageAsset: delete the D1 row, then postWrite a `delete` audit.
-// postWrite enqueues an `upsert`; the consumer re-reads the (now-missing) row and
-// treats a missing row as a removeItems() — so the item leaves Framer too.
+// Mirrors deleteImageAsset: delete the D1 row, then postWrite a `delete` audit
+// (+ public-cache purge). The public read path reads D1 directly, so the row
+// disappears from the site once the cache TTL/purge clears.
 //
 // NOTE (synced entities): qmi/communities/floor_plans are sourced from Snowflake.
 // Deleting the D1 row here does NOT stop the next sync from re-inserting it — the
@@ -565,9 +565,9 @@ export async function deleteEntity(
 // =============================================================================
 // matchAndRenderQmi — assign a floor plan (+ optional synced-field overrides) to an
 // unmatched draft and kick off the brochure PDF render. Reuses saveEntity for the
-// write, so floor_plan_id routes through buildOverrideWrite, gets audited, enqueues
-// the Framer push, and (via postWrite) ensures the pdf_renders row + enqueues a render
-// — all unchanged. Then it flags that render 'pending' so the UI shows in-flight
+// write, so floor_plan_id routes through buildOverrideWrite, gets audited, and (via
+// postWrite) ensures the pdf_renders row + enqueues a render — all unchanged. Then
+// it flags that render 'pending' so the UI shows in-flight
 // status. It does NOT publish; that stays the dedicated togglePublished step.
 // =============================================================================
 export async function matchAndRenderQmi(
@@ -730,8 +730,8 @@ export async function togglePublished(
 // toggleActive — promotions' publish gate. Migration 0005 RENAMED the gate column
 // `active` → `published` (uniform with every other entity); this writes that column.
 // Kept as a distinct entry point for backward compatibility with the promotions
-// toggle wiring; published=false → framer draft:true. Same audit contract as
-// togglePublished.
+// toggle wiring; published=false hides it from the public read path. Same audit
+// contract as togglePublished.
 // =============================================================================
 
 export async function toggleActive(
@@ -837,7 +837,7 @@ export async function setStatus(
 
 // =============================================================================
 // setTestimonialStatus — testimonials' publish gate is a select, not a boolean.
-// status === 'Draft' → framer draft:true; empty/other → live. Audit action mirrors
+// status === 'Draft' → hidden from the public read path; empty/other → live. Audit action mirrors
 // the publish/unpublish contract (publish when leaving Draft, unpublish when entering).
 // =============================================================================
 
@@ -953,7 +953,7 @@ export async function savePromotionTargets(
   await db.delete(promotionTargets).where(eq(promotionTargets.promotionId, promoId));
   if (rows.length > 0) await db.insert(promotionTargets).values(rows);
 
-  // Touch the promotion so the framer lookback/queue sees it changed.
+  // Touch the promotion so its updated_at reflects the target change (cache purge + audit).
   await db.update(promotions).set({ updatedAt: at }).where(eq(promotions.id, promoId));
 
   const summary =
@@ -982,11 +982,11 @@ export async function savePromotionTargets(
 // saveCommunityFloorPlans — set which floor plans are offered in one community.
 //
 // The relationship is denormalized on the floor-plan side (floor_plans.communities
-// CSV of community NAMES + community_count) — what framer-push and the public API
-// consume. Editing from the community page therefore rewrites that CSV on each
-// AFFECTED floor-plan row: add this community's name to newly-selected plans,
-// strip it from deselected ones, leave unchanged plans alone (no churn). Each
-// changed plan is audited and enqueued to Framer via postWrite('floor_plans', …).
+// CSV of community NAMES + community_count) — what the public API consumes. Editing
+// from the community page therefore rewrites that CSV on each AFFECTED floor-plan
+// row: add this community's name to newly-selected plans, strip it from deselected
+// ones, leave unchanged plans alone (no churn). Each changed plan is audited via
+// postWrite('floor_plans', …).
 // =============================================================================
 
 export async function saveCommunityFloorPlans(
@@ -1027,7 +1027,7 @@ export async function saveCommunityFloorPlans(
   for (const p of plans) {
     const isMember = selected.has(p.id);
     // Maintain BOTH denormalized CSVs in lockstep: names (for linking / display)
-    // and rec-IDs (Framer's "Contains" source of truth). applyMembership is token-
+    // and rec-IDs (the id-based membership source of truth). applyMembership is token-
     // agnostic; communityId comes verbatim from communities.id on add AND remove,
     // so its case-insensitive match is always byte-identical (safe for rec-IDs).
     const nameRes = applyMembership(p.communities, communityName, isMember);
@@ -1124,7 +1124,7 @@ export async function uploadImage(
     .where(eq(idColumn(def.table), id));
 
   // The image (R2) and column (D1) are already persisted above. postWrite only fans out
-  // best-effort side effects (audit, cache purge, PDF re-render, retired-Framer enqueue).
+  // best-effort side effects (audit, cache purge, PDF re-render).
   // Never let those reject the upload — that failure was reported as "an unexpected
   // response was received from the server" while the image had actually saved.
   try {
@@ -1239,7 +1239,7 @@ function sanitizeFilename(name: string): string {
 }
 
 // =============================================================================
-// JSON-column editors — emit the EXACT shapes framer-push/src/collections.ts expects.
+// JSON-column editors — emit the EXACT shapes the public API (esperanza-api) expects.
 //
 //   cities.city_copy_blocks_json  → flat { key -> value } object
 //   cities.city_venue_blocks_json → flat { key -> value } object
@@ -1359,9 +1359,9 @@ export async function saveCommunityHoaLinks(
 //   (1) INSERT a fresh `images` row (id prefixed `adm`, like createEntity),
 //   (2) PUT the file to R2 IMAGES at images/<id>/<filename>,
 //   (3) UPDATE the row's file_url to the stable r2.dev url,
-//   (4) audit_log (create + upload_image) + FRAMER_QUEUE enqueue, then revalidate.
+//   (4) audit_log (create + upload_image) + public-cache purge, then revalidate.
 // It obeys every write-contract clause: getCurrentUser() attribution, getDb()
-// first-primary session, postWrite() audit+enqueue, and it REJECTS airtable urls.
+// first-primary session, postWrite() audit+purge, and it REJECTS airtable urls.
 // =============================================================================
 
 export async function createImageAsset(
@@ -1412,7 +1412,7 @@ export async function createImageAsset(
     httpMetadata: { contentType: file.type || 'application/octet-stream' },
   });
 
-  // (3)+(4) audit (create + upload_image) and enqueue one Framer push.
+  // (3)+(4) audit (create + upload_image) and purge the public cache.
   await postWrite(db, 'images', id, [
     {
       entity: 'images',
@@ -1440,7 +1440,7 @@ export async function createImageAsset(
 
 // =============================================================================
 // deleteImageAsset — remove an images library row (and its R2 object, best-effort).
-// Audits a `delete` row and enqueues the Framer push so the consumer removes it.
+// Audits a `delete` row and purges the public cache.
 // =============================================================================
 
 export async function deleteImageAsset(
@@ -1492,10 +1492,9 @@ export async function deleteImageAsset(
 }
 
 // =============================================================================
-// FIELD BUILDER (Phase B) — field_definitions CRUD + reorder.
+// FIELD BUILDER — field_definitions CRUD + reorder.
 //
-// These ADD to the write path; they DO NOT enqueue a Framer push (Framer schema sync
-// is Phase C). Each obeys the in-repo write conventions:
+// These ADD to the write path. Each obeys the in-repo write conventions:
 //   (1) gate on the Auth.js session role === 'admin' (Full-Admin only; isAdmin()),
 //   (2) attribute via getCurrentUser() and write an audit_log row for the change,
 //   (3) write D1 via the PRIMARY session (getDb → read-your-writes).
@@ -1636,8 +1635,6 @@ export async function createFieldDefinition(
     visibleInForm: input.visibleInForm ?? true,
     visibleInList: Boolean(input.visibleInList),
     halfWidth: Boolean(input.halfWidth),
-    framerFieldId: null,
-    framerType: FIELD_TYPE_META[type as FieldType].framerType,
   };
 
   await db.insert(fieldDefinitions).values(row);
@@ -1738,7 +1735,6 @@ export async function updateFieldDefinition(input: UpdateFieldInput): Promise<Ac
       return { ok: false, error: `Invalid field type: ${input.type}` };
     }
     patch.type = input.type;
-    patch.framerType = FIELD_TYPE_META[input.type as FieldType].framerType;
     effectiveType = input.type;
     changed.push('type');
   }
@@ -1888,7 +1884,9 @@ export async function reorderFieldDefinitions(
 // Dashboard "Sync now" button (client feedback 2026-06-10: editors wanted a
 // manual trigger instead of waiting on the schedule). Calls the ingest worker's
 // POST /run (lib/ingest-client.ts), which runs the same Snowflake→D1
-// reconciliation as the 4-hour cron. Any signed-in editor may run it — it's the same
+// reconciliation as the 4-hour cron. The public read path reads D1 directly (via
+// esperanza-api), so a synced write is live as soon as the cache TTL clears — no
+// extra publish step. Any signed-in editor may run it — it's the same
 // reconciliation the cron runs unattended, just sooner.
 // =============================================================================
 
@@ -1918,8 +1916,8 @@ export async function triggerIngestSync(): Promise<
 // SITE SETTINGS — saveSiteSettings (migration 0013).
 //
 // Company-wide values the marketing team adjusts on a schedule — today that's
-// the Mortgage Rate (%), reviewed biweekly, which the Framer mortgage
-// calculators on community / QMI / financing pages fetch from the api worker's
+// the Mortgage Rate (%), reviewed biweekly, which the mortgage calculators on
+// community / QMI / financing pages fetch from the api worker's
 // GET /api/public/settings. Saving here updates D1, writes an audit_log row per
 // changed key, and purges the api worker's edge cache so the new rate is live
 // site-wide within moments (calculators fetch on page load).

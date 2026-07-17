@@ -31,8 +31,8 @@ const LOGO_URL = 'https://img.hazardhouse.ai/brand/esperanza-logo.png';
 
 /**
  * Read MailLayer config. In the deployed Worker, wrangler [vars] + secrets live on
- * getCloudflareContext().env (the convention across this package — see actions.ts /
- * framer-push-client.ts), NOT process.env. Fall back to process.env for local dev
+ * getCloudflareContext().env (the convention across this package — see actions.ts and
+ * the other worker clients), NOT process.env. Fall back to process.env for local dev
  * (.dev.vars under `next dev`) and unit tests, where the Cloudflare context is absent.
  */
 function readMaillayerEnv(): { apiKey?: string; apiUrl?: string } {

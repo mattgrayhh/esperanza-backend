@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { uploadGalleryImage } from '../../lib/actions';
 import { filterAcceptedFiles } from '../../lib/dropped-files';
+import { prepareForUpload } from '../../lib/prepare-upload';
 import { parseGalleryUrls } from '../../lib/gallery-urls';
 import { cn } from '@/lib/utils';
 import { FieldLabel } from './FieldLabel';
@@ -101,7 +102,12 @@ export function ImageGalleryEditor({
     startTransition(async () => {
       const errors: string[] = [];
       for (const file of files) {
-        const res = await uploadGalleryImage(entity, id, index, file);
+        const prepared = await prepareForUpload(file);
+        if (!prepared.ok) {
+          errors.push(prepared.error);
+          continue;
+        }
+        const res = await uploadGalleryImage(entity, id, index, prepared.file);
         if (res.ok) {
           applyUrls((prev) => [...prev, res.url]);
           index += 1;

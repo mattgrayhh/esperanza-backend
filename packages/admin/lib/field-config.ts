@@ -362,8 +362,7 @@ const communities: EntityFieldConfig = {
     { field: 'features_download_url', label: 'Features Download (PDF)', widget: 'image', bucket: 'admin' },
     { field: 'resources_download_url', label: 'Resources Download (PDF)', widget: 'image', bucket: 'admin' },
     // Auto-filled dynamic-PDF link (ensurePdfRender). Hidden from the form (computed,
-    // not hand-edited); the row exists only so its framer_type seeds as 'link'
-    // (MAPPER_FRAMER_TYPE) and applyTypeOverrides coerces the emitted URL to a link.
+    // not hand-edited).
     { field: 'brochure_pdf_url', label: 'Brochure PDF', widget: 'text', bucket: 'admin', visibleInForm: false },
     { field: 'office_phone', label: 'Office Phone', widget: 'text', bucket: 'admin' },
     { field: 'office_hours', label: 'Office Hours', widget: 'text', bucket: 'admin' },
@@ -372,7 +371,7 @@ const communities: EntityFieldConfig = {
     // [22] floor_plan_plaintext + [23] incentive removed from the admin form
     // (D1 columns + sync unchanged).
     // custom widget
-    { field: 'hoa_links_json', label: 'HOA Links', widget: 'hoaLinks', bucket: 'admin', help: 'Array of {title, link}; framer pushes the first 7.' },
+    { field: 'hoa_links_json', label: 'HOA Links', widget: 'hoaLinks', bucket: 'admin', help: 'HOA documents (CCRs, amendments). Give each a title and upload its PDF (drag/drop). The first 7 are shown.' },
     // Bespoke side widget (no column): which floor plans are offered in this community.
     // Writes the relationship onto floor_plans.communities via saveCommunityFloorPlans.
     { field: 'community_floor_plans', label: 'Floor Plans Offered', widget: 'communityFloorPlans', bucket: 'admin', help: 'Pick the floor plans available in this community. Saves with the main Save button.' },
@@ -409,7 +408,7 @@ const cities: EntityFieldConfig = {
     { field: 'hero_description', label: 'Hero Description', widget: 'textarea', bucket: 'admin' },
     { field: 'national_recognition', label: 'National Recognition', widget: 'text', bucket: 'admin' },
     { field: 'incentive', label: 'Incentive', widget: 'textarea', bucket: 'admin' },
-    // "Where We Build" image — bottom-of-page image (0017), Framer key `where_we_build_image`.
+    // "Where We Build" image — bottom-of-page image (0017), site key `where_we_build_image`.
     { field: 'where_we_build_image_url', label: 'Where We Build Image', widget: 'image', bucket: 'admin' },
     // custom widget (handled out-of-band via saveCityBlocks); both JSON blobs are one widget instance each.
     { field: 'city_copy_blocks_json', label: 'Copy Blocks', widget: 'jsonBlocks', bucket: 'admin' },
@@ -417,7 +416,7 @@ const cities: EntityFieldConfig = {
   ],
 };
 
-// Known keys per framer-push cities mapper. Keys ending `_image` (or image_0 /
+// Known keys per the cities mapper. Keys ending `_image` (or image_0 /
 // live_in_image) are IMAGE-valued; everything else is STRING-valued.
 export const CITY_COPY_BLOCK_KEYS = [
   'hero_description',
@@ -507,7 +506,7 @@ const floor_plans: EntityFieldConfig = {
     { field: 'interior_photos_json', label: 'Interior Photos', widget: 'imageGallery', bucket: 'admin', help: 'Ordered gallery of interior room photos for this plan (kitchen, living, baths…). Shown in the floor plan image section.' },
     // Legacy Airtable-synced galleries — exterior/listing + elevation sets. NOT touched by
     // ingest (static data), so they're operator-editable here. Each maps to its own live
-    // Framer field (photo_gallery / elevation_gallery), not the interior_photos set.
+    // site field (photo_gallery / elevation_gallery), not the interior_photos set.
     { field: 'photo_gallery', label: 'Photo Gallery', widget: 'imageGallery', bucket: 'admin', help: 'Exterior / listing photos for this plan (synced from the original catalog). Shown as the plan’s photo gallery.' },
     { field: 'elevation_gallery', label: 'Elevation Gallery', widget: 'elevationGallery', bucket: 'admin', help: 'Elevation renderings for this plan. The elevation type (Tuscan Brick, Farmhouse…) is auto-detected from each filename — edit it per image with the dropdown. Drives the labeled elevation grid on the live plan page.' },
     { field: 'description', label: 'Description', widget: 'richtext', bucket: 'admin' },
@@ -544,7 +543,7 @@ const promotions: EntityFieldConfig = {
   ],
   fields: [
     // gate column renamed from `active` to `published` in migration 0005.
-    { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish', help: 'The single gate; published=false → framer draft:true.' },
+    { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish', help: 'The single gate; published=false hides it from the live site.' },
     // Schedule first in Promotion Details (surface copy lives in preview sections).
     { field: 'start_date', label: 'Start Date', widget: 'date', bucket: 'admin', halfWidth: true },
     { field: 'end_date', label: 'End Date', widget: 'date', bucket: 'admin', halfWidth: true },
@@ -558,7 +557,7 @@ const promotions: EntityFieldConfig = {
     { field: 'pdf_url', label: 'PDF (optional)', widget: 'image', bucket: 'admin', help: 'Optional PDF (e.g. a flyer). Upload or drag a file; PDFs show as a document card.' },
     { field: 'rate_override', label: 'Rate Override %', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true, help: 'Blank = company-wide Incentive Rate. Enter a value to override this promo only.' },
     // Per-surface visibility toggles (migration 0021). Edited in Site banner / Incentives /
-    // Card surfaces preview sections — still seeded so Framer + list "Shows On" stay in sync.
+    // Card surfaces preview sections — still seeded so the public API + list "Shows On" stay in sync.
     { field: 'show_site_banner', label: 'Show on Site Banner', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Site-wide header ticker (Banner Overlay Promo + optional CTA).' },
     { field: 'show_incentive_page', label: 'Show on Incentives Page', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Featured card on the dedicated /incentives page.' },
     { field: 'show_card_badge', label: 'Show Card Badge', widget: 'boolean', bucket: 'admin', group: 'Where it shows', halfWidth: true, help: 'Corner badge (Banner Overlay Promo) + incentive line (Headline) on community / home / floor-plan cards and detail pages, for the locations this promo targets.' },
@@ -567,13 +566,10 @@ const promotions: EntityFieldConfig = {
     { field: 'sort_order', label: 'Sort Order', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
     { field: 'applies_to', label: 'Applies-To Label (legacy)', widget: 'text', bucket: 'admin', help: 'Informational only; does NOT drive targeting.', visibleInForm: false },
     { field: 'promotion_targets', label: 'Associated Locations', widget: 'promoScopeTag', bucket: 'target' },
-    // Engine-derived target-id CSVs pushed to Framer so a location page can filter
+    // Engine-derived target-id CSVs the public API exposes so a location page can filter
     // promos by `<x>_ids Contains {id}`. The promoScopeTag widget above OWNS editing;
     // these are read-only projections of promotion_targets (group_concat by type in
-    // the framer-push mapper). Hidden from the form; text widget → framer_type 'string'
-    // so /push-schema CREATES the matching Framer string field (a promoScopeTag field
-    // resolves to NULL and pushes no schema, so without these the mapper's *_ids were
-    // silently dropped by addItems). qmi is the majority target type in prod.
+    // the public API mapper). Hidden from the form. qmi is the majority target type in prod.
     { field: 'community_ids', label: 'Community IDs (derived)', widget: 'text', bucket: 'target', visibleInForm: false },
     { field: 'floor_plan_ids', label: 'Floor Plan IDs (derived)', widget: 'text', bucket: 'target', visibleInForm: false },
     { field: 'qmi_ids', label: 'QMI IDs (derived)', widget: 'text', bucket: 'target', visibleInForm: false },
@@ -651,7 +647,7 @@ const blogs: EntityFieldConfig = {
     // packages/db's exhaustive seed switch) unchanged. The BLOG content field is upgraded
     // to a true WYSIWYG editor by a TARGETED entity+field rule in build-edit-view
     // (BLOG_WYSIWYG_FIELDS), which emits the FieldView widget 'wysiwyg' → BlogContentEditor.
-    { field: 'content', label: 'Content', widget: 'richtext', bucket: 'admin', help: 'Rich-text editor. Headings, bold/italic, links, lists, quotes, and inline images (uploaded to the media library). Stored as Framer-safe HTML.' },
+    { field: 'content', label: 'Content', widget: 'richtext', bucket: 'admin', help: 'Rich-text editor. Headings, bold/italic, links, lists, quotes, and inline images (uploaded to the media library). Stored as safe HTML.' },
     { field: 'publish_date', label: 'Publish Date', widget: 'date', bucket: 'admin', halfWidth: true },
     { field: 'featured_image', label: 'Featured Image', widget: 'image', bucket: 'admin' },
     { field: 'video_url', label: 'Video URL', widget: 'text', bucket: 'admin', help: 'Vimeo URL for this post (same convention as a community’s Featured Video).' },

@@ -8,15 +8,15 @@ of commands. Part 3 is the glossary of every name and identifier in the system.
 ## Part 1 — Symptom → likely cause → fix
 
 ### "I edited a field in the admin but the website didn't change"
-1. Is the record **published** (`Live`)? Drafts never appear on the site.
-2. Hard-refresh the page — your browser may be showing a cached copy.
-3. Admin writes purge the public API cache, but the purge is best-effort. If a surface
-   still lags, wait for the TTL (≤5 min for most entities) or hit
-   `GET {API_PUBLIC_URL}/api/public/<entity>?purge=1`.
-4. Is the page driven by a **no-code Fetch** (e.g. company rates, or a community's resolved
+1. Is there a **stale redirect** shadowing the page? Some legacy URLs 308-redirect and hide
+   the live page. That's an operator config issue.
+2. Is the page driven by a **no-code Fetch** (e.g. company rates, or a community's resolved
    promo banner/badge) rather than CMS? Those read `esperanza-api` (`/api/public/<entity>`),
-   which caches each entity (qmi 60s, the rest 300s). Promotions edits also purge
-   `communities`/`cities`/`qmi` because the resolved promo is flattened onto those.
+   which caches each entity (qmi 60s, the rest 300s). Admin writes now auto-purge that cache
+   (`postWrite` → `purgePublicCache`; promotions edits also purge `communities`/`cities`/`qmi`
+   because the resolved promo is flattened onto those). If a Fetch-driven surface still lags,
+   the purge is best-effort and the TTL (≤5 min) is the backstop — wait it out or hit
+   `GET {API_PUBLIC_URL}/api/public/<entity>?purge=1`.
 
 ### "I added a field but it's not in the admin form"
 You deployed code but didn't **seed a `field_definitions` row**. Run
@@ -62,7 +62,7 @@ back to Snowflake. See [doc 01](./01-data-flow.md).
 ```bash
 # ── Identity / deploy ──────────────────────────────────────────────
 npx wrangler whoami                       # confirm hello@hazard.house account
-npx wrangler tail <worker-name>           # live logs (e.g. esperanza-framer-push)
+npx wrangler tail <worker-name>           # live logs (e.g. esperanza-ingest)
 
 # ── D1: query the database ─────────────────────────────────────────
 npx wrangler d1 execute esperanza --remote --command "SELECT count(*) FROM qmi WHERE published=1;"
@@ -100,7 +100,7 @@ Because pushes and syncs are asynchronous (queues), **never** judge success by a
 Judge by:
 - `sync_log` rows (`source='ingest'`, `status='success'`),
 - the actual row in D1 (`wrangler d1 execute … SELECT …`),
-- the public API response (`GET /api/public/<entity>`).
+- the live site / `esperanza-api` response for site changes.
 
 ---
 
@@ -115,10 +115,11 @@ Judge by:
 | **Queue** | Async message pipe between workers, with retries + a dead-letter queue (DLQ). |
 | **Cron trigger** | A schedule attached to a worker. |
 | **OpenNext** | Tool that compiles the Next.js admin into a Cloudflare Worker. |
+| **Framer** | *(retired 2026-07-06)* The old no-code host of the public website. Replaced by a static frontend (`esperanza-frontend`) served by a Cloudflare Worker at `esperanzahomes.hazardhouse.ai`, reading dynamic data from `esperanza-api`. |
 | **`synced_*` / `override_*`** | Paired columns: Snowflake writes `synced_`, marketing writes `override_`; views resolve `COALESCE(override, synced)` so overrides win. |
 | **`v_public_*`** | D1 views that apply override-resolution + `published=1` filtering + joins; downstream readers use these. |
 | **`field_definitions`** | D1 table that drives the admin forms; a new editable field needs a row here. |
-| **`sync_log`** | D1 table; one row per ingest run. Primary observability for sync health. |
+| **`sync_log`** | D1 table; one row per ingest run. Primary observability. |
 | **`audit_log`** | D1 table; every admin write records who changed what. |
 | **`eci_key`** | A QMI's natural key from Snowflake (CompanyCode+DevCode+HouseNumber, e.g. `006LP00000051`). |
 | **BDX** | Builder Data Exchange — the XML listing format the feed emits for Zillow/Realtor/etc. |
@@ -131,6 +132,7 @@ Judge by:
 | `esperanza-admin` | `esperanza-cf` / `packages/admin` | the CMS (Next.js/OpenNext) | 03 |
 | `esperanza-pdf` | `esperanza-cf` / `packages/pdf` | brochures/lists (headless Chrome) | 05 |
 | `esperanza-api` | `esperanza-cf` / `packages/api` | edge read API over `v_public_*` | — |
+| `esperanza-ops` | `esperanza-cf` / `packages/ops` | ops control plane (MCP + REST) | — |
 | `esperanza-xml-feed` | **`esperanza-xml-feed`** (separate) | BDX listing feed | 07 |
 | ~~`renderings`~~ | `esperanza-cf` / `packages/renderings` | descoped, not deployed | — |
 

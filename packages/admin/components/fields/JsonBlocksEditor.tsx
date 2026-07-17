@@ -3,7 +3,7 @@
 // =============================================================================
 // JsonBlocksEditor — cities.city_copy_blocks_json + city_venue_blocks_json widget.
 //
-// Both columns are FLAT { key -> value } objects (framer-push parses them and drops
+// Both columns are FLAT { key -> value } objects (the public API parses them and drops
 // absent keys). This editor edits BOTH at once (they save together via saveCityBlocks)
 // and emits exactly that flat-object shape.
 //

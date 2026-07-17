@@ -1,13 +1,11 @@
 // =============================================================================
 // esperanza-cf — human-readable QMI availability text ("Available JUN/JUL 2026").
 //
-// The Framer site's availability badge renders qmi.availability_text (see
-// packages/framer-push/src/collections.ts availabilityBadgeValue — it de-prefixes
-// "Available " and pushes the remainder as the managed move_in_date display
-// value, falling back to the raw ISO date ONLY when availability_text is absent;
-// that ISO fallback must never be what visitors see). This module derives the
-// text from the effective move-in date so ingest-created/updated homes always
-// carry it.
+// The public site's availability badge renders qmi.availability_text — it
+// de-prefixes "Available " and shows the remainder as the move-in display value,
+// falling back to the raw ISO date ONLY when availability_text is absent (that ISO
+// fallback must never be what visitors see). This module derives the text from the
+// effective move-in date so ingest-created/updated homes always carry it.
 //
 // Convention (confirmed against live D1 values on 2026-06-11):
 //   * Two-month window: move-in month + the following month, uppercase 3-letter

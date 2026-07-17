@@ -11,8 +11,8 @@
 // On save → savePromotionTargets REPLACES all promotion_targets rows for this promo:
 //   global → one row {target_type:'global', target_id:NULL}
 //   each selected id → row {target_type, target_id:<recId>}
-// (DB CHECK enforces global=NULL / non-global=NOT NULL.) The action audits the replace
-// and enqueues the framer push.
+// (DB CHECK enforces global=NULL / non-global=NOT NULL.) The action audits the replace;
+// the public API reads the updated targets directly from D1.
 //
 // The QMI column is GROUPED BY COMMUNITY (SelectOption.group = the home's community
 // name). Surface previews (Site banner / Card surfaces / Incentives page) live in

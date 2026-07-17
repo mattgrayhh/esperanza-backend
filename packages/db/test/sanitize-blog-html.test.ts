@@ -1,4 +1,4 @@
-// Sanitizer for legacy blog HTML → Framer rich-text subset. Mirrors the markup
+// Sanitizer for legacy blog HTML → a safe rich-text HTML subset. Mirrors the markup
 // shape served by the legacy O'Neil `.blog-wysiwyg` container (div paragraphs,
 // <div><br></div> spacers, inline-styled anchors, fancybox-wrapped images, a
 // vimeo iframe). Verified against the live pages before the 125-post backfill.

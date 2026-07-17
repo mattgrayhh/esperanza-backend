@@ -7,8 +7,8 @@
 // syncs the Voyager/Yardi feed from Snowflake into KV every 15 minutes and exposes
 // a small admin API for manual per-unit overrides + an on-demand re-sync.
 //
-// This module owns the ONE network hop from the admin to that Worker, mirroring
-// lib/framer-push-client.ts:
+// This module owns the ONE network hop from the admin to that Worker, using the
+// same service-binding-with-URL-fallback pattern as the other worker clients:
 //
 //   • PREFERRED: the RHODES service binding (env.RHODES.fetch). The request never
 //     leaves Cloudflare's network. The Worker STILL enforces its Bearer ADMIN_KEY,

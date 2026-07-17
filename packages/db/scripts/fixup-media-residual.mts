@@ -12,8 +12,8 @@
 //      source. Replicate pdf-ensure.ts: seed the pdf_renders row + set dynamic_pdf
 //      to the worker route (force-overwrite the legacy value).
 //   C) qmi.page_url (109 rows, all published=0) — dead canonical page routes that
-//      NOTHING in the live pipeline consumes (framer-push selects but never emits
-//      it; only the published-only legacy /api/public/qmi reads it). NULL them.
+//      NOTHING in the live pipeline consumes (only the published-only legacy
+//      /api/public/qmi ever read it). NULL them.
 //
 // Result: ZERO media.esperanzahomes.com references remain in D1.
 //

@@ -149,8 +149,8 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
   if (msg.isNew) {
     // INSERT new spec: published=0, seed slug from address, plus the synced patch.
     // availability_text (derived, NOT part of the synced allow-list — see header)
-    // is seeded from the move-in date so the Framer badge never falls back to the
-    // raw ISO date. No date → leave it absent (NULL).
+    // is seeded from the move-in date so the availability badge never falls back
+    // to the raw ISO date. No date → leave it absent (NULL).
     const slug = msg.slugSource ? deriveSlug(msg.slugSource) : null;
     const id = newQmiId();
     const availabilityText = deriveAvailabilityText(
@@ -184,8 +184,6 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
       .bind(...vals)
       .run();
     result.created = 1;
-    // Event-driven push: the new (draft) home flows to Framer immediately and
-    // surfaces as draft:true (hidden) until admin publishes — which is correct.
     // Self-register the Dynamic PDF: create a not_built pdf_renders row + backfill
     // qmi.dynamic_pdf. The PDF renders on first fetch (serve.ts cold-render path),
     // the same lazy mechanism seed-renders relies on — no render-queue binding here.
@@ -263,7 +261,6 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
     .bind(...vals)
     .run();
   result.updated = 1;
-  // Event-driven push: the changed synced values flow to Framer immediately.
   return result;
 }
 
@@ -277,8 +274,6 @@ async function applyQmiUnpublish(env: ConsumerEnv, msg: QmiUnpublishMessage): Pr
     .bind(nowIso(), msg.qmiId)
     .run();
   result.unpublished = 1;
-  // Event-driven push: framer-push re-reads the row, sees published=0, and pushes
-  // it with draft:true (soft-delete — the page is hidden). Always 'upsert'.
   return result;
 }
 
@@ -297,7 +292,6 @@ async function applyCommunityUpsert(env: ConsumerEnv, msg: CommunityUpsertMessag
     .bind(...vals)
     .run();
   result.communities = 1;
-  // Event-driven push: the changed square-footage range flows to Framer.
   return result;
 }
 
@@ -316,7 +310,6 @@ async function applyFloorPlanUpsert(env: ConsumerEnv, msg: FloorPlanUpsertMessag
     .bind(...vals)
     .run();
   result.floorPlans = 1;
-  // Event-driven push: the changed synced plan values flow to Framer.
   return result;
 }
 
@@ -327,8 +320,8 @@ export function newQmiId(): string {
 
 /**
  * The linked floor plan's header image, preferring the admin-set image_url and
- * falling back to the synced rendering — the same source framer-push uses for the
- * promotions/testimonials floor-plan image fallback. Returns null when the plan
+ * falling back to the synced rendering — the same source the public API uses for
+ * the promotions/testimonials floor-plan image fallback. Returns null when the plan
  * has no usable image (so the QMI seed stays absent rather than empty-string).
  */
 export async function floorPlanImageUrl(

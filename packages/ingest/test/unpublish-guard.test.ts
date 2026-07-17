@@ -251,7 +251,6 @@ describe('unpublish guard (producer sync_log)', () => {
         async send(b: unknown) { sent.push({ body: b }); },
         async sendBatch(msgs: { body: unknown }[]) { sent.push(...msgs); },
       },
-      FRAMER_QUEUE: { async send() {}, async sendBatch() {} },
     } as unknown as Env;
 
     await runIngest(env);

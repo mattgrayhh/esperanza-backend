@@ -7,8 +7,8 @@
 // sales team gets headings, bullet/numbered lists, bold/italic, links, quotes, and
 // inline images everywhere — entered visually, no markdown syntax to learn.
 //
-// Output: Framer-safe HTML. TipTap's ProseMirror schema (StarterKit + Link + Image)
-// CONSTRAINS the output to the tag subset Framer rich text supports
+// Output: safe HTML. TipTap's ProseMirror schema (StarterKit + Link + Image)
+// CONSTRAINS the output to the tag subset the site's rich text supports
 // (h1-h4,p,strong,em,a,ul,ol,li,blockquote,br,img); pasted markup with unknown
 // nodes/marks is dropped. saveEntity also sanitizes server-side as a second line.
 //
@@ -18,7 +18,7 @@
 // LEGACY LOAD: most existing `*_rich`/description/amenities values are MARKDOWN
 // ("- bullet", "**bold**"). toEditorHtml() converts markdown → HTML on load (TipTap
 // parses HTML, not markdown) so authors see real formatting. On save the field is
-// rewritten as HTML; framer-push's htmlFt passes HTML through and still converts any
+// rewritten as HTML; the public API's htmlFt passes HTML through and still converts any
 // not-yet-migrated markdown — so the swap is backward compatible during the rollout.
 //
 // INLINE IMAGE UPLOAD requires a record id (R2 key = <entity>/<id>/…). When `id` is

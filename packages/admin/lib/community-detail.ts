@@ -150,7 +150,7 @@ export async function buildCommunityDetailView(id: string): Promise<CommunityDet
 
   // ── 5. Stats ─────────────────────────────────────────────────────────────────
   // Read the close-out-aware price_from straight from v_public_communities — the SAME
-  // value the public site, API, and Framer push use — so the admin stats card AND the
+  // value the public site and API use — so the admin stats card AND the
   // map pin (below) never show a different number than what's live. A plain
   // COALESCE(override, synced) here would skip the close-out elevation/offered-min
   // resolution and display the dev-wide synced_price_from for close-out communities.

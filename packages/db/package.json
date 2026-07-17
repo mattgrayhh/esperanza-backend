@@ -20,11 +20,6 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "import": "tsx scripts/import-from-airtable.ts",
-    "import:dry": "tsx scripts/import-from-airtable.ts --dry-run",
-    "migrate-images": "tsx scripts/migrate-images.ts",
-    "migrate-images:dry": "tsx scripts/migrate-images.ts --dry-run",
-    "verify": "tsx scripts/verify-import.ts",
     "scripts:typecheck": "tsc --noEmit -p scripts/tsconfig.json"
   }
 }

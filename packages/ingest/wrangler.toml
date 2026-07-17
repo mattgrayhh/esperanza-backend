@@ -17,7 +17,7 @@ binding = "DB"
 database_name = "esperanza"
 database_id = "023ea995-0abc-4165-a1e1-6e2373fc43e9"
 
-# Shared R2 bucket (used by the one-time Airtable import to migrate attachment-only images).
+# Shared R2 bucket (image storage; consumer rehosts synced attachment images to R2).
 [[r2_buckets]]
 binding = "IMAGES"
 bucket_name = "esperanza-cms"
@@ -62,7 +62,6 @@ PDF_PUBLIC_BASE_URL = "https://esperanza-pdf.round-base-ed8c.workers.dev"
 
 # Secrets (set via `wrangler secret put`):
 #   SNOWFLAKE_PASSWORD   — Snowflake REST login password
-#   AIRTABLE_PAT         — one-time Airtable->D1 import only (not used by the cron/consumer)
 
 # Workers Logs + Traces — full observability, source of truth for deploys.
 # Mirrors the dashboard's granular schema (logs{} + traces{}) so a `wrangler deploy`

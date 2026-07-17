@@ -36,9 +36,9 @@ beforeEach(() => {
 
 describe('reads', () => {
   it('syncStatus returns latest sync_log rows newest-first', async () => {
-    raw.prepare(`INSERT INTO sync_log (source,status,at) VALUES ('framer','success','2026-06-18T10:00:00Z')`).run();
-    raw.prepare(`INSERT INTO sync_log (source,status,at) VALUES ('framer','error','2026-06-18T11:00:00Z')`).run();
-    const rows = await syncStatus(db, 'framer', 10);
+    raw.prepare(`INSERT INTO sync_log (source,status,at) VALUES ('snowflake','success','2026-06-18T10:00:00Z')`).run();
+    raw.prepare(`INSERT INTO sync_log (source,status,at) VALUES ('snowflake','error','2026-06-18T11:00:00Z')`).run();
+    const rows = await syncStatus(db, 'snowflake', 10);
     expect(rows[0]!.status).toBe('error'); // newest first
     expect(rows).toHaveLength(2);
   });

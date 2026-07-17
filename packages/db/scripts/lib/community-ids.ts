@@ -3,8 +3,8 @@
 //
 // A floor plan stores `communities` as a CSV of community NAMES (maintained by the
 // admin "Floor Plans Offered" picker). This turns that into a CSV of community
-// rec-IDs by looking each name up in the communities table — the stable source of
-// truth Framer filters on (`community_ids Contains {id}`). Output mirrors the
+// rec-IDs by looking each name up in the communities table — the id-based community
+// membership source of truth (used by the public API/site filters). Output mirrors the
 // picker's CSV convention EXACTLY (sorted case-insensitively, ", "-joined, deduped)
 // so a backfilled value won't churn the next time the picker rewrites the row.
 //

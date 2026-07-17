@@ -3,7 +3,7 @@
 //
 // Clone of the legacy O'Neil Interactive `/sitesearch.json` feed: a single flat
 // array fetched once by the client and filtered in-browser (no per-keystroke
-// network). Each record is { label, type, href }. The Framer SiteSearch code
+// network). Each record is { label, type, href }. The frontend's SiteSearch
 // component does case-insensitive substring matching over `label` and navigates
 // to `href` on select.
 //
@@ -16,7 +16,7 @@
 // can evolve independently of the main serializer file. index.ts wires it in
 // with a single `case 'sitesearch'` (see docs/sitesearch-clone-design.md).
 //
-// QMI hrefs MUST use the same public slug framer-push pushes to Framer (dashes
+// QMI hrefs MUST use the same public slug the frontend renders (dashes
 // normalized to underscores, with the viewer/seo/rich/slug precedence), so the
 // QMI slug is derived via the shared `qmiPublicSlug` rather than the raw `slug`
 // column — otherwise every QMI/lot-number result 404s.
@@ -37,7 +37,7 @@ export interface SiteSearchRecord {
   href: string;
 }
 
-/** Public path prefixes on the Framer rebuild (corrected 2026-06-03). */
+/** Public path prefixes on the frontend (corrected 2026-06-03). */
 export interface BaseUrls {
   community: string;
   floorPlan: string;
@@ -59,7 +59,7 @@ export const DEFAULT_BASE_URLS: BaseUrls = {
 export const SITESEARCH_SQL = {
   communities: 'SELECT name, slug FROM v_public_communities',
   floorPlans: 'SELECT name, slug FROM v_public_floor_plans',
-  // id + all slug-source columns so the QMI href matches the live Framer page
+  // id + all slug-source columns so the QMI href matches the live page
   // slug exactly (see qmiPublicSlug). The raw `slug` alone is dash-cased and 404s.
   qmis: 'SELECT id, address, community, lot_number, slug, seo_slug, rich_slug, viewer_slug FROM v_public_qmi',
   blogs: 'SELECT title, slug FROM v_public_blogs',

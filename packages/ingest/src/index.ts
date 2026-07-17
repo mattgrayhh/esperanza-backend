@@ -168,7 +168,7 @@ export default {
 
   // ── MANUAL TRIGGER: POST /run (Bearer INGEST_TRIGGER_TOKEN) runs the same
   //    Snowflake→D1 reconciliation as the cron, on demand (e.g. cutover/backfill).
-  //    Mirrors framer-push's POST /cron. Any other path → 404. No token set → 403.
+  //    Bearer-gated. Any other path → 404. No token set → 403.
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
     if (req.method === 'POST' && url.pathname === '/run') {

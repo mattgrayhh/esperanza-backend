@@ -5,7 +5,7 @@
 // wholesale: resolve every Snowflake per-elevation price row to a D1 community +
 // floor-plan id, then DELETE-all + INSERT in one atomic D1 batch.
 //
-// Read path: the close-out price_from resolution (views.sql / framer-push / pdf)
+// Read path: the close-out price_from resolution (views.sql / api / pdf)
 // takes MIN(sales_price) for the community's chosen close_out_elevation label
 // among its offered published plans. See migration 0019.
 // =============================================================================

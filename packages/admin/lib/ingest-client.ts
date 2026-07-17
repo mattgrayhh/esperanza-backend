@@ -4,11 +4,12 @@
 // The triggerIngestSync action calls the ingest worker's POST /run, which runs
 // the same Snowflake→D1 reconciliation as the 4-hour cron, on demand — so an
 // operator can pull a Mark Systems change through without waiting for the next
-// cron tick. (D1→Framer is already event-driven: every admin save and every
-// ingest write enqueues a framer push that lands within seconds; the only
-// schedule-bound hop is Snowflake→D1, which is exactly what /run flushes.)
+// cron tick. (The public read path reads D1 directly via esperanza-api, so there's
+// no push step; the only schedule-bound hop is Snowflake→D1, which is exactly what
+// /run flushes.)
 //
-// Mirrors lib/framer-push-client.ts, abstracting HOW we reach the worker:
+// Uses the same service-binding-with-URL-fallback pattern as the other worker
+// clients, abstracting HOW we reach the worker:
 //
 //   • PREFERRED: the INGEST service binding (env.INGEST.fetch). The request never
 //     leaves Cloudflare's network. ingest STILL enforces Bearer auth on /run, so

@@ -6,9 +6,9 @@
 // markdown value would render its source literally ("- bullet"). On load we convert
 // markdown → HTML so the author sees rich formatting; on save the editor stores HTML.
 //
-// This MIRRORS packages/framer-push/src/markdown.ts so what the author sees in the
-// admin equals what Framer renders (formattedText is the same HTML). Kept as a small,
-// dependency-free copy rather than wiring a cross-package import.
+// A self-contained markdown→HTML converter (formattedText is the same HTML the
+// public site renders). Kept as a small, dependency-free helper rather than wiring
+// a cross-package import.
 // =============================================================================
 
 function escapeHtml(s: string): string {

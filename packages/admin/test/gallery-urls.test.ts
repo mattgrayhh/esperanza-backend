@@ -7,7 +7,7 @@
 // (floor_plans.photo_gallery / elevation_gallery / additional_images_gallery) hold a
 // JSON array of *objects* { url, filename }. The parser MUST read both shapes — pulling
 // `.url` out of objects — or those galleries render empty and a subsequent save would
-// serialize `[]` and WIPE the column. This mirrors framer-push's galleryUrls().
+// serialize `[]` and WIPE the column.
 // =============================================================================
 
 import { describe, it, expect } from 'vitest';

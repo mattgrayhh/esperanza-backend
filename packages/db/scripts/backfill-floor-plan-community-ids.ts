@@ -4,7 +4,8 @@
 //
 // floor_plans.communities holds a CSV of community NAMES (maintained by the admin
 // "Floor Plans Offered" picker). This one-off populates the parallel community_ids
-// CSV (community rec-IDs) — Framer's "Contains" filter source of truth — by
+// CSV (community rec-IDs) — the id-based community membership source of truth
+// (used by the public API/site filters) — by
 // resolving each name against the communities table. Going forward the picker keeps
 // both columns in lockstep; this just seeds existing rows.
 //
