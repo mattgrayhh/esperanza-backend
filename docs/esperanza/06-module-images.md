@@ -70,11 +70,39 @@ re-enabling the edge proxy.
 
 ---
 
+## ★ Client-side upload guard (prevents the "stuck spinner" hang)
+
+Uploads go through a **Next.js Server Action**, whose body is capped at **15 MB**
+(`next.config.ts` → `serverActions.bodySizeLimit`). An over-limit body is rejected at the
+framework transport layer — it does **not** come back as a resolved `{ ok:false }` or a
+thrown error — so the uploader's `useTransition` `pending` never clears and the operator
+sees an infinite "Uploading…" spinner (reported as *"sat 8–10 minutes, wouldn't proceed"*
+on the Masseto plan, which had print-resolution renderings well over 15 MB).
+
+Fix lives in **`packages/admin/lib/prepare-upload.ts`**, called by every uploader
+(`ImageUploader`, `ImageGalleryEditor`, `ElevationGalleryEditor`) **before** the action:
+
+- **Oversized raster images** (jpeg/png/webp/avif over ~8 MB) are **canvas-downscaled** to
+  a 2560 px longest edge (web size) and re-encoded — PNG stays PNG to keep alpha, else JPEG
+  q0.85, with a JPEG fallback if a PNG result is still too big. Files already small enough
+  pass through untouched (no re-encode, no quality loss).
+- **Oversized non-images** (PDF/SVG/GIF over the ~12 MB payload ceiling) can't be shrunk
+  client-side, so they're **rejected with a clear, actionable message** instead of hanging.
+- The result is **never** larger than `MAX_UPLOAD_BYTES` (12 MB — margin under the 15 MB
+  action limit), so the silent framework rejection can't happen.
+
+This partially delivers the compress-at-upload TODO above (client-side, for hang-prevention
++ web-sizing). A server-side `sharp` pipeline is still the sanctioned direction if we want
+canonical optimized renditions shared by PDFs and the site.
+
+---
+
 ## Files / where to look
 
 | Goal | Where |
 |---|---|
 | Admin upload to R2 | `packages/admin/lib/actions.ts` (`uploadImage`, `uploadGalleryImage`, `uploadBlockImage`) |
+| Client-side pre-upload guard/downscale | `packages/admin/lib/prepare-upload.ts` (called by all three uploaders) |
 | PDF image resizing | `packages/pdf/src/index.ts` (`/img`) |
 | One-off rendition derivation (sharp) | `packages/pdf` `derive-renditions` script |
 | Legacy image rescue (re-host to R2) | `packages/db/scripts/migrate-images.ts` |

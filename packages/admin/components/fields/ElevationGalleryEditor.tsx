@@ -16,6 +16,7 @@
 import { useRef, useState, useTransition } from 'react';
 import { uploadGalleryImage } from '../../lib/actions';
 import { filterAcceptedFiles } from '../../lib/dropped-files';
+import { prepareForUpload } from '../../lib/prepare-upload';
 import { parseTypedGallery, deriveElevationType, ELEVATION_TYPES, type TypedImage } from '../../lib/elevation-types';
 import { cn } from '@/lib/utils';
 import { FieldLabel } from './FieldLabel';
@@ -76,9 +77,14 @@ export function ElevationGalleryEditor({
     startTransition(async () => {
       const errors: string[] = [];
       for (const file of files) {
-        const res = await uploadGalleryImage(entity, id, index, file);
+        const prepared = await prepareForUpload(file);
+        if (!prepared.ok) {
+          errors.push(prepared.error);
+          continue;
+        }
+        const res = await uploadGalleryImage(entity, id, index, prepared.file);
         if (res.ok) {
-          // Derive the type from the uploaded file's name (R2 url keeps it).
+          // Derive the type from the ORIGINAL file's name (downscale renames it).
           const type = deriveElevationType(file.name) ?? deriveElevationType(res.url) ?? '';
           setItems((prev) => [...prev, { url: res.url, type }]);
           index += 1;
