@@ -379,7 +379,12 @@ rows.
 
 `HoaLinksEditor` emits `__hoa_links`; `CommunityFloorPlansPicker` emits
 `__community_floor_plans`. `saveEntity('communities', …)` persists both via
-`saveCommunityHoaLinks` / `saveCommunityFloorPlans`. On the bespoke community detail page,
+`saveCommunityHoaLinks` / `saveCommunityFloorPlans`. Each HOA row is `{title, link}` where
+**`link` is a drag/drop PDF upload** (CCRs, amendments) — `HoaLinksEditor` calls
+`uploadBlockImage('communities', id, 'hoa-N', file)` to store the PDF in R2 and writes the
+returned stable URL into the row (size-guarded via `prepare-upload.ts`). Legacy rows whose
+`link` is still an external URL (e.g. the old `framerusercontent.com` PDFs) render as an
+openable link so an operator can replace them by uploading the real PDF. On the bespoke community detail page,
 **Floor Plans Offered** lives inside **Community Details** (above LotVue Map) as a
 multi-select combobox. The collapsible **Utilities** subsection groups gas, internet,
 water, electric, and **Security Details**; HOA links stay in their own panel below the form.

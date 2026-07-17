@@ -371,7 +371,7 @@ const communities: EntityFieldConfig = {
     // [22] floor_plan_plaintext + [23] incentive removed from the admin form
     // (D1 columns + sync unchanged).
     // custom widget
-    { field: 'hoa_links_json', label: 'HOA Links', widget: 'hoaLinks', bucket: 'admin', help: 'Array of {title, link}; the first 7 are shown.' },
+    { field: 'hoa_links_json', label: 'HOA Links', widget: 'hoaLinks', bucket: 'admin', help: 'HOA documents (CCRs, amendments). Give each a title and upload its PDF (drag/drop). The first 7 are shown.' },
     // Bespoke side widget (no column): which floor plans are offered in this community.
     // Writes the relationship onto floor_plans.communities via saveCommunityFloorPlans.
     { field: 'community_floor_plans', label: 'Floor Plans Offered', widget: 'communityFloorPlans', bucket: 'admin', help: 'Pick the floor plans available in this community. Saves with the main Save button.' },
