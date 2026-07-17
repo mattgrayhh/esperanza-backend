@@ -146,6 +146,12 @@ export interface QmiDetailView {
    *  the editable gallery. A photo is "selected" when its url is present in
    *  photoGalleryJson. Stable R2 urls only (airtable urls filtered out). */
   floorPlanGallery: GalleryImage[];
+  /** Plan's Interior photos (`interior_photos_json`) — labeled inherit group for the
+   *  home's override gallery. */
+  floorPlanInterior: GalleryImage[];
+  /** Plan's Exterior/listing photos (`photo_gallery`) — labeled inherit group for the
+   *  home's override gallery. */
+  floorPlanExterior: GalleryImage[];
   /** Elevation renderings from the linked plan's `elevation_gallery` — picker options
    *  in MarkSystems for which exterior render is this home's site Main Image. */
   elevationRenders: TypedImage[];
@@ -349,6 +355,21 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
     (g) => !g.url.includes(AIRTABLE)
   );
 
+  // Plan galleries broken out by category, inherited by the home. The four plan
+  // categories are Interior (interior_photos_json), Exterior (photo_gallery),
+  // Elevation render (elevation_gallery → elevationRenders/picker) and Schematic
+  // (floor_plan_image → floorPlanImage field). Interior + Exterior are offered as
+  // labeled suggestion groups on the home's single override gallery (photo_gallery_json)
+  // — inherit-from-plan + per-home override, no per-home columns. Clean R2 urls only.
+  const cleanPlanImages = (raw: unknown): GalleryImage[] => {
+    const seen = new Set<string>();
+    return parseImages(raw, alt).filter((g) =>
+      g.url.includes(AIRTABLE) ? false : seen.has(g.url) ? false : (seen.add(g.url), true)
+    );
+  };
+  const floorPlanInterior = cleanPlanImages(fp?.interior_photos_json);
+  const floorPlanExterior = cleanPlanImages(fp?.photo_gallery);
+
   // Option lists for the assignment + override selects.
   const [fpOptions, communityOptions, cityOptions] = await Promise.all([
     loadOptions('floor_plans'),
@@ -457,6 +478,8 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
     gallery: dedupedGallery,
     photoGalleryJson: s(r.photo_gallery_json),
     floorPlanGallery,
+    floorPlanInterior,
+    floorPlanExterior,
     elevationRenders,
 
     syncedOverride: {

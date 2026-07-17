@@ -133,14 +133,22 @@ visually — no markdown syntax. Notes:
     **`object-contain` (uncropped)** — square `object-cover` crops wide layouts. NB: a
     `floor_plan_image` still stored as a **PDF** shows a file icon, not an image — that
     needs the brochure→PNG conversion (data fix), not a UI change.
-  - **`qmi` photo gallery inherits master-plan photos:** the editable **Photo Gallery**
-    (`photo_gallery_json`, `ImageGalleryEditor`) now shows a selectable palette of the
-    assigned plan's photos (`floorPlanGallery` in `qmi-detail.ts` = plan
-    `interior_photos_json` + `fp_image` + `fp_additional_images`, airtable urls filtered,
-    de-duped). A palette photo is **selected iff its url is present in `photo_gallery_json`**
-    — click to add/remove, or **Add all** — so no new column/migration is needed. Uploading
-    actual home photos is unchanged. Blank gallery still falls back to `image_url`/plan on
-    the site.
+  - **`qmi` photo gallery inherits master-plan photos, broken out by category:** the plan
+    has four media categories — **Interior** (`interior_photos_json`), **Exterior**
+    (`photo_gallery`), **Elevation Render** (`elevation_gallery`) and **Schematic**
+    (`floor_plan_image`). The QMI screen surfaces them as **inherit-from-plan + per-home
+    override**, with no per-home columns (the `qmi` table is near the 100-col cap):
+    - The editable **Photo Gallery** (`photo_gallery_json`, `ImageGalleryEditor`) is the
+      single per-home override bucket. Below it, two **labeled palettes** — *Interior* and
+      *Exterior*, from the assigned plan (`floorPlanInterior` = plan `interior_photos_json`,
+      `floorPlanExterior` = plan `photo_gallery`; airtable urls filtered, de-duped, in
+      `qmi-detail.ts`) — are offered via `ImageGalleryEditor`'s `suggestionGroups`. A palette
+      photo is **selected iff its url is present in `photo_gallery_json`** — click to
+      add/remove, or **Add all** per group.
+    - **Elevation Render** is set via the MarkSystems → Site elevation render picker (below);
+      **Schematic** is the `floor_plan_image` field above. Both inherit the plan and override
+      per-home. Uploading actual home photos is unchanged; a blank gallery still falls back
+      to `image_url`/plan on the site.
   - **QMI MarkSystems → Site elevation render picker:** inside the collapsed **MarkSystems**
     panel (`#section-from-marksystems`), marketing picks which linked-plan elevation
     rendering (`floor_plans.elevation_gallery`) is this home's site **Main Image**
