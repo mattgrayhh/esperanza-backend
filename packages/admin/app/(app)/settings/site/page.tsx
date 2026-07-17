@@ -4,7 +4,7 @@
 // SERVER COMPONENT. Open to every signed-in editor (the (app) layout owns the
 // auth gate) — these are content values the marketing team adjusts on a
 // schedule, like prices; NOT a Full-Admin engine surface. Today: Mortgage
-// Rate (%), reviewed biweekly, consumed by the Framer mortgage calculators via
+// Rate (%), reviewed biweekly, consumed by the mortgage calculators via
 // GET /api/public/settings (one edit → every calculator site-wide).
 // =============================================================================
 

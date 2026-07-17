@@ -1,7 +1,7 @@
 // =============================================================================
 // packages/admin — entity registry + QMI field classification.
 //
-// The 9 managed collections (== framer-push CollectionKey set). For each we record:
+// The 9 managed collections (== the public API's entity/collection set). For each we record:
 //   - the Drizzle table
 //   - the human label + url segment
 //   - whether it has a publish toggle (admin-owns-1)
@@ -34,7 +34,7 @@ import {
 } from '@esperanza/db/override';
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 
-/** The 9 admin entity keys — identical to framer-push CollectionKey. */
+/** The 9 admin entity keys — identical to the public API's entity/collection set. */
 export type EntityKey =
   | 'qmi'
   | 'communities'
@@ -49,7 +49,7 @@ export type EntityKey =
 export interface EntityDef {
   key: EntityKey;
   label: string;
-  /** url segment under /admin (and the framer queue `collection`). */
+  /** url segment under /admin (and the public API's `collection` key). */
   segment: string;
   table: SQLiteTable;
   /** has an admin-owned publish gate (toggle path). */

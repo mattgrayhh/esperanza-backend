@@ -3,7 +3,7 @@
 //
 // The relationship lives ONLY on the floor-plan side, denormalized as
 // `floor_plans.communities` (a comma-separated list of community NAMES) plus
-// `floor_plans.community_count`. framer-push + the public API consume exactly
+// `floor_plans.community_count`. The public API consumes exactly
 // those two fields, so editing membership = rewriting that CSV on the affected
 // floor-plan rows (no join table, no read-path change).
 //

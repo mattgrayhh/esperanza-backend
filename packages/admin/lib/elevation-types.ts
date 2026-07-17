@@ -98,7 +98,7 @@ export function splitElevationLabel(label: string): {
  * Parse a stored elevation gallery into `{ url, type }[]`. Accepts the new `{url,type}`
  * shape, the legacy `{url,filename}` shape, and bare-string arrays — deriving `type`
  * from the filename whenever it isn't explicitly stored. Mirrors the dual-shape
- * tolerance of framer-push's galleryUrls so admin + push agree.
+ * tolerance of the shared galleryUrls parser so admin + the public API agree.
  */
 export function parseTypedGallery(raw: string): TypedImage[] {
   if (!raw) return [];

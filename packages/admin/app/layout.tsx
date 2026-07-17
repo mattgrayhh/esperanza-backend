@@ -10,7 +10,7 @@ const geist = Geist({subsets:['latin'],variable:'--font-geist'});
 
 export const metadata: Metadata = {
   title: 'Esperanza Admin',
-  description: 'Esperanza Homes CMS admin — D1 + R2 + Framer push.',
+  description: 'Esperanza Homes CMS admin — D1 + R2 on Cloudflare Workers.',
   robots: { index: false, follow: false },
 };
 

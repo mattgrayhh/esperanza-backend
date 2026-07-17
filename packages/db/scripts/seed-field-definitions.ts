@@ -75,7 +75,7 @@ function widgetToType(f: FieldConfig): FieldType {
     case 'number':
       return 'number';
     // The `currency` admin widget (Phase B) maps to the `currency` field-builder type
-    // (Framer number). No static config field uses it today; it's here for exhaustiveness
+    // (a numeric type). No static config field uses it today; it's here for exhaustiveness
     // so the widget union and the seed never drift.
     case 'currency':
       return 'currency';
@@ -103,159 +103,6 @@ function widgetToType(f: FieldConfig): FieldType {
       return _exhaustive;
     }
   }
-}
-
-// ── field-builder type → Framer field type ──────────────────────────────────
-// text→string · long/rich→formattedText · number/currency→number · bool→boolean ·
-// date→date · url→link · image→image · select→enum. Bespoke widgets resolve to the
-// Framer type their data shape pushes today (NULL where there's no single mapping).
-function framerType(type: FieldType, f: FieldConfig): string | null {
-  switch (type) {
-    case 'text':
-      return 'string';
-    case 'long':
-    case 'rich':
-      return 'formattedText';
-    case 'number':
-    case 'currency':
-      return 'number';
-    case 'bool':
-      return 'boolean';
-    case 'date':
-      return 'date';
-    case 'url':
-      return 'link';
-    case 'image':
-      return 'image';
-    case 'select':
-      return 'enum';
-    case 'syncedOverride': {
-      // The override widget's effective Framer type follows its underlying datum:
-      // select → enum, numeric (has step) → number, else string.
-      if (f.selectSource) return 'enum';
-      if (f.step) return 'number';
-      return 'string';
-    }
-    // hoaLinks / jsonBlocks / promoScopeTag are composed out-of-band by framer-push
-    // (no single scalar Framer field); leave NULL until Phase C decides per-widget.
-    default:
-      return null;
-  }
-}
-
-// ── mapper-truth Framer-type overrides ───────────────────────────────────────
-// AUDIT RECONCILIATION (Field Types Phase C, pre-work): the generic widgetToType →
-// framerType mapping above is the *intent*, but the live framer-push mappers
-// (packages/framer-push/src/collections.ts) emit a DIFFERENT Framer type for a
-// specific set of (entity,key) whose emitted Framer field id equals the
-// field_definitions.key. The override pass (applyTypeOverrides) only acts when a
-// def's framer_type != the type the mapper actually emits — so for the seed to make
-// that pass a guaranteed NO-OP, framer_type must equal the mapper's CURRENT output,
-// NOT the generic intent. These are the exact divergences the audit found:
-//
-//   * textarea/richtext admin fields the mappers push with sIf() (plain `string`),
-//     not ftIf()/formattedText — the mapper, not the widget, is the live truth
-//     (the proven per-field mapper type-assertion tests pin these as `string`).
-//   * `date` admin fields the mappers push as `string` (sIf) — Framer has no live
-//     date binding for them; they go out as plain strings.
-//   * qmi.postal_code: the live Framer "ZIP" field is `string` (qmi mapper comment +
-//     qmi.mapper.test asserts type==='string'); the override widget intent was number.
-//   * testimonials.status: the `select` widget intent was enum, but the mapper emits
-//     the status label via sIf() as a plain `string`.
-//
-// Keyed by `${entity}.${key}` → the Framer type the mapper EMITS today. Editing this
-// map (or the mappers) is how a future field is reconciled; do NOT widen framerType()
-// generically (most *_rich fields ARE correctly pushed as formattedText via ftIf).
-const MAPPER_FRAMER_TYPE: Record<string, string> = {
-  // Dynamic-PDF links: the mapper emits the deterministic /pdf/<type>/<slug> URL as a
-  // string, but it must land in Framer as a LINK. Pinning framer_type to 'link' makes
-  // applyTypeOverrides coerce the string → link before push. The live Framer field must
-  // be Link type to match (else addItems aborts). All three carry a (hidden, for
-  // communities) field-config row so the seed emits these framer_type overrides.
-  'qmi.dynamic_pdf': 'link',
-  'floor_plans.brochure_pdf_url': 'link',
-  'communities.brochure_pdf_url': 'link',
-  // (promotions PDF needs no pin here: the mapper emits a `pdf` field via linkIf()
-  // directly, so it's already a Link, and applyTypeOverrides keys on the emitted field
-  // name `pdf` — not the `pdf_url` column — so a column-keyed pin would be a dead no-op.
-  // Same direct-linkIf pattern as plan_list_pdf_url/sale_list_pdf_url.)
-  // communities.{schedule_visit,lending}: the mapper emits these as strings (sIf) but
-  // the live Framer fields are LINK. They previously dropped when empty (sIf → undefined)
-  // so the mismatch was invisible; once sIf began emitting str('') for cleared fields, an
-  // empty string hit a Link field and aborted the whole communities batch (vista-verde).
-  // Pinning 'link' makes applyTypeOverrides coerce the URL → link and DROP empties.
-  // Hand-fixed on remote 2026-06-14; pinned here so a reseed can't regress it (PR #30).
-  // communities.featured_video: the live Framer field is STRING, not link — it was
-  // rebuilt as a Vimeo/video-embed that wants a plain URL string (deploy 6bf5021, the
-  // "Featured Video rebuild"). This map previously still said 'link', so a reseed on
-  // 2026-06-23 reverted the hand-fix → framer-push sent a link to a string field and
-  // aborted the whole communities batch again. Pinned 'string' so a reseed can't regress
-  // it. Do NOT flip back to 'link'.
-  'communities.featured_video': 'string',
-  'communities.schedule_visit': 'link',
-  'communities.lending': 'link',
-  // {qmi,communities}.nter_now — the NterNow "Enter Now" self-tour link. Mapper emits
-  // the URL as a string (sIf); the live Framer field must be Link. Pinning 'link' makes
-  // applyTypeOverrides coerce the URL → link and DROP empties (same proven pattern as
-  // schedule_visit/lending/brochure_pdf_url). Re-type the Framer field via /push-schema.
-  'qmi.nter_now': 'link',
-  'communities.nter_now': 'link',
-  // floor_plans.description: rich text — widget 'richtext' → formattedText. Mapper emits
-  // ftIf (HTML/markdown→formattedText) so bullets render. No pin needed, matching
-  // communities.description. (Was pinned 'string' when pushed via sIf.) The live Framer
-  // field MUST be re-typed string→formattedText (push-schema) before the next floor_plans
-  // backfill, or the whole batch aborts.
-  'qmi.postal_code': 'string',
-  // qmi.description: rich text — widget 'richtext' (→ 'rich' → framerType 'formattedText');
-  // the mapper now emits ftIf (HTML/markdown→formattedText) so an override renders with
-  // bullets, and the floor-plan fallback markdown ("- Feature") renders too. No pin needed,
-  // matching communities.description. (Was pinned 'string' when this was a plain textarea
-  // pushed via sIf.) The live Framer qmi.description field MUST be re-typed to formattedText
-  // (push-schema) before the next qmi backfill, or the whole batch aborts.
-  'qmi.upgrades': 'string',
-  'qmi.incentive': 'string',
-  'qmi.move_in_date': 'string',
-  // communities.description: rich text — widget 'richtext' (→ 'rich' → framerType
-  // 'formattedText'); mapper emits ftIf (markdown→HTML). No pin needed, matching
-  // amenities_rich / education_rich. (Was pinned 'string' when the field was a
-  // plain textarea.)
-  'communities.directions': 'string',
-  'communities.community_map_embed': 'string',
-  // Live Framer field is formattedText (reconciled in PR #30). Mapper emits sIf
-  // (string); pin coerces string → formattedText (empties drop). Was 'string', which
-  // a reseed re-applied and re-broke the communities push on 2026-06-14.
-  'communities.security_details': 'formattedText',
-  // collections.content ("About this Collection") is rich text: mapper emits
-  // formattedText (ftIf) from Framer-subset HTML, same as blogs.content. Pin must
-  // match the emitted type or applyTypeOverrides coerces it back to string (re-breaking
-  // the literal <p>…</p> render). Re-type the live Framer field via /push-schema before
-  // the next collections backfill, or the whole batch aborts. (Was 'string'.)
-  'collections.content': 'formattedText',
-  'collections.incentive': 'string',
-  'images.caption': 'string',
-  'images.caption_clean': 'string',
-  'blogs.excerpt': 'string',
-  // blogs.content is rich text: mapper emits formattedText (htmlFt) from
-  // Framer-subset HTML (re-scraped legacy + admin TipTap WYSIWYG). Pin must match
-  // the emitted type or applyTypeOverrides would coerce/abort the batch.
-  'blogs.content': 'formattedText',
-  // Real Framer date field (mapper emits date()/ISO). Must match the Framer field
-  // type or applyTypeOverrides coerces; pushed via POST /schema (date is settable).
-  'blogs.publish_date': 'date',
-  'blogs.seo_description': 'string',
-  'promotions.copy': 'string',
-  'cities.hero_description': 'string',
-  'cities.incentive': 'string',
-  'testimonials.date_posted': 'string',
-  'testimonials.testimonial_text': 'string',
-  'testimonials.status': 'string',
-};
-
-/** Generic framerType(), then apply the mapper-truth override if one exists. */
-function resolveFramerType(entity: string, type: FieldType, f: FieldConfig): string | null {
-  const override = MAPPER_FRAMER_TYPE[`${entity}.${f.field}`];
-  if (override !== undefined) return override;
-  return framerType(type, f);
 }
 
 // ── system (locked / synced) flag ───────────────────────────────────────────
@@ -296,8 +143,6 @@ interface SeedRow {
   visible_in_form: number;
   visible_in_list: number;
   half_width: number;
-  framer_field_id: string | null;
-  framer_type: string | null;
   /** 0 for every static-config field (they map real columns / bespoke widgets). */
   custom: number;
 }
@@ -335,8 +180,6 @@ function buildRows(): { rows: SeedRow[]; perEntity: Record<string, number> } {
         visible_in_form: 1,
         visible_in_list: listKeys.has(f.field) ? 1 : 0,
         half_width: f.halfWidth ? 1 : 0,
-        framer_field_id: null, // populated in Phase C by setFields
-        framer_type: resolveFramerType(key, type, f),
         custom: 0, // every static-config field maps a real column / bespoke widget
       };
       // The publish-gate (bucket 'publish') is rendered as the detail-header toggle,
@@ -398,8 +241,6 @@ async function main(): Promise<void> {
       visible_in_form: r.visible_in_form,
       visible_in_list: r.visible_in_list,
       half_width: r.half_width,
-      framer_field_id: r.framer_field_id,
-      framer_type: r.framer_type,
       custom: r.custom,
     });
     sink.add(stmt.sql, stmt.params);

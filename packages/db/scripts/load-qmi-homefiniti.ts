@@ -217,7 +217,7 @@ async function main() {
 
   // 2. current D1 state. Mirrors the v_public_qmi FP join but reads the BASE
   //    table (no published gate) so unpublished homes are still loadable —
-  //    same choice framer-push makes for its projection.
+  //    same choice the public API projection makes.
   const rows = d1Json(
     `SELECT q.id, COALESCE(q.override_address, q.synced_address) AS address, ` +
     `q.photo_gallery_json, fp.description AS fp_description ` +
@@ -305,8 +305,8 @@ async function main() {
     if (home.virtual_tour_url && home.virtual_tour_url.trim()) {
       sets.push(`virtual_tour_url = ${q(home.virtual_tour_url.trim())}`);
     }
-    // lat/long: `latitude`/`longitude` is the canonical pair (framer-push map
-    // fields + api normalizeLatLng read these; geo_* are separate raw-contract
+    // lat/long: `latitude`/`longitude` is the canonical pair (the public map
+    // projection + api normalizeLatLng read these; geo_* are separate raw-contract
     // mirrors we leave untouched).
     const lat = asNum(home.latitude);
     const lng = asNum(home.longitude);

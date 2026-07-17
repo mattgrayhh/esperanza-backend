@@ -3,9 +3,7 @@
 //
 // The "where did my change go?" page the dashboard links to. Two reads, both via
 // getReadDb() (read-your-writes), both READ-only:
-//   • sync_log  — one row per sync/push batch (snowflake / framer / renderings /
-//                 import). This is the only place Framer-push health is recorded;
-//                 pushes themselves are fire-and-forget through a Cloudflare Queue.
+//   • sync_log  — one row per ingest run (Snowflake → D1). Records sync health.
 //   • audit_log — every admin edit, grouped into human activity lines.
 // =============================================================================
 
@@ -108,10 +106,10 @@ export default async function ActivityPage() {
       {/* ── Sync & publish runs ──────────────────────────────────────────── */}
       <Card>
         <CardHeader className="border-b">
-          <CardTitle>Sync &amp; publish runs</CardTitle>
+          <CardTitle>Sync runs</CardTitle>
           <CardDescription>
-            Snowflake imports and Framer pushes. A failed Framer run means the public site
-            may be behind D1 until the next successful push.
+            Snowflake → D1 sync runs. A failed run means D1 may be behind Snowflake
+            until the next successful sync.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-0">

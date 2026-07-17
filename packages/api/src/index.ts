@@ -1,7 +1,7 @@
 // =============================================================================
 // esperanza-api — public read API Worker (edge-served). Migration Plan v2, Phase 4.
 //
-// Serves the legacy public-JSON contract Framer already consumes, but sourced from
+// Serves the legacy public-JSON contract the frontend consumes, but sourced from
 // the D1 v_public_* views instead of the old Airtable cache workers:
 //
 //   GET /api/public/qmi          -> { homes:        RawAirtableRecord[], ts }
@@ -148,9 +148,9 @@ function fpArray(raw: unknown): Json[] | undefined {
 
 /**
  * QMI photo gallery: v_public_qmi.photo_gallery_json is a JSON string array of
- * {url, alt} (tolerates bare URL strings too). Emitted at fields.photo_gallery
- * (same key framer-push uses); omitted when empty so galleryless homes fall back
- * to image_url. The plain coercers can't carry a multi-element array, so emit here.
+ * {url, alt} (tolerates bare URL strings too). Emitted at fields.photo_gallery;
+ * omitted when empty so galleryless homes fall back to image_url. The plain
+ * coercers can't carry a multi-element array, so emit here.
  */
 function parseGallery(raw: unknown): Array<{ url: string; alt: string }> {
   if (raw == null || raw === '') return [];
@@ -243,7 +243,7 @@ const QMI_PLAIN: FieldSpec[] = [
   ['construction_stage', 'construction_stage', (v) => asStr(v)],
   ['dynamic_pdf', 'Dynamic PDF', (v) => asStr(v)],
   ['mark_job_number', 'mark_job_number', (v) => asStr(v)],
-  // postal_code MUST stay numeric (load-bearing — Framer expects a number).
+  // postal_code MUST stay numeric (load-bearing — the public contract expects a number).
   ['postal_code', 'postal_code', (v) => asNumOrNull(v) as Json],
   ['viewer_slug', 'viewer slug', (v) => asStr(v)], // NOTE the SPACE in the label
   ['last_synced_price', 'last_synced_price', (v) => asNumOrNull(v) as Json],
@@ -344,7 +344,7 @@ export function serializeQmiRow(row: Row, resolved: ResolvedPromo | null): RawAi
   }
 
   // Floor-plan-default → QMI-override description resolution (the same COALESCE
-  // the PDF renderer and framer-push apply): when the home carries no Description
+  // the PDF renderer applies): when the home carries no Description
   // of its own (NULL or ''), serve the linked floor plan's copy so consumers bind
   // ONE plain field with zero conditional logic. 'FP: Description' above keeps
   // carrying the raw FP lookup, so existing component-side fallbacks still work.
@@ -937,7 +937,7 @@ async function buildPayload(
 
     case 'settings': {
       // Company-wide settings (site_settings, migration 0013) — e.g. mortgage_rate,
-      // which the Framer mortgage calculators fetch so a single admin edit updates
+      // which the mortgage calculators fetch so a single admin edit updates
       // every payment calculator site-wide. Numeric-looking values are coerced so
       // calculators can use them directly.
       const res = await session.prepare('SELECT key, value FROM site_settings').all();
@@ -963,10 +963,6 @@ async function buildPayload(
 const DEFAULT_ALLOWED = [
   'https://www.esperanzahomes.com',
   'https://esperanzahomes.com',
-  'https://framer.com', // Framer editor canvas — needed for no-code Fetch setup
-  'https://*.framer.com',
-  'https://*.framer.app',
-  'https://*.framer.website',
 ];
 
 function originAllowed(origin: string, pattern: string): boolean {

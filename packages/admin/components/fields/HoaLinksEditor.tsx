@@ -2,7 +2,7 @@
 
 // =============================================================================
 // HoaLinksEditor — communities.hoa_links_json widget. Repeatable rows of
-// { title, link }. Serializes to the EXACT shape framer-push expects: a JSON array of
+// { title, link }. Serializes to the EXACT shape the public API expects: a JSON array of
 // { title, link } objects (the mapper fans the first 7 into hoa_link_title_N /
 // hoa_link_N). Saves via saveCommunityHoaLinks, which drops fully-empty rows and
 // JSON-stringifies server-side. Capped at 7 rows (only the first 7 are pushed).

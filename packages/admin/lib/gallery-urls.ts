@@ -10,8 +10,8 @@
 //
 // If the parser dropped the object shape (its original behaviour), surfacing a synced
 // gallery in the editor would render empty AND a save would write `[]` back — silently
-// WIPING the column. This mirrors framer-push's galleryUrls() so the admin and the push
-// pipeline agree on what a gallery contains.
+// WIPING the column. This mirrors the shared galleryUrls() parser so the admin and the
+// public API agree on what a gallery contains.
 // =============================================================================
 
 /** Parse a stored gallery column into an ordered list of image URL strings. */

@@ -56,8 +56,7 @@ import {
 // Inverts scripts/seed-field-definitions.ts:widgetToType. The bespoke widgets are
 // stored verbatim, so they round-trip by name. Phase B gives `rich`/`currency`/`select`
 // dedicated widgets (RichTextField / CurrencyField / SelectField); `url` still renders as
-// text (its seed framer_type carries the link semantic). No Phase-A seed row uses
-// currency/url, so this is parity-safe.
+// text. No Phase-A seed row uses currency/url, so this is parity-safe.
 function typeToWidget(type: string): Widget {
   switch (type) {
     case 'text':

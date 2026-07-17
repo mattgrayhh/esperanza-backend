@@ -1,7 +1,7 @@
 # Site Search Clone — Design
 
 **Date:** 2026-06-02
-**Goal:** Clone the live esperanzahomes.com header search bar into the Framer rebuild.
+**Goal:** Clone the live esperanzahomes.com header search bar into the static frontend rebuild.
 
 ## What we're cloning
 
@@ -60,9 +60,9 @@ other endpoints (component reads `.results`).
 - Rows with no usable label or no slug are skipped (defensive).
 - 5-minute edge cache (matches communities/floorplans/blogs Cache-Control).
 
-### 2. `SiteSearch.tsx` Framer code component
+### 2. `SiteSearch.tsx` frontend search component
 
-Standalone code component (file delivered for paste-into-Framer, or MCP insert on request).
+Standalone component for the static frontend.
 
 **Property controls:** `endpoint` (URL string, default the api route), `placeholder`,
 `maxResults` (default 5), `accentColor` (default dark green), `panelBg` (default warm
@@ -75,7 +75,7 @@ off-white). Brand defaults align with the Esperanza header tokens.
   `Displaying <shown> out of <total> results`, each row = `<mark>`-highlighted label + a
   type tag/icon.
 - Keyboard: ArrowUp/Down moves `aria-activedescendant`, Enter selects, Esc closes.
-- Select → `window.location.assign(href)` (relative paths resolve on the Framer domain).
+- Select → `window.location.assign(href)` (relative paths resolve on the site domain).
 - Threshold 1 char; empty query closes the panel.
 
 ## Out of scope (YAGNI)
@@ -83,7 +83,7 @@ off-white). Brand defaults align with the Esperanza header tokens.
 - No fuzzy/typo matching (O'Neil's is plain substring — match it).
 - No server-side search, no Algolia/Pagefind, no analytics events.
 - No mobile-specific layout beyond responsive width (legacy hides it `<lg`; component is
-  drop-anywhere and inherits the Framer frame's responsive sizing).
+  drop-anywhere and inherits the frontend layout's responsive sizing).
 
 ## Verification
 
@@ -91,5 +91,5 @@ off-white). Brand defaults align with the Esperanza header tokens.
   representative published/unpublished rows of each type, runs the serializer, and asserts:
   the published gate is honored, QMI yields 2 records sharing one href, hrefs match the
   templates, label composition is correct, and unslugged rows are dropped.
-- Manual: hit `/api/public/sitesearch` after wiring; drop component in Framer, type "tres",
+- Manual: hit `/api/public/sitesearch` after wiring; drop the component into the frontend, type "tres",
   confirm community matches + navigation.

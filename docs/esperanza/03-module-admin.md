@@ -4,8 +4,8 @@
 (App Router) deployed to Cloudflare via **OpenNext**.
 
 This is the CMS marketing uses to edit all nine content entities. It's the **only write
-path** into D1 for human-authored content. Every write it makes records an audit-log row,
-purges the public API cache for the affected entity, and may enqueue PDF re-renders.
+path** into D1 for human-authored content. Every write it makes records an audit-log row
+and purges the affected `esperanza-api` public-cache entity.
 
 > Running it locally and the env/secrets gotchas are in
 > [doc 00 §5–6](./00-setup-and-access.md). This doc is about how it works and how to change
@@ -110,30 +110,25 @@ Field `type` → widget mapping (`typeToWidget()`):
 Every `rich` field (community description/amenities, the floor-plan `*_rich` copy blocks,
 city venue copy, blog content, …) uses one TipTap WYSIWYG so marketing formats content
 visually — no markdown syntax. Notes:
-- **Storage = Framer-safe HTML** (`h1`–`h4`, `p`, `strong`, `em`, `a`, `ul`, `ol`, `li`,
+- **Storage = a safe HTML subset** (`h1`–`h4`, `p`, `strong`, `em`, `a`, `ul`, `ol`, `li`,
   `blockquote`, `br`, `img`). TipTap's schema constrains output; `saveEntity` also runs
   `sanitizeRichHtml` (strips `<script>/<style>/<iframe>/on*=`) as a second line of defense.
 - **Legacy values were markdown** (e.g. amenities `- bullet`). `lib/markdown.ts:toEditorHtml`
   converts markdown→HTML on load so it renders correctly; the field is rewritten as HTML on
-  the next save (progressive migration — no bulk data change needed).
-- **framer-push `ftIf`** is HTML-aware: passes HTML through, falls back to markdown→HTML for
-  any not-yet-edited value. So the swap is backward compatible; no Framer field re-type
-  (these stay `formattedText`) and no mandatory backfill.
-  - **Exception — `qmi.description`:** this one was a plain `textarea` pushed via `sIf`
-    (Framer `string`), so promoting it to the rich editor (+ `ftIf`) **does** require a
-    one-time Framer re-type. On the QMI detail screen the Description editor overrides the
-    floor-plan copy: leave it blank and the linked plan's description flows through (shown
-    read-only beneath the editor); set it to reformat that copy for this home — e.g. turn
-    the features into a real bullet list. The fallback now renders markdown too, so a plan
-    whose copy is `- Feature` lines shows bullets even without an override. Rollout order
-    (the field type must match before the batch, per the framer-push golden rule):
-    reseed `field_definitions` `--remote` → `/push-schema` (re-types `qmi.description`
-    `string`→`formattedText`) → deploy → `/backfill?keys=qmi` (long timeout, ~356 homes).
+  the next save (progressive migration — no bulk data change needed). The public view/api
+  falls back to markdown→HTML for any not-yet-edited value, so the swap is backward
+  compatible with no mandatory backfill.
+  - **`qmi.description` (overrides floor-plan copy):** On the QMI detail screen the
+    Description editor overrides the floor-plan copy: leave it blank and the linked plan's
+    description flows through (shown read-only beneath the editor); set it to reformat that
+    copy for this home — e.g. turn the features into a real bullet list. The fallback renders
+    markdown too, so a plan whose copy is `- Feature` lines shows bullets even without an
+    override.
   - **`qmi.floor_plan_image` (optional home override):** blank inherits the linked plan's
     top-down layout (`floor_plans.floor_plan_image` via JOIN). Compact media-rail preview
     shows the plan image with **Upload / Replace to override** (chip action + outline
     button) so you can pin a home-specific sketch without clearing the inherited preview
-    first. Blank on save inherits again; framer-push emits
+    first. Blank on save inherits again; the public view resolves
     `COALESCE(qmi override, plan default)`. The uploader renders floor-plan/diagram fields
     **`object-contain` (uncropped)** — square `object-cover` crops wide layouts. NB: a
     `floor_plan_image` still stored as a **PDF** shows a file icon, not an image — that
@@ -194,9 +189,9 @@ visually — no markdown syntax. Notes:
     spotlights the matching banner (tan incentive, gray/green availability, self-tour +
     house icon) while the rest of the image fades. Edits update the preview live; Available
     Now forces a green **AVAILABLE NOW** banner.
-- **Toolbar offers H1/H2/H3 + Body.** H1 is available because it was requested, but a Framer
-  page already has its own page-title H1 — prefer H2/H3 for in-body section headings to avoid
-  duplicate-H1 SEO.
+- **Toolbar offers H1/H2/H3 + Body.** H1 is available because it was requested, but the
+  public page already has its own page-title H1 — prefer H2/H3 for in-body section headings
+  to avoid duplicate-H1 SEO.
 - **Inline image upload** needs the record id (R2 key `<entity>/<id>/…`); on the few detail
   screens that render a field without an id the image button is hidden (text formatting still
   works).
@@ -213,8 +208,8 @@ A new field is **two changes**, code + data:
    ```
    Without this row, the field **will not appear** in the live admin even though your code
    is deployed. (This is the #1 "I added a field but can't see it" gotcha.)
-3. If the field should reach the website, also expose it through the public API
-   (and wire the frontend to read it).
+3. If the field should reach the website, expose it through the public view (`v_public_*`)
+   so `esperanza-api` serves it to the frontend (doc 01).
 
 To add a brand-new field **type** (not just a field), touch `lib/field-builder.ts`
 (`FIELD_TYPES`), `lib/field-config-source.ts` (`typeToWidget`), and the form handling in
@@ -229,12 +224,13 @@ after the D1 commit. `postWrite()`:
 - inserts `audit_log` rows — `{entity, entityId, field, action, oldValue, newValue, actor,
   created_at}` — chunked at **≤14 rows per INSERT** (D1 bind-parameter limit;
   `lib/audit-chunk.ts`);
-- purges the public API edge cache for the affected entity (best-effort);
+- purges the affected `esperanza-api` public-cache entity (`purgePublicCache`) so the site
+  picks up the change without waiting out the TTL;
 - for entities with brochures, marks PDFs stale via the render queue.
 
 **Exception:** unpublished draft creates (`createEntity` / `createCommunityDraft`) pass
 `{ sync: false }` — audit only. Empty drafts stay local until the operator saves or
-publishes; those paths still run the full side-effect fan-out.
+publishes; those paths still run the full sync fan-out.
 
 `actor` is the logged-in user's email from the Auth.js session.
 
@@ -245,7 +241,7 @@ publishes; those paths still run the full side-effect fan-out.
 Operator worklist, not a scoreboard. Layout (top → bottom):
 
 1. **Needs attention** — actionable tiles only (homes ready to publish, drafts in the
-   readiness funnel). Empty state is an explicit “All clear.”
+   readiness funnel, sync failures). Empty state is an explicit “All clear.”
 2. **At a glance** — QMI published/ready/in-progress bar + compact community and
    promotion counts.
 3. **Recent activity** + **All collections** jump list.
@@ -373,7 +369,7 @@ open by default; empty sections collapse. Count badges remain visible on closed 
 The Communities list (and dashboard) **New** control posts `createCommunityDraft`
 (`createEntity('communities')` + redirect) and lands on `/communities/{id}` —
 no interstitial, no dedicated create page. Create is local/fast: D1 insert +
-`create` audit only (no Framer enqueue, cache purge, or PDF register). Site sync
+`create` audit only (no cache purge or PDF register). Site sync
 starts on the first save or publish. A thin `/communities/new` route only
 redirects to the list (stale bookmarks). Generic entities and blogs still use
 the confirm-then-create `/new` card so an accidental click does not litter empty
@@ -389,4 +385,4 @@ multi-select combobox. The collapsible **Utilities** subsection groups gas, inte
 water, electric, and **Security Details**; HOA links stay in their own panel below the form.
 
 ---
-**Next:** [05 — Module: PDF Generator](./05-module-pdf.md)
+**Next:** [05 — Module: PDF Brochures](./05-module-pdf.md)

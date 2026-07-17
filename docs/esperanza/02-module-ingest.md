@@ -27,7 +27,8 @@ Every run (`runIngest()`):
    values. Only genuine changes produce work — no churn.
 4. **Enqueues** one message per changed record onto `esperanza-sync-queue`.
 5. The **same worker's queue consumer** drains that queue and applies the changes to D1
-   through the **synced-columns allowlist** (below).
+   through the **synced-columns allowlist** (below). The D1 write *is* the job's output —
+   the public site reads the updated data at request time via `esperanza-api`.
 6. Writes a row to `sync_log` summarizing the run.
 
 > The producer (diff) and consumer (apply) are split across a queue so a big run can't time
@@ -41,9 +42,7 @@ Every run (`runIngest()`):
 |---|---|---|---|
 | `esperanza-ingest` | cron | `0 */4 * * *` (**every 4 hours**) | Diff Snowflake vs D1, enqueue per-record changes. |
 
-So pricing/availability is at most ~4 hours stale. Admin saves and ingest writes both
-update D1 immediately; the public API cache is purged on admin writes so the site picks
-up changes without waiting for TTL expiry.
+So pricing/availability is at most ~4 hours stale.
 
 ### Running it on demand
 You don't have to wait for the cron. Trigger a run manually:
@@ -134,7 +133,7 @@ The allowlists (abridged):
 | Binding | Resource | Role |
 |---|---|---|
 | `DB` | D1 `esperanza` | read state + write synced columns |
-| `IMAGES` | R2 `esperanza-cms` | (one-time Airtable image import only) |
+| `IMAGES` | R2 `esperanza-cms` | R2 image bucket binding |
 | `SYNC_QUEUE` (producer) | `esperanza-sync-queue` | cron → per-record sync messages |
 | consumer | `esperanza-sync-queue` (DLQ: `esperanza-sync-queue-dlq`) | apply to D1 (batch 10, 3 retries) |
 
@@ -158,7 +157,7 @@ Secret: `SNOWFLAKE_PASSWORD` · Manual-trigger secret: `INGEST_TRIGGER_TOKEN`.
 `synced_<x>` column to the D1 schema + migration, (2) read it in `src/snowflake.ts`,
 (3) include it in the diff in `src/diff.ts`, (4) **add it to the allowlist in
 `src/synced.ts`** (or the apply step will reject it), (5) if it should reach the site, add
-the override pairing in the view and expose it through the public API.
+the override pairing in the public view (doc 01) so `esperanza-api` serves it.
 
 ---
 

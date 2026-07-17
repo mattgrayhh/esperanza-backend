@@ -28,7 +28,7 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 # CSV CORS allowlist. Reflected back when the request Origin matches (exact, "*",
 # or "https://*.host" subdomain wildcard); else falls back to the first entry.
-ALLOWED_ORIGINS = "https://www.esperanzahomes.com,https://esperanzahomes.com,https://framer.com,https://*.framer.com,https://*.framer.app,https://*.framer.website"
+ALLOWED_ORIGINS = "https://www.esperanzahomes.com,https://esperanzahomes.com"
 
 # Shared D1 binding. database_id placeholder — fill after `wrangler d1 create esperanza`.
 # Read path uses read replicas (first-unconstrained); admin read-your-writes uses

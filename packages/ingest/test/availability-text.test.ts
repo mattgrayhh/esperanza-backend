@@ -1,11 +1,10 @@
 // =============================================================================
 // availability_text auto-population.
 //
-// The Framer availability badge renders qmi.availability_text (framer-push
-// de-prefixes it into the managed move_in_date display value and falls back to
-// the raw ISO date when the text is absent — which must never happen for a home
-// with a move-in date). Ingest-created QMIs historically never received the
-// field. These tests pin:
+// The availability badge renders qmi.availability_text (the public API falls
+// back to the raw ISO date when the text is absent — which must never happen for
+// a home with a move-in date). Ingest-created QMIs historically never received
+// the field. These tests pin:
 //   * deriveAvailabilityText(): normal window, year boundary (DEC/JAN), past →
 //     "Available Now", null/garbage → null.
 //   * consumer INSERT: a new spec with a moveInDate gets availability_text.

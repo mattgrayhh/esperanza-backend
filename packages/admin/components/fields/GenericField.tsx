@@ -18,7 +18,7 @@
 //
 // Phase-B Field-Builder widgets route OUT to dedicated components, all preserving the
 // hidden-input name={field} FormData contract:
-//   * richtext / wysiwyg → RichTextEditor (TipTap WYSIWYG → Framer-safe HTML)  [19]
+//   * richtext / wysiwyg → RichTextEditor (TipTap WYSIWYG → safe HTML)  [19]
 //   * currency → CurrencyField ($-formatted display, stores number)
 //   * select WITH optionItems → SelectField ({value,label} from options_json)  [21]
 // =============================================================================
@@ -88,7 +88,7 @@ export function GenericField({
 }: GenericFieldProps) {
   // Field-Builder widgets render their own label + hidden name={field} input, so
   // short-circuit to them (avoids a double label and keeps the FormData contract).
-  // richtext + wysiwyg both render the universal TipTap WYSIWYG (Framer-safe HTML +
+  // richtext + wysiwyg both render the universal TipTap WYSIWYG (safe HTML +
   // inline R2 image upload). Same hidden name={field} FormData contract. entity+id are
   // optional — the image button hides when id is absent (a few detail screens omit it).
   if (widget === 'richtext' || widget === 'wysiwyg') {

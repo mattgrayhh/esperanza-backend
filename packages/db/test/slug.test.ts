@@ -1,14 +1,14 @@
 // =============================================================================
-// Tests for the canonical public-slug derivation shared by framer-push (writer)
-// and the api sitesearch index (reader). The whole point of this module is that
-// both sides agree, so these tests pin the exact transform.
+// Tests for the canonical public-slug derivation used by the public site and the
+// api sitesearch index. The whole point of this module is that every consumer
+// agrees on the exact slug, so these tests pin the transform.
 // =============================================================================
 
 import { describe, it, expect } from 'vitest';
 import { qmiPublicSlug, toUnderscore, kebab, recSuffix } from '../lib/slug.js';
 
 describe('qmiPublicSlug', () => {
-  it('normalizes dashes to underscores (the live Framer page slug)', () => {
+  it('normalizes dashes to underscores (the live public page slug)', () => {
     expect(qmiPublicSlug({ id: 'q1', slug: '7023-cypress-springs-dr' })).toBe('7023_cypress_springs_dr');
     expect(qmiPublicSlug({ id: 'q2', slug: '1728-e-marquise-st' })).toBe('1728_e_marquise_st');
   });

@@ -121,11 +121,9 @@ function seedFieldDefinitions(): void {
   const stmt = H.sqlite.prepare(
     `INSERT INTO field_definitions
       (id, entity, key, label, help, group_label, sort, type, options_json,
-       required, system, visible_in_form, visible_in_list, half_width,
-       framer_field_id, framer_type)
+       required, system, visible_in_form, visible_in_list, half_width)
      VALUES (@id,@entity,@key,@label,@help,@group_label,@sort,@type,@options_json,
-       @required,@system,@visible_in_form,@visible_in_list,@half_width,
-       @framer_field_id,@framer_type)`
+       @required,@system,@visible_in_form,@visible_in_list,@half_width)`
   );
   const insertMany = H.sqlite.transaction(() => {
     for (const def of ENTITY_LIST) {
@@ -149,8 +147,6 @@ function seedFieldDefinitions(): void {
           visible_in_form: f.bucket === 'publish' || f.visibleInForm === false ? 0 : 1,
           visible_in_list: listKeys.has(f.field) ? 1 : 0,
           half_width: f.halfWidth ? 1 : 0,
-          framer_field_id: null,
-          framer_type: null,
         });
       });
     }

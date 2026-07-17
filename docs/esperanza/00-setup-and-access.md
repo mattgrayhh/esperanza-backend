@@ -15,7 +15,7 @@ Everything runs on **Cloudflare**. You only need to understand five primitives:
 | **Worker** | A small serverless program that runs at Cloudflare's edge, triggered by an HTTP request, a cron timer, or a queue message. Like a tiny always-on Node service. | We have 6 workers (5 in the monorepo + the XML feed). |
 | **D1** | A serverless **SQLite** database. Normal SQL. Has some hard limits (e.g. **100 columns per table**). | One database, named `esperanza`. The source of truth for the whole site. |
 | **R2** | Object storage, like Amazon S3. We store images and generated PDFs here. | One bucket, `esperanza-cms`, served over a public CDN URL. |
-| **Queues** | A message queue. A "producer" worker drops a message; a "consumer" worker processes it later, with retries. | Used to move Snowflake sync work into D1 without blocking the cron. |
+| **Queues** | A message queue. A "producer" worker drops a message; a "consumer" worker processes it later, with retries. | Used to move work from ingest → D1 without blocking. |
 | **Cron Triggers** | A schedule attached to a worker (standard cron syntax). | ingest runs every 4h. |
 
 You manage all of this with one CLI tool: **`wrangler`** (Cloudflare's official CLI).
@@ -76,6 +76,7 @@ esperanza-cf/
 │   │                 and seed/maintenance scripts. NOT a deployed worker.
 │   ├── ingest/       Worker `esperanza-ingest` — pulls Snowflake → D1 (cron).      → doc 02
 │   ├── admin/        Worker `esperanza-admin` — the Next.js CMS marketing uses.    → doc 03
+│   ├── ops/          Worker `esperanza-ops` — MCP + REST ops control plane.
 │   ├── pdf/          Worker `esperanza-pdf` — renders PDFs with a headless browser. → doc 05
 │   ├── api/          Worker `esperanza-api` — edge read API over the public views.
 │   └── renderings/   DESCOPED. OneDrive→R2 floor-plan rendering importer. Not deployed.
@@ -139,9 +140,8 @@ There are two kinds of secrets, and they're stored in two different places:
 | **CI/CD** | GitHub → Settings → Secrets → Actions | only `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` live here |
 
 Production runtime secrets (`AUTH_SECRET`, `MAILLAYER_API_KEY`, `PDF_PREVIEW_SECRET`,
-`INGEST_TRIGGER_TOKEN`, `SNOWFLAKE_PASSWORD`) are set
-with `wrangler secret put` **on the relevant worker** and persist across deploys — they
-are NOT in the repo and NOT in CI.
+`INGEST_TRIGGER_TOKEN`, `SNOWFLAKE_PASSWORD`) are set with `wrangler secret put` **on the
+relevant worker** and persist across deploys — they are NOT in the repo and NOT in CI.
 
 ```bash
 # Example: rotate the ingest trigger token
@@ -178,6 +178,7 @@ The five deployable workers:
 | `packages/admin` | `esperanza-admin` | `npm run deploy` (OpenNext build + deploy) |
 | `packages/api` | `esperanza-api` | `wrangler deploy` |
 | `packages/ingest` | `esperanza-ingest` | `wrangler deploy` |
+| `packages/ops` | `esperanza-ops` | `wrangler deploy` |
 | `packages/pdf` | `esperanza-pdf` | `wrangler deploy` |
 
 To force a redeploy with no code change, use the workflow's **"Run workflow"** button in
@@ -205,4 +206,4 @@ the GitHub Actions tab (it has an option to "Deploy ALL workers").
       everything else.
 
 ---
-**Next:** [01 — Data Flow: Snowflake → D1 → Public Site](./01-data-flow.md)
+**Next:** [01 — Data Flow: Snowflake → D1](./01-data-flow.md)

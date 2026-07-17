@@ -44,22 +44,20 @@ export interface FieldTypeMeta {
   label: string;
   /** does this type carry a {value,label} options list (select)? */
   hasOptions: boolean;
-  /** the Framer field type this maps to (recorded for Phase C; not synced here). */
-  framerType: string;
 }
 
-/** type → {label, hasOptions, framerType}. Mirrors seed-field-definitions.framerType. */
+/** type → {label, hasOptions}. */
 export const FIELD_TYPE_META: Record<FieldType, FieldTypeMeta> = {
-  text: { type: 'text', label: 'Short text', hasOptions: false, framerType: 'string' },
-  long: { type: 'long', label: 'Long text', hasOptions: false, framerType: 'formattedText' },
-  rich: { type: 'rich', label: 'Rich text', hasOptions: false, framerType: 'formattedText' },
-  number: { type: 'number', label: 'Number', hasOptions: false, framerType: 'number' },
-  currency: { type: 'currency', label: 'Currency', hasOptions: false, framerType: 'number' },
-  bool: { type: 'bool', label: 'Boolean', hasOptions: false, framerType: 'boolean' },
-  date: { type: 'date', label: 'Date', hasOptions: false, framerType: 'date' },
-  url: { type: 'url', label: 'URL', hasOptions: false, framerType: 'link' },
-  image: { type: 'image', label: 'Image', hasOptions: false, framerType: 'image' },
-  select: { type: 'select', label: 'Select / enum', hasOptions: true, framerType: 'enum' },
+  text: { type: 'text', label: 'Short text', hasOptions: false },
+  long: { type: 'long', label: 'Long text', hasOptions: false },
+  rich: { type: 'rich', label: 'Rich text', hasOptions: false },
+  number: { type: 'number', label: 'Number', hasOptions: false },
+  currency: { type: 'currency', label: 'Currency', hasOptions: false },
+  bool: { type: 'bool', label: 'Boolean', hasOptions: false },
+  date: { type: 'date', label: 'Date', hasOptions: false },
+  url: { type: 'url', label: 'URL', hasOptions: false },
+  image: { type: 'image', label: 'Image', hasOptions: false },
+  select: { type: 'select', label: 'Select / enum', hasOptions: true },
 };
 
 export function isFieldType(t: string): t is FieldType {

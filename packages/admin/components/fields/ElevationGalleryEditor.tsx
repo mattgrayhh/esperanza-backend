@@ -7,7 +7,7 @@
 //
 // The type is auto-derived from the filename on add (filenames encode it ~99% of the
 // time) and editable per-image via a dropdown. The live plan page renders these as a
-// captioned grid (framer-push emits `elevations_json`; a Framer code component reads it).
+// captioned grid (the public API emits `elevations_json`; the site renders it).
 //
 // UX mirrors ImageGalleryEditor (drag-drop bulk upload, reorder, remove) plus a type
 // <select> under each thumbnail.

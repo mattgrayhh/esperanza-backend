@@ -25,7 +25,7 @@ The monorepo has five deployable Workers:
 | `packages/admin` | `esperanza-admin` | `npm run deploy` (OpenNext build + deploy) |
 | `packages/api` | `esperanza-api` | `wrangler deploy` |
 | `packages/ingest` | `esperanza-ingest` | `wrangler deploy` |
-| `packages/framer-push` | `esperanza-framer-push` | `wrangler deploy` |
+| `packages/ops` | `esperanza-ops` | `wrangler deploy` |
 | `packages/pdf` | `esperanza-pdf` | `wrangler deploy` |
 
 > `packages/renderings` (MS Graph OneDrive→R2 floor-plan renderings) is **descoped** —

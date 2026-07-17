@@ -1,9 +1,9 @@
 {
-  "name": "esperanza-cf",
+  "name": "esperanza-backend",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Pure-Cloudflare CMS stack for Esperanza Homes (D1 + R2 + Workers/Queues/Cron + Next.js admin). Replaces Airtable.",
+  "description": "Cloudflare CMS stack for Esperanza Homes (D1 + R2 + Workers/Queues/Cron + Next.js admin). Source of truth for the public site.",
   "workspaces": [
     "packages/*"
   ],

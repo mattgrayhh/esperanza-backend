@@ -7,7 +7,7 @@
 // on QMI cards + the default in every on-page calculator) and the promotional Incentive
 // Rate (the green payment + "Savings Over 30 Years" on QMI cards). Saving calls the
 // saveSiteSettings action, which validates, writes D1 + audit_log, and purges the public
-// settings API cache — the Framer QMI cards / calculators fetch GET /api/public/settings
+// settings API cache — the site's QMI cards / calculators fetch GET /api/public/settings
 // on page load, so new rates are live site-wide within moments of saving.
 // =============================================================================
 

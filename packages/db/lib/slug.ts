@@ -1,16 +1,16 @@
 // =============================================================================
 // Canonical public-URL slug derivation.
 //
-// SINGLE SOURCE OF TRUTH for the slug that appears in a live Framer page path.
-// Both sides MUST agree or links break:
-//   * framer-push (the WRITER) pushes `qmiPublicSlug(row)` as the Framer item slug,
-//     so the QMI detail page lives at `/new-homes/available/<qmiPublicSlug>`.
-//   * the api sitesearch index (the READER) builds its QMI href from the SAME
-//     function, so the header search always points at the URL that exists.
+// SINGLE SOURCE OF TRUTH for the slug that appears in the public QMI page path.
+// Every consumer MUST agree or links break:
+//   * the static frontend + esperanza-api render the QMI detail page at
+//     `/new-homes/available/<qmiPublicSlug>`.
+//   * the api sitesearch index builds its QMI href from the SAME function, so
+//     the header search always points at the URL that exists.
 //
-// Before this was shared, the search worker emitted the raw (dash) `slug` column
-// while framer-push normalized dashes→underscores — so every QMI/lot-number
-// search result 404'd. Keep the derivation here; do not re-implement it.
+// The underscore-normalization is simply the public slug convention: the raw
+// `slug` column is dash-cased, so a reader that emitted it directly would 404.
+// Keep the derivation here; do not re-implement it.
 // =============================================================================
 
 /** Public slugs for QMI & Testimonials normalize dashes→underscores. */
@@ -29,7 +29,7 @@ export function kebab(s: string): string {
 /**
  * Record suffix used when deriving a slug from an address fallback: chars 3..11
  * of a `recXXXXXXXX…` id (or the id minus a leading `rec`). NOT lowercased —
- * mirrors framer-push's inline qmi-mapper suffix exactly.
+ * mirrors the QMI slug convention exactly.
  */
 export function recSuffix(id: string): string {
   return id.length >= 11 ? id.slice(3, 11) : id.replace(/^rec/, '');
@@ -57,15 +57,15 @@ export interface QmiSlugRow {
 }
 
 /**
- * The public QMI slug exactly as framer-push pushes it to Framer: the first
- * non-empty of viewer_slug → seo_slug → rich_slug → slug → kebab(address)-recSuffix
- * (→ id), normalized dashes→underscores.
+ * The public QMI slug: the first non-empty of
+ * viewer_slug → seo_slug → rich_slug → slug → kebab(address)-recSuffix (→ id),
+ * normalized dashes→underscores.
  *
- * Note: framer-push additionally de-dupes slugs that collide across the whole
- * batch (a second home at the same address gets a `_<recSuffix>` suffix). That
- * is order-dependent and currently never fires (0 collisions in live data), so
- * the reader cannot reproduce it deterministically and does not try; the base
- * slug below matches the Framer page for every non-colliding home.
+ * Note: the historical publisher additionally de-duped slugs that collided
+ * across the whole batch (a second home at the same address got a
+ * `_<recSuffix>` suffix). That is order-dependent and currently never fires
+ * (0 collisions in live data), so this shared derivation does not reproduce it;
+ * the base slug below matches the public page for every non-colliding home.
  */
 export function qmiPublicSlug(row: QmiSlugRow): string {
   const id = String(row.id ?? '');
