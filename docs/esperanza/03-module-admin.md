@@ -420,5 +420,12 @@ openable link so an operator can replace them by uploading the real PDF. On the 
 multi-select combobox. The collapsible **Utilities** subsection groups gas, internet,
 water, electric, and **Security Details**; HOA links stay in their own panel below the form.
 
+**HOA docs now render on the live community page.** `serializeCommunityRow` emits `hoaLinks`
+(parsed from `hoa_links_json`) in `/api/public/communities`, and the frontend
+(`render-community.mjs`) renders an **HOA Documents** download list (esperanza-frontend).
+So editing HOA docs in the admin is D1→API→site wired (one of the O'Neill-cutover items).
+The 12 legacy `framerusercontent.com` HOA PDFs were rehosted to R2
+(`img.hazardhouse.ai/communities/<id>/hoa/<slug>.pdf`) — no Framer-hosted asset URLs remain in D1.
+
 ---
 **Next:** [05 — Module: PDF Brochures](./05-module-pdf.md)

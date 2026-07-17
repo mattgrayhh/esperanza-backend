@@ -433,6 +433,24 @@ export interface CommunityPublic {
   promoBadgeText: string;
   promoCtaLabel: string;
   promoCtaLink: string;
+  /** HOA documents (CCRs, amendments) — {title, link} where link is an R2 PDF url.
+   *  Parsed from communities.hoa_links_json; empty array when none. */
+  hoaLinks: Array<{ title: string; link: string }>;
+}
+
+/** Parse the hoa_links_json column (JSON array of {title, link}) into a typed list,
+ *  dropping any entry without a link. */
+function parseHoaLinks(raw: unknown): Array<{ title: string; link: string }> {
+  if (typeof raw !== 'string' || raw.trim() === '') return [];
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((x) => ({ title: asStr((x as Record<string, unknown>)?.title), link: asStr((x as Record<string, unknown>)?.link) }))
+      .filter((x) => x.link !== '');
+  } catch {
+    return [];
+  }
 }
 
 export function serializeCommunityRow(row: Row, resolved: ResolvedPromo | null): CommunityPublic {
@@ -471,6 +489,7 @@ export function serializeCommunityRow(row: Row, resolved: ResolvedPromo | null):
     promoBadgeText: resolved?.promoBadgeText ?? '',
     promoCtaLabel: resolved?.promoCtaLabel ?? '',
     promoCtaLink: resolved?.promoCtaLink ?? '',
+    hoaLinks: parseHoaLinks(row['hoa_links_json']),
   };
 }
 

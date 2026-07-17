@@ -23,7 +23,8 @@
       "promoBannerText": "",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "rec4nvhmkSZGAeSv8",
@@ -48,7 +49,8 @@
       "promoBannerText": "4.99% Fixed Rates, Closing Cost Assistance, OR up to $20,000 Flex Cash!",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "rec8gup3Jkzgt9jlr",
@@ -73,7 +75,8 @@
       "promoBannerText": "Unlock Your $15K Flex Discount Now!",
       "promoBadgeText": "Unlock Your Flex Discount Now!",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "recA0OJbPdu6Upcvx",
@@ -98,7 +101,8 @@
       "promoBannerText": "4.99% Fixed Rates, Closing Cost Assistance, OR up to $20,000 Flex Cash!",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "recASTscXcdxmzGUJ",
@@ -123,7 +127,8 @@
       "promoBannerText": "4.99% Fixed Rates, Closing Cost Assistance, OR up to $20,000 Flex Cash!",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "recBPyCkZVG3nTz9Y",
@@ -148,7 +153,8 @@
       "promoBannerText": "4.99% Fixed Rates, Closing Cost Assistance, OR up to $20,000 Flex Cash!",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "recF8bOLQ5fAccm6d",
@@ -173,7 +179,8 @@
       "promoBannerText": "4.99% Interest Rate OR up to $20,000 Flex Cash!",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "recFy2CELgzpOS7YP",
@@ -198,7 +205,8 @@
       "promoBannerText": "",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "recHq3bBxCB3113nZ",
@@ -223,7 +231,8 @@
       "promoBannerText": "4.99% Fixed Rates, Closing Cost Assistance, OR up to $20,000 Flex Cash!",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "recI5Pp9ZzgZ6aWtV",
@@ -248,7 +257,8 @@
       "promoBannerText": "",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "recL0hNBwr4gzkC2O",
@@ -273,7 +283,8 @@
       "promoBannerText": "4.99% Rate + up to $3,000 in Closing Costs",
       "promoBadgeText": "Limited Time",
       "promoCtaLabel": "View Details",
-      "promoCtaLink": "https://www.esperanzahomes.com/incentives/499-rate-up-to-3000-in-closing-costs"
+      "promoCtaLink": "https://www.esperanzahomes.com/incentives/499-rate-up-to-3000-in-closing-costs",
+      "hoaLinks": []
     },
     {
       "id": "recPmmwCh1IO8QJ6x",
@@ -298,7 +309,8 @@
       "promoBannerText": "4.99% Interest Rate OR up to $20,000 Flex Cash!",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "recR71DGgu5K6Uaih",
@@ -323,7 +335,8 @@
       "promoBannerText": "Los Prados Now Selling in Mercedes, Texas!",
       "promoBadgeText": "Now Selling",
       "promoCtaLabel": "Book My Tour",
-      "promoCtaLink": "https://www.esperanzahomes.com/new-homes/tx/mercedes/los-prados/17616/#request-a-tour"
+      "promoCtaLink": "https://www.esperanzahomes.com/new-homes/tx/mercedes/los-prados/17616/#request-a-tour",
+      "hoaLinks": []
     },
     {
       "id": "recUsPXccZCTAYB4M",
@@ -348,7 +361,8 @@
       "promoBannerText": "Anaqua at Tres Lagos Now Selling Phase 1!",
       "promoBadgeText": "",
       "promoCtaLabel": "Learn More!",
-      "promoCtaLink": "/new-homes/anaqua-at-tres-lagos#visit"
+      "promoCtaLink": "/new-homes/anaqua-at-tres-lagos#visit",
+      "hoaLinks": []
     },
     {
       "id": "recX6JFH2NKKWSVpE",
@@ -373,7 +387,8 @@
       "promoBannerText": "4.99% Rate + up to $3,000 in Closing Costs",
       "promoBadgeText": "Limited Time",
       "promoCtaLabel": "View Details",
-      "promoCtaLink": "https://www.esperanzahomes.com/incentives/499-rate-up-to-3000-in-closing-costs"
+      "promoCtaLink": "https://www.esperanzahomes.com/incentives/499-rate-up-to-3000-in-closing-costs",
+      "hoaLinks": []
     },
     {
       "id": "recZoIHLxhWMQHL2g",
@@ -398,7 +413,8 @@
       "promoBannerText": "4.99% Fixed Rates, Closing Cost Assistance, OR up to $20,000 Flex Cash!",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "recaMgpuP51MNYuPS",
@@ -423,7 +439,8 @@
       "promoBannerText": "4.99% Fixed Rates, Closing Cost Assistance, OR up to $20,000 Flex Cash!",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "recafk44jf97RE4yY",
@@ -448,7 +465,8 @@
       "promoBannerText": "4.99% Rate + up to $3,000 in Closing Costs",
       "promoBadgeText": "Limited Time",
       "promoCtaLabel": "View Details",
-      "promoCtaLink": "https://www.esperanzahomes.com/incentives/499-rate-up-to-3000-in-closing-costs"
+      "promoCtaLink": "https://www.esperanzahomes.com/incentives/499-rate-up-to-3000-in-closing-costs",
+      "hoaLinks": []
     },
     {
       "id": "recbbtGBmArXoOY09",
@@ -473,7 +491,8 @@
       "promoBannerText": "",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "recctX7rilhUjwx4w",
@@ -498,7 +517,8 @@
       "promoBannerText": "Design Studio Showcase Happening June 7th at Tres Lagos!",
       "promoBadgeText": "June 7",
       "promoCtaLabel": "RSVP NOW!",
-      "promoCtaLink": "https://share.hsforms.com/1SBG1-uunQRqgNYXvnnfYFw4ugas"
+      "promoCtaLink": "https://share.hsforms.com/1SBG1-uunQRqgNYXvnnfYFw4ugas",
+      "hoaLinks": []
     },
     {
       "id": "rechAF9Me3YhEZbiq",
@@ -523,7 +543,8 @@
       "promoBannerText": "4.99% Rate + up to $3,000 in Closing Costs",
       "promoBadgeText": "Limited Time",
       "promoCtaLabel": "View Details",
-      "promoCtaLink": "https://www.esperanzahomes.com/incentives/499-rate-up-to-3000-in-closing-costs"
+      "promoCtaLink": "https://www.esperanzahomes.com/incentives/499-rate-up-to-3000-in-closing-costs",
+      "hoaLinks": []
     },
     {
       "id": "rechY6kNpzc45eCuq",
@@ -548,7 +569,8 @@
       "promoBannerText": "4.99% Interest Rate OR up to $20,000 Flex Cash!",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "recibxIbaUodkOq17",
@@ -573,7 +595,8 @@
       "promoBannerText": "4.99% Fixed Rates, Closing Cost Assistance, OR up to $20,000 Flex Cash!",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "recj8Znf2y53k1vdq",
@@ -598,7 +621,8 @@
       "promoBannerText": "4.99% Interest Rates on Select Move-In Ready Homes",
       "promoBadgeText": "4.99% Rate",
       "promoCtaLabel": "View Details",
-      "promoCtaLink": "https://www.esperanzahomes.com/incentives/499-interest-rates"
+      "promoCtaLink": "https://www.esperanzahomes.com/incentives/499-interest-rates",
+      "hoaLinks": []
     },
     {
       "id": "recjdNoDZcN8iuFNY",
@@ -623,7 +647,8 @@
       "promoBannerText": "4.99% Interest Rates on Select Move-In Ready Homes",
       "promoBadgeText": "4.99% Rate",
       "promoCtaLabel": "View Details",
-      "promoCtaLink": "https://www.esperanzahomes.com/incentives/499-interest-rates"
+      "promoCtaLink": "https://www.esperanzahomes.com/incentives/499-interest-rates",
+      "hoaLinks": []
     },
     {
       "id": "recjnoYnYslVzwi17",
@@ -648,7 +673,8 @@
       "promoBannerText": "",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "recn9G9xjMAU5qD8m",
@@ -673,7 +699,8 @@
       "promoBannerText": "4.99% Interest Rate OR up to $20,000 Flex Cash!",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "recrVDz8qSj9urX4G",
@@ -698,7 +725,8 @@
       "promoBannerText": "4.99% Interest Rate OR up to $20,000 Flex Cash!",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "rectUf4cPjgY0GEcZ",
@@ -723,7 +751,8 @@
       "promoBannerText": "",
       "promoBadgeText": "",
       "promoCtaLabel": "",
-      "promoCtaLink": ""
+      "promoCtaLink": "",
+      "hoaLinks": []
     },
     {
       "id": "recyqsayHRWeIWfaK",
@@ -748,7 +777,8 @@
       "promoBannerText": "4.99% Rate + up to $3,000 in Closing Costs",
       "promoBadgeText": "Limited Time",
       "promoCtaLabel": "View Details",
-      "promoCtaLink": "https://www.esperanzahomes.com/incentives/499-rate-up-to-3000-in-closing-costs"
+      "promoCtaLink": "https://www.esperanzahomes.com/incentives/499-rate-up-to-3000-in-closing-costs",
+      "hoaLinks": []
     }
   ],
   "ts": 0
