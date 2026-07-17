@@ -191,7 +191,7 @@ export function buildLiveSitePlacement(
   // secret, so its detail island renders drafts. Shareable, no login, never touches prod.
   const qmiSlug = entity === 'qmi' ? resolveSlug(entity, row) : '';
   const previewUrl = qmiSlug
-    ? `${STAGING_ORIGIN}${QMI_PREVIEW_SHELL}?slug=${encodeURIComponent(qmiSlug)}`
+    ? `${STAGING_ORIGIN}${QMI_PREVIEW_SHELL}?slug=${encodeURIComponent(qmiSlug)}&preview=1`
     : null;
   return {
     pageLabel: PAGE_LABELS[entity],
