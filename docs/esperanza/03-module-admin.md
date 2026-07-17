@@ -390,7 +390,7 @@ A **published** QMI shows "Preview live page" (the real public URL). A **draft**
 staging Worker without touching production. Flow:
 
 - `live-site.ts` `buildLiveSitePlacement` emits `previewUrl` for QMI:
-  `https://esperanzahomes-staging.workers.dev/new-homes/available/home/?slug=<slug>` (the
+  `https://esperanzahomes-staging.round-base-ed8c.workers.dev/new-homes/available/home/?slug=<slug>` (the
   client-rendered detail shell renders any home by `?slug=`). `RecordEditShell` renders the
   link for non-live QMIs.
 - The **staging** frontend Worker's `/api/*` proxy (`worker.js`) rewrites `/api/public/qmi`
