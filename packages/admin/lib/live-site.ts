@@ -6,7 +6,7 @@ export const LIVE_SITE_ORIGIN = 'https://www.esperanzahomes.com';
 /** Staging Worker (workers.dev only — can never touch prod). Its /api proxy adds the
  *  preview secret, so the QMI detail island there renders DRAFT homes. Used to offer a
  *  shareable "Preview draft" link for unpublished QMI homes. */
-export const STAGING_ORIGIN = 'https://esperanzahomes-staging.workers.dev';
+export const STAGING_ORIGIN = 'https://esperanzahomes-staging.round-base-ed8c.workers.dev';
 /** The client-rendered QMI detail shell — renders any home by ?slug=, incl. drafts on staging. */
 const QMI_PREVIEW_SHELL = '/new-homes/available/home/';
 
