@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from 'react';
 import { uploadImage } from '../../lib/actions';
 import { filterAcceptedFiles } from '../../lib/dropped-files';
+import { prepareForUpload } from '../../lib/prepare-upload';
 import { cn } from '@/lib/utils';
 import { FieldLabel } from './FieldLabel';
 import {
@@ -94,7 +95,12 @@ export function ImageUploader({
     setErr(null);
     startTransition(async () => {
       try {
-        const res = await uploadImage(entity, id, field, file);
+        const prepared = await prepareForUpload(file);
+        if (!prepared.ok) {
+          setErr(prepared.error);
+          return;
+        }
+        const res = await uploadImage(entity, id, field, prepared.file);
         if (res.ok) {
           setStoredUrl(res.url);
         } else {
