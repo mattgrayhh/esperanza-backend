@@ -27,6 +27,7 @@ export function ImageGalleryEditor({
   suggestions,
   suggestionsLabel = 'From the floor plan',
   suggestionsHelp = 'Master-plan photos. Click to add to (or remove from) this home’s gallery.',
+  suggestionGroups,
 }: {
   entity: string;
   id: string;
@@ -44,6 +45,9 @@ export function ImageGalleryEditor({
   suggestions?: string[];
   suggestionsLabel?: string;
   suggestionsHelp?: string;
+  /** Multiple labeled inherit palettes (e.g. plan Interior vs Exterior). When set, takes
+   *  precedence over the single `suggestions`. Each group toggles into the same gallery. */
+  suggestionGroups?: Array<{ label: string; help?: string; urls: string[] }>;
 }) {
   const [internalUrls, setInternalUrls] = useState<string[]>(() => parseGalleryUrls(initialValue));
   const controlled = controlledUrls !== undefined && onGalleryUrlsChange !== undefined;
@@ -84,11 +88,17 @@ export function ImageGalleryEditor({
     applyUrls((prev) => (prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url]));
   }
 
-  function addAllSuggestions() {
-    applyUrls((prev) => [...prev, ...(suggestions ?? []).filter((u) => !prev.includes(u))]);
+  function addAll(groupUrls: string[]) {
+    applyUrls((prev) => [...prev, ...groupUrls.filter((u) => !prev.includes(u))]);
   }
 
-  const unselectedSuggestions = (suggestions ?? []).filter((u) => !urls.includes(u));
+  // One render path for both the single `suggestions` palette and multi `suggestionGroups`.
+  const groups =
+    suggestionGroups && suggestionGroups.length > 0
+      ? suggestionGroups.filter((g) => g.urls.length > 0)
+      : suggestions && suggestions.length > 0
+        ? [{ label: suggestionsLabel, help: suggestionsHelp, urls: suggestions }]
+        : [];
 
   function addFiles(picked: Iterable<File> | null | undefined) {
     if (!picked) return;
@@ -256,47 +266,50 @@ export function ImageGalleryEditor({
         </Button>
       </div>
 
-      {suggestions && suggestions.length > 0 ? (
-        <div className="grid gap-2 rounded-lg border border-dashed border-border p-2">
-          <div className="flex items-center justify-between gap-2">
-            <FieldLabel label={suggestionsLabel} help={suggestionsHelp} />
-            {unselectedSuggestions.length > 0 ? (
-              <Button type="button" variant="ghost" size="sm" onClick={addAllSuggestions} className="h-7">
-                Add all
-              </Button>
-            ) : null}
-          </div>
-          <div className={cn('grid gap-2', compact ? 'grid-cols-2' : 'grid-cols-3 sm:grid-cols-4')}>
-            {suggestions.map((url, i) => {
-              const selected = urls.includes(url);
-              return (
-                <button
-                  key={`sug-${i}-${url}`}
-                  type="button"
-                  onClick={() => toggleSuggestion(url)}
-                  aria-pressed={selected}
-                  title={selected ? 'In gallery — click to remove' : 'Click to add to gallery'}
-                  className={cn(
-                    'group relative overflow-hidden rounded-md border bg-muted/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                    selected ? 'border-primary ring-2 ring-primary ring-offset-1' : 'border-border opacity-80 hover:opacity-100'
-                  )}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt={`${suggestionsLabel} ${i + 1}`} className="h-24 w-full object-cover" draggable={false} />
-                  <span
+      {groups.map((group, gi) => {
+        const unselected = group.urls.filter((u) => !urls.includes(u));
+        return (
+          <div key={`grp-${gi}-${group.label}`} className="grid gap-2 rounded-lg border border-dashed border-border p-2">
+            <div className="flex items-center justify-between gap-2">
+              <FieldLabel label={group.label} help={group.help} />
+              {unselected.length > 0 ? (
+                <Button type="button" variant="ghost" size="sm" onClick={() => addAll(group.urls)} className="h-7">
+                  Add all
+                </Button>
+              ) : null}
+            </div>
+            <div className={cn('grid gap-2', compact ? 'grid-cols-2' : 'grid-cols-3 sm:grid-cols-4')}>
+              {group.urls.map((url, i) => {
+                const selected = urls.includes(url);
+                return (
+                  <button
+                    key={`sug-${gi}-${i}-${url}`}
+                    type="button"
+                    onClick={() => toggleSuggestion(url)}
+                    aria-pressed={selected}
+                    title={selected ? 'In gallery — click to remove' : 'Click to add to gallery'}
                     className={cn(
-                      'absolute right-1 top-1 inline-flex size-5 items-center justify-center rounded-sm text-white',
-                      selected ? 'bg-primary' : 'bg-background/80 text-muted-foreground'
+                      'group relative overflow-hidden rounded-md border bg-muted/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                      selected ? 'border-primary ring-2 ring-primary ring-offset-1' : 'border-border opacity-80 hover:opacity-100'
                     )}
                   >
-                    {selected ? <CheckIcon className="size-3" /> : <PlusIcon className="size-3" />}
-                  </span>
-                </button>
-              );
-            })}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt={`${group.label} ${i + 1}`} className="h-24 w-full object-cover" draggable={false} />
+                    <span
+                      className={cn(
+                        'absolute right-1 top-1 inline-flex size-5 items-center justify-center rounded-sm text-white',
+                        selected ? 'bg-primary' : 'bg-background/80 text-muted-foreground'
+                      )}
+                    >
+                      {selected ? <CheckIcon className="size-3" /> : <PlusIcon className="size-3" />}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ) : null}
+        );
+      })}
 
       {err ? <span className="text-xs text-destructive">{err}</span> : null}
     </div>

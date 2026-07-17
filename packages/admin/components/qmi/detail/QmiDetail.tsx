@@ -217,9 +217,19 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
         initialValue={view.photoGalleryJson}
         galleryUrls={galleryUrls}
         onGalleryUrlsChange={setGalleryUrls}
-        suggestions={view.floorPlanGallery.map((g) => g.url)}
-        suggestionsLabel={`Photos from ${view.floorPlanName || 'the floor plan'}`}
-        help="Per-home photos in display order. Slots 2 and 3 also appear in the header (right column). Entry 1 is usually the elevation render — prefer picking the site render under MarkSystems → Site elevation render."
+        suggestionGroups={[
+          {
+            label: `Interior — from ${view.floorPlanName || 'the plan'}`,
+            help: "Plan interior photos. Click one to add it to this home's gallery (override).",
+            urls: view.floorPlanInterior.map((g) => g.url),
+          },
+          {
+            label: `Exterior — from ${view.floorPlanName || 'the plan'}`,
+            help: "Plan exterior/listing photos. Click one to add it to this home's gallery (override).",
+            urls: view.floorPlanExterior.map((g) => g.url),
+          },
+        ]}
+        help="This home's photos in display order (overrides the plan). Slots 2 and 3 also appear in the header. Inherit from the plan's Interior / Exterior sets below, or upload home-specific photos. The elevation Render is set under MarkSystems → Site elevation render; the Schematic is the Floor Plan Image field above."
         compact
       />
     </div>
