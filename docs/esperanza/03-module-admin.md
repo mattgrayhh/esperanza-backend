@@ -375,6 +375,29 @@ redirects to the list (stale bookmarks). Generic entities and blogs still use
 the confirm-then-create `/new` card so an accidental click does not litter empty
 rows.
 
+### Draft preview link (QMI → staging)
+
+A **published** QMI shows "Preview live page" (the real public URL). A **draft** now shows
+**"Preview draft (staging)"** — a shareable link that renders the unpublished home on the
+staging Worker without touching production. Flow:
+
+- `live-site.ts` `buildLiveSitePlacement` emits `previewUrl` for QMI:
+  `https://esperanzahomes-staging.workers.dev/new-homes/available/home/?slug=<slug>` (the
+  client-rendered detail shell renders any home by `?slug=`). `RecordEditShell` renders the
+  link for non-live QMIs.
+- The **staging** frontend Worker's `/api/*` proxy (`worker.js`) rewrites `/api/public/qmi`
+  → **`/api/preview/qmi`** and attaches the secret header **only when `env.PREVIEW_SECRET`
+  is bound** (staging only). So the detail island's normal `/api/public/qmi` fetch returns
+  drafts on staging, and nothing changes on prod.
+- The API's `/api/preview/qmi` (packages/api) reads **`v_preview_qmi`** (identical to
+  `v_public_qmi` minus the publish gate) and returns published + drafts, but ONLY when
+  `X-Esperanza-Preview` matches `env.PREVIEW_SECRET` (constant-time; unit-tested in
+  `preview-auth.test.ts`). Unset secret (prod) → 404, so drafts can never leak publicly.
+
+**Provisioning:** `PREVIEW_SECRET` is a `wrangler secret` set on `esperanza-api` and the
+staging frontend Worker only. `v_public_qmi` is untouched — the live gate is unchanged.
+Activation needs a staging deploy (push to the `staging` branch).
+
 ### Community HOA links + floor plans save with the page Save
 
 `HoaLinksEditor` emits `__hoa_links`; `CommunityFloorPlansPicker` emits

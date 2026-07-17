@@ -3,6 +3,13 @@ import type { EntityKey } from './entities';
 
 export const LIVE_SITE_ORIGIN = 'https://www.esperanzahomes.com';
 
+/** Staging Worker (workers.dev only — can never touch prod). Its /api proxy adds the
+ *  preview secret, so the QMI detail island there renders DRAFT homes. Used to offer a
+ *  shareable "Preview draft" link for unpublished QMI homes. */
+export const STAGING_ORIGIN = 'https://esperanzahomes-staging.workers.dev';
+/** The client-rendered QMI detail shell — renders any home by ?slug=, incl. drafts on staging. */
+const QMI_PREVIEW_SHELL = '/new-homes/available/home/';
+
 /** Path prefixes — mirrors packages/api/src/sitesearch.ts DEFAULT_BASE_URLS. */
 export const LIVE_SITE_PATHS = {
   community: '/new-homes',
@@ -26,6 +33,9 @@ export interface LiveSitePlacement {
   /** True only when the public page actually exists (record is published/active). Drafts
       resolve a slug but 404 on the public site — the UI must not offer a broken "preview". */
   isLive: boolean;
+  /** Shareable staging preview URL (QMI only). Renders the home — including DRAFTS — on
+      the staging Worker without touching production. Null for non-QMI or when no slug. */
+  previewUrl: string | null;
   sections: PlacementSection[];
 }
 
@@ -177,12 +187,19 @@ export function buildLiveSitePlacement(
   // 404s. Coming-soon counts as live (the page renders). Fall back to `active` for
   // entities gated on that instead of `published`.
   const isLive = Boolean(path) && Boolean(gate?.published ?? gate?.active ?? false);
+  // QMI-only staging preview (item 5). The staging Worker's /api proxy injects the preview
+  // secret, so its detail island renders drafts. Shareable, no login, never touches prod.
+  const qmiSlug = entity === 'qmi' ? resolveSlug(entity, row) : '';
+  const previewUrl = qmiSlug
+    ? `${STAGING_ORIGIN}${QMI_PREVIEW_SHELL}?slug=${encodeURIComponent(qmiSlug)}`
+    : null;
   return {
     pageLabel: PAGE_LABELS[entity],
     path,
     fullUrl: fullUrl(path),
     visitorStatus: visitorStatusLabel(entity, gate ?? {}),
     isLive,
+    previewUrl,
     sections: SECTIONS[entity] ?? [{ id: 'content', label: 'Page content' }],
   };
 }
