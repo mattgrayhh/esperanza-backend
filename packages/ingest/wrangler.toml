@@ -70,3 +70,10 @@ PDF_PUBLIC_BASE_URL = "https://esperanza-pdf.round-base-ed8c.workers.dev"
 [observability]
 enabled = true
 head_sampling_rate = 1
+
+# Explicit logs config (matches the dashboard schema). invocation_logs keeps the
+# per-request start/end lines; head_sampling_rate=1 = keep 100%.
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true
