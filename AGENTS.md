@@ -30,3 +30,10 @@ in your own checkout.
 
 ## Admin change = knowledge update (same delivery)
 Any change to an admin panel feature/flow MUST include a `docs/esperanza/` update in the same PR.
+
+## Verify site-affecting changes in the BROWSER
+Any change that alters what renders on the public site (API serializers/payloads, `v_public_*`
+views, admin fields the site consumes) MUST be QA'd in a real browser with `pw` before it's
+called done — not just typecheck/tests/curl. The frontend (the O'Neill replacement) is
+mostly-static + partially-live with harvested maps + lazy images, so regressions surface only in
+the rendered page. See esperanza-frontend `AGENTS.md`. (Standing rule, 2026-07-17.)
