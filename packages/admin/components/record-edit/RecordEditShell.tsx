@@ -62,7 +62,12 @@ export function PlacementRail({
               <ExternalLinkIcon className="size-3" />
             </a>
           </div>
-        ) : placement.previewUrl ? (
+        ) : null}
+
+        {/* Staging preview: works for ANY QMI home (published or draft). It renders the
+            home live from the latest D1 edits (publish state + resolved incentive) on the
+            staging site — the public static page only updates on a site rebuild. */}
+        {placement.previewUrl ? (
           <div className="mt-2 space-y-1">
             <a
               href={placement.previewUrl}
@@ -70,14 +75,15 @@ export function PlacementRail({
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs text-foreground hover:bg-muted"
             >
-              Preview draft (staging)
+              Preview on staging
               <ExternalLinkIcon className="size-3" />
             </a>
             <p className="text-[11px] text-muted-foreground">
-              Not published yet — this shows how the page will look, on the staging site (not the public URL). Shareable.
+              Renders this home live from your latest edits (publish state + incentive) on the
+              staging site — the public URL only updates on the next site rebuild. Shareable.
             </p>
           </div>
-        ) : placement.fullUrl ? (
+        ) : !placement.isLive && placement.fullUrl ? (
           <p className="mt-2 text-xs text-muted-foreground">
             Preview available once published — this page isn’t live on the public site yet.
           </p>
