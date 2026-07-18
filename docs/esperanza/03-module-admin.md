@@ -163,6 +163,18 @@ visually — no markdown syntax. Notes:
     like `Kestrel - Traditional - Brick` aren't reconstructed from the render). Panel
     auto-opens when the plan has elevation renders. Top-down **Floor Plan Image** (layout
     sketch) stays in the media rail — separate from this exterior render pick.
+  - **Floor-plan image sections — what goes where (every field now has help text):** the
+    floor-plan editor has several image inputs that operators confused; each now carries a
+    `help` string (`field-config.ts`) so it's unambiguous:
+    - **Main Image** (`image_url`) — the plan's primary EXTERIOR elevation render (top of the
+      plan page + card image).
+    - **Hero Image 2 / 3** (`hero_image_2/3`) — optional extra heroes; NOT shown on the live
+      plan page today → use Elevation Gallery for elevations.
+    - **Floor Plan Image** (`floor_plan_image`) — the top-down layout DRAWING (rooms/dims),
+      not a photo/render.
+    - **Interior Photos** (`interior_photos_json`) — interior rooms. **Photo Gallery**
+      (`photo_gallery`) — exterior/listing photos. **Elevation Gallery** (`elevation_gallery`)
+      — elevation renderings (per-image type dropdown). These three are the distinct galleries.
   - **`qmi.nter_now` (self-tour link):** the Marketing section now has a **Self-Tour Link
     (NterNow)** URL field beside the Show "Self Tour Available" Banner? toggle. The toggle
     only flags the banner; this is the actual booking URL it opens. Plain admin column —
