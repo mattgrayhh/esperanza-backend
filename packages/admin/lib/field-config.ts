@@ -499,11 +499,11 @@ const floor_plans: EntityFieldConfig = {
     { field: 'total_square_footage', label: 'Total SqFt', widget: 'syncedOverride', bucket: 'override', step: '1', halfWidth: true },
     { field: 'hers_score', label: 'HERS Score', widget: 'number', bucket: 'admin', step: '1', halfWidth: true },
     { field: 'master_bed_location', label: 'Master Bed Location', widget: 'text', bucket: 'admin', halfWidth: true },
-    { field: 'image_url', label: 'Main Image', widget: 'image', bucket: 'admin' },
-    { field: 'hero_image_2', label: 'Hero Image 2', widget: 'image', bucket: 'admin' },
-    { field: 'hero_image_3', label: 'Hero Image 3', widget: 'image', bucket: 'admin' },
-    { field: 'floor_plan_image', label: 'Floor Plan Image', widget: 'image', bucket: 'admin' },
-    { field: 'interior_photos_json', label: 'Interior Photos', widget: 'imageGallery', bucket: 'admin', help: 'Ordered gallery of interior room photos for this plan (kitchen, living, baths…). Shown in the floor plan image section.' },
+    { field: 'image_url', label: 'Main Image', widget: 'image', bucket: 'admin', help: 'The plan’s primary image — the exterior elevation RENDER. Shown at the top of the floor plan page and as the plan’s card image. (Not the layout drawing — that’s Floor Plan Image below.)' },
+    { field: 'hero_image_2', label: 'Hero Image 2', widget: 'image', bucket: 'admin', help: 'Optional secondary hero image. Not shown on the live plan page today — put additional elevation renders in the Elevation Gallery below instead.' },
+    { field: 'hero_image_3', label: 'Hero Image 3', widget: 'image', bucket: 'admin', help: 'Optional third hero image. Not shown on the live plan page today — use the Elevation Gallery below for elevations.' },
+    { field: 'floor_plan_image', label: 'Floor Plan Image', widget: 'image', bucket: 'admin', help: 'The top-down layout DRAWING (rooms + dimensions) — NOT a photo or an elevation render. Shown as the plan’s layout schematic.' },
+    { field: 'interior_photos_json', label: 'Interior Photos', widget: 'imageGallery', bucket: 'admin', help: 'Interior room photos for this plan (kitchen, living, baths…). This is the INTERIOR set — exterior/listing photos go in Photo Gallery below.' },
     // Legacy Airtable-synced galleries — exterior/listing + elevation sets. NOT touched by
     // ingest (static data), so they're operator-editable here. Each maps to its own live
     // site field (photo_gallery / elevation_gallery), not the interior_photos set.
