@@ -39,8 +39,12 @@ const nextConfig: NextConfig = {
 
 // Initialise the Cloudflare dev context (bindings) for `next dev`. Awaited at module
 // load; harmless/short-circuits outside dev.
+// remoteBindings stays FALSE so local `next dev` uses the emulated local D1/R2 —
+// with the ADMIN_DEV_EMAIL auth bypass, remote bindings would let a local dev
+// server write PRODUCTION data. To deliberately use prod data, temporarily set
+// this true AND `remote = true` on the wrangler.toml bindings; revert both after.
 void initOpenNextCloudflareForDev({
-  remoteBindings: true,
+  remoteBindings: false,
 });
 
 export default nextConfig;

@@ -28,9 +28,12 @@ binding = "ASSETS"
 binding = "DB"
 database_name = "esperanza"
 database_id = "023ea995-0abc-4165-a1e1-6e2373fc43e9"
-# Local `next dev` reads production D1 so community media matches live data.
-# Remove `remote = true` to use the emulated local D1 instead (stale unless synced).
-remote = true
+# Local `next dev` uses the EMULATED local D1 (stale unless synced via
+# `wrangler d1 export` → `wrangler d1 execute --local`, or migrations + seed-admin).
+# Combined with the ADMIN_DEV_EMAIL auth bypass, a remote binding here would let a
+# local dev server write PRODUCTION data — so prod parity is opt-in: to deliberately
+# work against prod data, TEMPORARILY set `remote = true` here AND
+# `remoteBindings: true` in next.config.ts, and revert both before committing.
 migrations_dir = "../db/migrations"
 
 # Shared R2 bucket — image uploads land here; only stable URLs are persisted to D1.
@@ -136,6 +139,14 @@ MAILLAYER_API_URL = "https://mailer.hazardhouse.ai/api/transactional/send"
 #                   error. Set with:
 #                     wrangler secret put RHODES_ADMIN_KEY --config packages/admin/wrangler.toml
 #                   (locally, put RHODES_ADMIN_KEY=... in packages/admin/.dev.vars).
+#
+#   PURGE_KEY — sent as `X-Purge-Key` on the /api/public/<entity>?purge=1 calls
+#                   (lib/actions.ts purgePublicCache). Must EQUAL the esperanza-api
+#                   worker's PURGE_KEY secret — the api IGNORES unauthenticated purges,
+#                   so without it edits only show after the edge TTL. Already set on the
+#                   deployed esperanza-admin worker. Set with:
+#                     wrangler secret put PURGE_KEY --config packages/admin/wrangler.toml
+#                   (locally, put PURGE_KEY=... in packages/admin/.dev.vars).
 #
 #   MAILLAYER_API_KEY — the ENABLED Esperanza MailLayer template's `txn_…` key. Used by
 #                   lib/maillayer.ts to email a generated password to a user on create /
