@@ -66,6 +66,13 @@ export interface Env {
    *  Worker. UNSET on any public/prod path -> the preview route 404s, so drafts can
    *  never leak. See docs/esperanza/03-module-admin.md (draft preview). */
   PREVIEW_SECRET?: string;
+  /** Shared secret gating `?purge=1` cache-busting. Set (via `wrangler secret put
+   *  PURGE_KEY`) on this Worker plus the admin + ingest Workers that issue purges.
+   *  A purge request must carry a matching `X-Purge-Key` header; otherwise the purge
+   *  param is IGNORED (served as a normal cached GET), so public callers cannot
+   *  cache-bust their way into a D1 rebuild on every request. UNSET -> all purges
+   *  ignored. */
+  PURGE_KEY?: string;
 }
 
 // -----------------------------------------------------------------------------
@@ -1050,6 +1057,24 @@ export function previewAuthorized(secret: string | undefined, provided: string |
   return Boolean(secret) && Boolean(provided) && safeEqual(provided as string, secret as string);
 }
 
+// -----------------------------------------------------------------------------
+// Miss coalescing — one D1 build per cache key per isolate. `caches.default` is
+// per-colo, so on TTL expiry every concurrent request in a colo would otherwise
+// run its own full buildPayload (thundering herd straight into D1). The map is
+// module-level: all requests sharing this isolate await the same build promise.
+// ponytail: per-isolate only (a colo runs a handful of isolates) — good enough;
+// upgrade path is a Durable Object lock if D1 miss load ever matters again.
+const inflight = new Map<string, Promise<string>>();
+
+/** Long-lived last-good copy, used to serve stale instead of a 502 when a rebuild
+ *  fails (D1 blip). Distinct cache key so its 24h TTL can't leak into the normal
+ *  short-TTL entry. */
+function backupKeyFor(cacheKeyUrl: URL): Request {
+  const u = new URL(cacheKeyUrl);
+  u.searchParams.set('__backup', '1');
+  return new Request(u.toString(), { method: 'GET' });
+}
+
 // Worker entry — routes /api/public/<entity>, Cache API wrap, D1 read session.
 // =============================================================================
 const apiHandler = {
@@ -1104,7 +1129,14 @@ const apiHandler = {
     cacheKeyUrl.searchParams.delete('purge');
     const cacheKey = new Request(cacheKeyUrl.toString(), { method: 'GET' });
 
-    if (wantsPurge) {
+    // Purge is authenticated: only the admin/ingest Workers (which send X-Purge-Key
+    // matching our PURGE_KEY secret) may cache-bust. An unauthenticated ?purge=1 is
+    // IGNORED — the caller gets the normal cached response — so bots can't turn every
+    // request into a D1 rebuild. Same constant-time gate as the preview route.
+    const purgeAuthorized =
+      wantsPurge && previewAuthorized(env.PURGE_KEY, request.headers.get('X-Purge-Key'));
+
+    if (purgeAuthorized) {
       // Admin cache-busting hook: DELETE the cached body so the next read repopulates.
       // (The admin Worker calls this service-to-service after a write; see runbook.)
       ctx.waitUntil(cache.delete(cacheKey));
@@ -1121,12 +1153,23 @@ const apiHandler = {
       }
     }
 
+    const inflightKey = cacheKeyUrl.toString();
     try {
-      // Public read path: any replica is fine (eventually consistent). The admin
-      // path MUST NOT use this — it uses first-primary / a stored bookmark.
-      const session = env.DB.withSession('first-unconstrained');
-      const payload = await buildPayload(entity, session);
-      const body = JSON.stringify(payload);
+      // Coalesce concurrent misses: the first request per isolate runs the build;
+      // the rest await the same promise instead of piling onto D1.
+      let build = inflight.get(inflightKey);
+      if (!build) {
+        build = (async () => {
+          // Public read path: any replica is fine (eventually consistent). The admin
+          // path MUST NOT use this — it uses first-primary / a stored bookmark.
+          const session = env.DB.withSession('first-unconstrained');
+          const payload = await buildPayload(entity, session);
+          return JSON.stringify(payload);
+        })();
+        inflight.set(inflightKey, build);
+        build.finally(() => inflight.delete(inflightKey)).catch(() => {});
+      }
+      const body = await build;
 
       // Store in cache WITH the edge Cache-Control (this header lives on the cached
       // copy only). max-age == s-maxage == ttl, matching the legacy workers.
@@ -1135,6 +1178,11 @@ const apiHandler = {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': cacheControl },
       });
       ctx.waitUntil(cache.put(cacheKey, toCache.clone()));
+      // Also refresh the 24h last-good backup used to serve stale on build failure.
+      const toBackup = new Response(body, {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=86400, s-maxage=86400' },
+      });
+      ctx.waitUntil(cache.put(backupKeyFor(cacheKeyUrl), toBackup));
 
       // Client response: NO Cache-Control, X-Cache: MISS, CORS reflected.
       const out = new Response(body, { status: 200 });
@@ -1146,6 +1194,22 @@ const apiHandler = {
       // The handler swallows upstream/D1 failures into a 502, so Sentry's automatic
       // uncaught-error capture never sees them — report explicitly. No-op if disabled.
       Sentry.captureException(err);
+
+      // Serve the last-good copy (≤24h old) rather than failing the page: a stale
+      // listing beats a 502 + browser retry storm while D1 is already struggling.
+      try {
+        const stale = await cache.match(backupKeyFor(cacheKeyUrl));
+        if (stale) {
+          const out = new Response(stale.body, stale);
+          out.headers.delete('Cache-Control');
+          for (const [k, v] of cors) out.headers.set(k, v);
+          out.headers.set('X-Cache', 'STALE');
+          return out;
+        }
+      } catch {
+        // fall through to 502
+      }
+
       const detail = err instanceof Error ? err.message : String(err);
       const out = new Response(JSON.stringify({ error: 'upstream_failure', detail }), {
         status: 502,
