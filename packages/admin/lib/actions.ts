@@ -98,15 +98,24 @@ const PUBLIC_CACHE_DEPS: Record<string, string[]> = {
   images: ['images'],
   blogs: ['blogs'],
   testimonials: ['testimonials'],
+  settings: ['settings'],
 };
 
-/** Best-effort: a purge failure must never fail the save (the TTL is the backstop). */
-async function purgePublicCache(apiBaseUrl: string | undefined, collection: string): Promise<void> {
-  const base = (apiBaseUrl ?? '').replace(/\/+$/, '');
+/** Best-effort: a purge failure must never fail the save (the TTL is the backstop).
+ * The api worker requires `X-Purge-Key: <PURGE_KEY secret>` and IGNORES
+ * unauthenticated ?purge=1, so the header must be present for the purge to land. */
+async function purgePublicCache(
+  env: { API_PUBLIC_URL?: string; PURGE_KEY?: string },
+  collection: string
+): Promise<void> {
+  const base = (env.API_PUBLIC_URL ?? '').replace(/\/+$/, '');
   const entities = PUBLIC_CACHE_DEPS[collection];
   if (!base || !entities) return;
+  const headers = env.PURGE_KEY ? { 'X-Purge-Key': env.PURGE_KEY } : undefined;
   await Promise.all(
-    entities.map((e) => fetch(`${base}/api/public/${e}?purge=1`, { method: 'GET' }).catch(() => {}))
+    entities.map((e) =>
+      fetch(`${base}/api/public/${e}?purge=1`, { method: 'GET', headers }).catch(() => {})
+    )
   );
 }
 
@@ -150,7 +159,7 @@ async function postWrite(
   // so the edit shows before the TTL instead of after it. Best-effort.
   try {
     await purgePublicCache(
-      (env as unknown as { API_PUBLIC_URL?: string }).API_PUBLIC_URL,
+      env as unknown as { API_PUBLIC_URL?: string; PURGE_KEY?: string },
       collection
     );
   } catch {
@@ -1994,9 +2003,8 @@ export async function saveSiteSettings(
   // next page load instead of after the 5-minute TTL. Best-effort: a purge failure
   // must not fail the save (the TTL is the backstop).
   try {
-    const env = getCloudflareContext().env as unknown as { API_PUBLIC_URL?: string };
-    const base = (env.API_PUBLIC_URL ?? '').replace(/\/+$/, '');
-    if (base) await fetch(`${base}/api/public/settings?purge=1`, { method: 'GET' });
+    const env = getCloudflareContext().env as unknown as { API_PUBLIC_URL?: string; PURGE_KEY?: string };
+    await purgePublicCache(env, 'settings');
   } catch {
     /* TTL backstop */
   }

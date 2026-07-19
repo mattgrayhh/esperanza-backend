@@ -20,6 +20,13 @@ ADMIN_DEV_EMAIL=you@esperanzahomes.com
 IMAGES_PUBLIC_BASE_URL=https://img.hazardhouse.ai
 
 # --- D1 during `next dev` ---
-# packages/admin/wrangler.toml sets `remote = true` on the DB binding so localhost
-# reads production D1 (matches rhodes / live media). Comment that line out to use
-# the emulated local D1 instead — it is often stale and missing migrations.
+# Localhost uses the EMULATED local D1 (apply migrations --local + seed-admin; sync
+# data via `wrangler d1 export` → `wrangler d1 execute --local` if you need parity).
+# To deliberately work against PRODUCTION data, temporarily set `remote = true` on
+# the DB binding in wrangler.toml AND `remoteBindings: true` in next.config.ts —
+# and revert both before committing (local writes would hit prod).
+
+# --- Public API cache purge (optional locally) ---
+# Admin writes purge the esperanza-api edge cache with an X-Purge-Key header.
+# Set it to the api worker's PURGE_KEY secret if you need purges to work locally.
+# PURGE_KEY=<matches the esperanza-api worker's PURGE_KEY secret>
