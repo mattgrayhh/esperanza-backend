@@ -6,7 +6,10 @@ export interface PdfRenderRow {
 }
 
 export function decideFreshness(row: PdfRenderRow | null, activeVersion: number): 'fresh' | 'stale-present' | 'absent' {
-  if (!row || !row.r2_key || row.status === 'not_built' || row.status === 'error') return 'absent';
+  // 'error' with an r2_key is deliberately stale-present, NOT absent: a doc that failed a
+  // re-render still has its last-good object — serve that + enqueue rather than trapping
+  // visitors on the "Building…" poll page forever.
+  if (!row || !row.r2_key || row.status === 'not_built') return 'absent';
   if (row.status === 'live' && row.theme_version === activeVersion) return 'fresh';
   return 'stale-present';
 }

@@ -13,4 +13,10 @@ describe('decideFreshness', () => {
     expect(decideFreshness({ status: 'stale', r2_key: 'k', theme_version: 5 } as any, 5)).toBe('stale-present');
     expect(decideFreshness({ status: 'live', r2_key: 'k', theme_version: 4 } as any, 5)).toBe('stale-present');
   });
+  it('error with a last-good object is stale-present (serve stale + re-enqueue, not the poll page)', () => {
+    expect(decideFreshness({ status: 'error', r2_key: 'pdf/qmi/q.pdf', theme_version: 5 } as any, 5)).toBe('stale-present');
+  });
+  it('error with no object is absent', () => {
+    expect(decideFreshness({ status: 'error', r2_key: null, theme_version: null } as any, 5)).toBe('absent');
+  });
 });

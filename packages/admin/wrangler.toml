@@ -39,7 +39,7 @@ binding = "IMAGES"
 bucket_name = "esperanza-cms"
 
 # Producer: enqueue affected PDF renders on every admin write + all renders on theme publish.
-# The esperanza-pdf worker consumes this queue at max_concurrency=2.
+# The esperanza-pdf worker consumes this queue at max_concurrency=1.
 [[queues.producers]]
 binding = "RENDER_Q"
 queue = "esperanza-pdf-render"
