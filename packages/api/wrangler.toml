@@ -14,12 +14,16 @@
 # The ADMIN Worker MUST instead use `withSession("first-primary")` (or replay a stored
 # x-d1-bookmark) so editors get read-your-writes immediately after a commit.
 #
-# === Cache purge hook ===
+# === Cache purge hook (AUTHENTICATED) ===
 # Each entity body is stored in caches.default keyed by its URL with an edge
 # Cache-Control (qmi 60s, others 300s) that is NOT emitted to clients. The admin
-# Worker busts an entity after a write by issuing GET /api/public/<entity>?purge=1
-# (service binding or public fetch), which cache.delete()s the entry; the next read
-# repopulates from D1.
+# and ingest Workers bust an entity after a write by issuing
+# GET /api/public/<entity>?purge=1 with header `X-Purge-Key: <PURGE_KEY secret>`;
+# an unauthenticated ?purge=1 is IGNORED (served as a normal cached GET) so public
+# callers can't cache-bust every request into a D1 rebuild. cache.delete() is
+# per-colo; the TTL is the global staleness bound.
+# A 24h "last-good" backup copy is also kept per entity and served (X-Cache: STALE)
+# if a rebuild throws, instead of a 502.
 name = "esperanza-api"
 main = "src/index.ts"
 compatibility_date = "2025-05-20"
@@ -44,6 +48,12 @@ binding = "IMAGES"
 bucket_name = "esperanza-cms"
 
 # No secrets required for the read path.
+#
+# === PURGE_KEY (authenticated cache purge) ===
+# Shared secret for the ?purge=1 hook (see header comment). ALREADY SET on the deployed
+# esperanza-api, esperanza-admin, and esperanza-ingest Workers (2026-07-19):
+#   wrangler secret put PURGE_KEY --name esperanza-api
+# Unset -> every purge request is ignored (fail-safe: cache still expires via TTL).
 #
 # === Sentry (backend error monitoring) ===
 # Optional. Set once against the deployed Worker to enable Sentry:
