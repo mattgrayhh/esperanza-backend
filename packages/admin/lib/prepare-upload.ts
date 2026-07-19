@@ -127,7 +127,7 @@ export async function prepareForUpload(file: File): Promise<PreparedUpload> {
   if (!ENCODABLE.test(type)) {
     return {
       ok: false,
-      error: `This file is ${humanSize(file.size)} — the upload limit is ${humanSize(
+      error: `"${file.name}" is ${humanSize(file.size)} — the upload limit is ${humanSize(
         MAX_UPLOAD_BYTES
       )}. Please compress it and try again.`,
     };

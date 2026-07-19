@@ -22,6 +22,7 @@
 
 import { useRef, useState, useTransition } from 'react';
 import { saveCityBlocks, uploadBlockImage } from '../../lib/actions';
+import { prepareForUpload } from '../../lib/prepare-upload';
 import {
   CITY_COPY_BLOCK_KEYS,
   CITY_VENUE_BLOCK_KEYS,
@@ -172,7 +173,12 @@ function BlockRow({
     if (!file) return;
     setErr(null);
     startTransition(async () => {
-      const res = await uploadBlockImage('cities', id, blockKey, file);
+      const prepared = await prepareForUpload(file);
+      if (!prepared.ok) {
+        setErr(prepared.error);
+        return;
+      }
+      const res = await uploadBlockImage('cities', id, blockKey, prepared.file);
       if (res.ok) onChange(res.url);
       else setErr(res.error);
     });
