@@ -27,6 +27,7 @@
 
 import { deriveAvailabilityText, isAutoAvailabilityText } from './availability.js';
 import { ensurePdfRender } from '@esperanza/db/pdf-ensure';
+import { affectedRenderKeys } from '@esperanza/db/pdf-invalidate';
 import {
   applySynced,
   assertQmiPatchAllowed,
@@ -65,6 +66,14 @@ export interface ConsumerEnv {
    * seed-renders). Optional so unit tests can omit it.
    */
   PDF_PUBLIC_BASE_URL?: string;
+  /**
+   * Public base of the esperanza-api worker. When set, the consumer purges the
+   * api's edge cache for each entity type a batch touched (GET ?purge=1 with
+   * X-Purge-Key) so synced changes show before the TTL. Optional for tests.
+   */
+  API_PUBLIC_URL?: string;
+  /** Secret the api requires on authenticated purges (X-Purge-Key header). */
+  PURGE_KEY?: string;
 }
 
 /** kebab slug from an address (worker.js:503-505): lower, [^a-z0-9]+→'-', strip trailing '-'. */
@@ -87,6 +96,43 @@ export interface ApplyResult {
   communities: number;
   floorPlans: number;
   priceUpdated: number;
+}
+
+/**
+ * Mark the PDF brochures affected by a synced update stale, so the pdf worker
+ * re-renders them on next read (serve.ts stale-present path) — the same
+ * affectedRenderKeys fan-out + UPDATE-stale pattern the admin uses
+ * (packages/admin/lib/actions.ts postWrite). No queue producer here by design:
+ * stale rows re-render lazily. Best-effort — a PDF hiccup never fails the
+ * synced D1 write.
+ */
+async function markPdfStale(
+  env: ConsumerEnv,
+  entity: 'qmi' | 'communities' | 'floor_plans',
+  id: string
+): Promise<void> {
+  try {
+    const q = async (sql: string, binds: unknown[]) =>
+      (await env.DB.prepare(sql).bind(...binds).all()).results as any[];
+    const keys = await affectedRenderKeys(q, entity, id);
+    for (const k of keys) {
+      if (k.type === 'list') {
+        await env.DB.prepare(
+          `UPDATE pdf_renders SET status='stale' WHERE type='list' AND city_slug=? AND status<>'rendering'`
+        )
+          .bind(k.citySlug)
+          .run();
+      } else {
+        await env.DB.prepare(
+          `UPDATE pdf_renders SET status='stale' WHERE type=? AND entity_id=? AND status<>'rendering'`
+        )
+          .bind(k.type, k.entityId)
+          .run();
+      }
+    }
+  } catch (e) {
+    console.error('[ingest:pdf-stale]', entity, id, e);
+  }
 }
 
 const emptyResult = (): ApplyResult => ({
@@ -261,6 +307,22 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
     .bind(...vals)
     .run();
   result.updated = 1;
+  // Synced changes (price/spec/stage) make the home's Dynamic PDF stale — the
+  // insert path self-registers (PR#99) but updates used to leave the old PDF
+  // forever. Ensure the render row exists, then mark the fan-out stale.
+  if (env.PDF_PUBLIC_BASE_URL) {
+    try {
+      const q = async (sql: string, binds: unknown[]) =>
+        (await env.DB.prepare(sql).bind(...binds).all()).results as any[];
+      const r = async (sql: string, binds: unknown[]) => {
+        await env.DB.prepare(sql).bind(...binds).run();
+      };
+      await ensurePdfRender(q, r, 'qmi', msg.qmiId, env.PDF_PUBLIC_BASE_URL);
+    } catch (e) {
+      console.error('[ingest:ensurePdfRender]', msg.qmiId, e);
+    }
+  }
+  await markPdfStale(env, 'qmi', msg.qmiId);
   return result;
 }
 
@@ -292,6 +354,8 @@ async function applyCommunityUpsert(env: ConsumerEnv, msg: CommunityUpsertMessag
     .bind(...vals)
     .run();
   result.communities = 1;
+  // Rows are already registered (admin/seed) — stale-mark only, no ensure.
+  await markPdfStale(env, 'communities', msg.communityId);
   return result;
 }
 
@@ -310,6 +374,8 @@ async function applyFloorPlanUpsert(env: ConsumerEnv, msg: FloorPlanUpsertMessag
     .bind(...vals)
     .run();
   result.floorPlans = 1;
+  // Rows are already registered (admin/seed) — stale-mark only, no ensure.
+  await markPdfStale(env, 'floor_plans', msg.floorPlanId);
   return result;
 }
 
@@ -402,6 +468,35 @@ export interface MessageBatchLike<Body> {
   messages: QueueMessageLike<Body>[];
 }
 
+// Public api (esperanza-api) edge-cache purge. The api caches each
+// /api/public/<entity> for its TTL; without a purge a synced change only shows
+// after the TTL expires. Message kind → the api entities it invalidates —
+// mirrors the admin's PUBLIC_CACHE_DEPS (packages/admin/lib/actions.ts): a
+// community change flattens onto city + qmi payloads, a floor-plan change onto
+// qmi. `promotions` is purged whenever anything was touched, since promos embed
+// community/plan/qmi data (resolveEffectivePromo). Note api path `floorplans`.
+const PURGE_DEPS: Record<SyncMessage['kind'], string[]> = {
+  'qmi.upsert': ['qmi'],
+  'qmi.unpublish': ['qmi'],
+  'community.upsert': ['communities', 'cities', 'qmi'],
+  'floorplan.upsert': ['floorplans', 'qmi'],
+};
+
+/** Best-effort: a purge failure must never fail the batch (the TTL is the backstop). */
+async function purgePublicCache(env: ConsumerEnv, kinds: Set<SyncMessage['kind']>): Promise<void> {
+  const base = (env.API_PUBLIC_URL ?? '').replace(/\/+$/, '');
+  if (!base || kinds.size === 0) return;
+  const entities = new Set<string>(['promotions']);
+  for (const k of kinds) for (const e of PURGE_DEPS[k]) entities.add(e);
+  await Promise.all(
+    [...entities].map((e) =>
+      fetch(`${base}/api/public/${e}?purge=1`, {
+        headers: env.PURGE_KEY ? { 'X-Purge-Key': env.PURGE_KEY } : undefined,
+      }).catch((err) => console.error('[ingest:purge]', e, err))
+    )
+  );
+}
+
 /**
  * Drain a batch. Per-message ack/retry so one poison message doesn't fail the
  * batch (it retries independently up to max_retries, then → DLQ). Aggregates a
@@ -414,6 +509,7 @@ export async function handleQueueBatch(
   const startedAt = nowIso();
   const start = Date.now();
   const agg = { created: 0, updated: 0, unpublished: 0, communities: 0, floorPlans: 0, priceUpdated: 0 };
+  const touchedKinds = new Set<SyncMessage['kind']>();
   let errors = 0;
   let lastError: string | null = null;
 
@@ -426,6 +522,7 @@ export async function handleQueueBatch(
       agg.communities += r.communities;
       agg.floorPlans += r.floorPlans;
       agg.priceUpdated += r.priceUpdated;
+      touchedKinds.add(m.body.kind);
       m.ack();
     } catch (err) {
       errors++;
@@ -433,6 +530,10 @@ export async function handleQueueBatch(
       m.retry(); // independent retry → DLQ after max_retries
     }
   }
+
+  // Purge the public api edge cache for the entity types this batch changed so
+  // synced edits show before the TTL. One fetch per distinct entity, best-effort.
+  await purgePublicCache(env, touchedKinds);
 
   await writeSyncLog(env, {
     runId: crypto.randomUUID(),
@@ -450,4 +551,34 @@ export async function handleQueueBatch(
     notes: `consumer batch of ${batch.messages.length} message(s)`,
     errorMessage: lastError,
   });
+}
+
+/**
+ * Drain the DEAD-LETTER queue: one sync_log row per message (status 'dlq') so
+ * poison messages are visible on the sync dashboard instead of vanishing, then
+ * ack. No re-enqueue — triage the underlying data and re-run the ingest.
+ */
+export async function handleDlqBatch(
+  batch: MessageBatchLike<SyncMessage>,
+  env: ConsumerEnv
+): Promise<void> {
+  for (const m of batch.messages) {
+    const body = m.body as Partial<SyncMessage> | undefined;
+    try {
+      const at = nowIso();
+      await writeSyncLog(env, {
+        runId: crypto.randomUUID(),
+        source: 'snowflake',
+        status: 'dlq',
+        startedAt: at,
+        finishedAt: at,
+        durationS: 0,
+        notes: `dead-lettered ${body?.kind ?? 'unknown'} message (exhausted max_retries)`,
+        errorMessage: JSON.stringify(body ?? null).slice(0, 2000),
+      });
+      m.ack();
+    } catch {
+      m.retry(); // sync_log write failed — retry so the dead letter isn't lost silently
+    }
+  }
 }

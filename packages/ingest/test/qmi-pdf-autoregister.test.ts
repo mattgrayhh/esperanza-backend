@@ -8,7 +8,8 @@
 // tests pin the wired behavior:
 //   * INSERT (PDF_PUBLIC_BASE_URL set): a not_built pdf_renders row + dynamic_pdf.
 //   * INSERT (base unset): no-op — nothing to point a URL at (tests/old config).
-//   * UPDATE: ingest does not register a render (only create self-registers).
+//   * UPDATE: the render row is ensured + marked STALE (synced price/spec changes
+//     used to leave the old PDF forever); the pdf worker re-renders on next read.
 // Uses the REAL schema + views via better-sqlite3 (same harness as siblings).
 // =============================================================================
 
@@ -66,10 +67,20 @@ describe('consumer QMI Dynamic PDF auto-register', () => {
     expect(render(db, qmi.id)).toBeUndefined();
   });
 
-  it('UPDATE: ingest does not register a render (only create self-registers)', async () => {
+  it('UPDATE: ensures the render row exists and marks it stale', async () => {
     const env: ConsumerEnv = { DB: d1(db), PDF_PUBLIC_BASE_URL: BASE };
     db.prepare(`INSERT INTO qmi (id, eci_key, slug) VALUES ('recU', 'P3', '5-oak-ln')`).run();
     await applyMessage(env, upsertMsg({ qmiId: 'recU', isNew: false, values: { eciKey: 'P3', address: '5 Oak Ln' } }));
-    expect(render(db, 'recU')).toBeUndefined();
+    expect(render(db, 'recU')?.status).toBe('stale');
+  });
+
+  it('UPDATE: an already-built render is marked stale (even without a PDF base)', async () => {
+    const env: ConsumerEnv = { DB: d1(db) };
+    db.prepare(`INSERT INTO qmi (id, eci_key, slug) VALUES ('recB', 'P4', '7-pine-ct')`).run();
+    db.prepare(
+      `INSERT INTO pdf_renders (type, slug, entity_id, r2_key, status) VALUES ('qmi', '7-pine-ct', 'recB', 'pdf/qmi/recB.pdf', 'built')`
+    ).run();
+    await applyMessage(env, upsertMsg({ qmiId: 'recB', isNew: false, values: { eciKey: 'P4', address: '7 Pine Ct' } }));
+    expect(render(db, 'recB')?.status).toBe('stale');
   });
 });

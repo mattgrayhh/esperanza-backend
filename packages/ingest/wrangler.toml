@@ -44,10 +44,13 @@ dead_letter_queue = "esperanza-sync-queue-dlq"
 #     wrangler queues create esperanza-sync-queue-dlq
 # Messages land in the DLQ only after 3 failed delivery attempts (a poison
 # message — e.g. an unresolved community/city link, or a write-set violation
-# thrown by assertQmiPatchAllowed). The DLQ has NO consumer by design: it's an
-# inspection bucket. Drain it manually (or attach a temporary consumer) to
-# triage, then re-enqueue once the underlying data is fixed. Each DLQ arrival
-# should be surfaced on the Phase 7 dashboard alongside sync_log.unresolved_links.
+# thrown by assertQmiPatchAllowed). The DLQ consumer below records each dead
+# message as a sync_log row (status 'dlq', body in error_message) and acks —
+# visibility only, NO re-enqueue. Triage the underlying data, then re-run the
+# ingest (POST /run) to regenerate the message.
+[[queues.consumers]]
+queue = "esperanza-sync-queue-dlq"
+max_batch_size = 10
 
 # Snowflake config (non-secret) — ported from esperanza-data-sync wrangler.toml.
 [vars]
@@ -59,9 +62,15 @@ SNOWFLAKE_SCHEMA = "ANALYTICS_ZONE"
 # Public base of the esperanza-pdf worker. A synced QMI create self-registers a
 # pdf_renders row + backfills qmi.dynamic_pdf against this base (consumer.ts).
 PDF_PUBLIC_BASE_URL = "https://esperanza-pdf.round-base-ed8c.workers.dev"
+# Public base of the esperanza-api worker. After each consumer batch the ingest
+# purges the api's /api/public/<entity> edge cache for the entity types the
+# batch touched, so synced changes show before the TTL (consumer.ts).
+API_PUBLIC_URL = "https://esperanza-api.round-base-ed8c.workers.dev"
 
 # Secrets (set via `wrangler secret put`):
 #   SNOWFLAKE_PASSWORD   — Snowflake REST login password
+#   PURGE_KEY            — X-Purge-Key the api requires on authenticated cache
+#                          purges (already set on the deployed worker)
 
 # Workers Logs + Traces — full observability, source of truth for deploys.
 # Mirrors the dashboard's granular schema (logs{} + traces{}) so a `wrangler deploy`

@@ -65,7 +65,15 @@ export function d1(db: Database.Database): D1Like {
       };
     },
     async batch(statements: unknown[]) {
-      return statements; // unused by the consumer; present for type-completeness
+      // Execute the bound statements inside ONE better-sqlite3 transaction —
+      // mirrors D1's batch (a single implicit transaction). The bound run() is
+      // declared async but executes synchronously (no awaits), so it's safe
+      // inside db.transaction.
+      const results: unknown[] = [];
+      db.transaction(() => {
+        for (const s of statements as { run(): Promise<unknown> }[]) results.push(s.run());
+      })();
+      return results;
     },
   };
 }

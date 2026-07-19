@@ -72,26 +72,29 @@ export function buildElevationPriceRows(
 }
 
 /**
- * Replace the whole table: DELETE-all, then INSERT in chunked D1 batches (the
- * derived set can be several hundred rows; one giant batch risks D1's per-call
- * limits). Each batch is its own transaction — if a later chunk fails the table
- * is partial, but the close-out price safely falls back to the auto-MIN (never
- * blank) and the next run rebuilds it.
+ * Replace the whole table in ONE db.batch (a D1 batch is a single transaction),
+ * so the DELETE + every INSERT commit or roll back together — a mid-write crash
+ * can never leave the table partial or empty. The derived set is ~330 rows,
+ * well under D1's per-batch limits.
+ *
+ * Empty guard (mirrors the diff's mass-unpublish guard): zero resolved rows
+ * means Snowflake returned nothing usable — keep the last good table rather
+ * than wiping every close-out price.
  */
 export async function writeElevationPrices(db: D1Like, rows: ElevationPriceRow[]): Promise<void> {
-  await db.batch([db.prepare('DELETE FROM community_elevation_prices').bind()]);
+  if (rows.length === 0) {
+    console.warn('elevation prices: 0 resolved rows — skipping rebuild, keeping existing table');
+    return;
+  }
   const insert = db.prepare(
     `INSERT INTO community_elevation_prices
        (id, community_id, floor_plan_id, elevation_type, material_type, elevation_label, sales_price)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   );
-  const CHUNK = 50;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const stmts = rows
-      .slice(i, i + CHUNK)
-      .map((r) =>
-        insert.bind(r.id, r.communityId, r.floorPlanId, r.elevationType, r.materialType, r.elevationLabel, r.salesPrice)
-      );
-    await db.batch(stmts);
-  }
+  await db.batch([
+    db.prepare('DELETE FROM community_elevation_prices').bind(),
+    ...rows.map((r) =>
+      insert.bind(r.id, r.communityId, r.floorPlanId, r.elevationType, r.materialType, r.elevationLabel, r.salesPrice)
+    ),
+  ]);
 }
