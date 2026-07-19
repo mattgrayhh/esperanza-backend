@@ -155,10 +155,42 @@ async function enqueue(env: Env, messages: SyncMessage[]): Promise<void> {
   }
 }
 
+// ── Retention: operational logs grow unbounded otherwise (audit trails, one
+//    sync_log row per queue batch, one ops_audit row per MCP/REST call). Runs on
+//    every cron tick — each is a single indexed DELETE, trivial when there's
+//    nothing to prune. Editorial history (audit_log) keeps 90 days; machine logs
+//    keep 30.
+const RETENTION: Array<{ table: string; column: string; days: number }> = [
+  { table: 'audit_log', column: 'at', days: 90 },
+  { table: 'sync_log', column: 'at', days: 30 },
+  { table: 'ops_audit', column: 'at', days: 30 },
+];
+
+export async function pruneOldRows(db: D1Like): Promise<void> {
+  for (const { table, column, days } of RETENTION) {
+    try {
+      // Bound in the same ISO format the tables default to (see 0000_init.sql /
+      // 0019_ops_tokens.sql); string compare stays on the at-index. ops_audit uses
+      // datetime('now') (space, not T) — only boundary-DAY rows compare differently,
+      // which is irrelevant for retention.
+      await db
+        .prepare(`DELETE FROM ${table} WHERE ${column} < strftime('%Y-%m-%dT%H:%M:%fZ','now', ?)`)
+        .bind(`-${days} days`)
+        .run();
+    } catch (err) {
+      // Best-effort: a missing table (e.g. ops_audit before its migration) or a
+      // transient D1 error must never fail the sync run.
+      console.error(`prune ${table} failed:`, err instanceof Error ? err.message : err);
+    }
+  }
+}
+
 export default {
-  // ── PRODUCER: cron diffs Snowflake vs D1 and enqueues per-record changes ──
+  // ── PRODUCER: cron diffs Snowflake vs D1 and enqueues per-record changes.
+  //    Piggybacks the retention prune (cheap, best-effort). ──
   async scheduled(_event: unknown, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
     ctx.waitUntil(runIngest(env));
+    ctx.waitUntil(pruneOldRows(env.DB));
   },
 
   // ── CONSUMER: drain the queue, write only allow-listed synced columns.
