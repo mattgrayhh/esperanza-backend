@@ -136,8 +136,10 @@ The allowlists (abridged):
 | `IMAGES` | R2 `esperanza-cms` | R2 image bucket binding |
 | `SYNC_QUEUE` (producer) | `esperanza-sync-queue` | cron → per-record sync messages |
 | consumer | `esperanza-sync-queue` (DLQ: `esperanza-sync-queue-dlq`) | apply to D1 (batch 10, 3 retries) |
+| consumer | `esperanza-sync-queue-dlq` | record dead messages to `sync_log` (status `dlq`), ack — no re-enqueue |
 
-Secret: `SNOWFLAKE_PASSWORD` · Manual-trigger secret: `INGEST_TRIGGER_TOKEN`.
+Secrets: `SNOWFLAKE_PASSWORD` · manual-trigger `INGEST_TRIGGER_TOKEN` · `PURGE_KEY`
+(X-Purge-Key for the api cache purge fired after each consumer batch).
 
 ---
 
@@ -172,7 +174,11 @@ npx wrangler d1 execute esperanza --remote --command \
   "SELECT started_at, status, notes, error_message FROM sync_log WHERE source='ingest' ORDER BY started_at DESC LIMIT 5;"
 ```
 
-If messages keep failing they land in `esperanza-sync-queue-dlq` after 3 retries.
+If messages keep failing they land in `esperanza-sync-queue-dlq` after 3 retries; the DLQ
+consumer records each one as a `sync_log` row (status `dlq`, message body in
+`error_message`) — fix the underlying data, then re-run the ingest (`POST /run`).
+Concurrent runs are prevented by a `sync_lock` D1 row (15-min TTL); a second trigger
+logs "skipped: already running" and exits.
 
 ---
 **Next:** [03 — Module: Admin Panel](./03-module-admin.md)

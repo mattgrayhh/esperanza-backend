@@ -43,7 +43,7 @@ import {
   type Lookups,
   type SyncMessage,
 } from './diff.js';
-import { handleQueueBatch, writeSyncLog, type ConsumerEnv, type D1Like } from './consumer.js';
+import { handleQueueBatch, handleDlqBatch, writeSyncLog, type ConsumerEnv, type D1Like } from './consumer.js';
 
 export interface Env extends SnowflakeEnv, ConsumerEnv {
   DB: D1Like;
@@ -161,8 +161,17 @@ export default {
     ctx.waitUntil(runIngest(env));
   },
 
-  // ── CONSUMER: drain the queue, write only allow-listed synced columns ──
-  async queue(batch: { messages: { body: SyncMessage; ack(): void; retry(): void }[] }, env: Env): Promise<void> {
+  // ── CONSUMER: drain the queue, write only allow-listed synced columns.
+  //    The DLQ batch (messages that exhausted max_retries) is recorded to
+  //    sync_log (status 'dlq') and acked — visibility only, no re-enqueue. ──
+  async queue(
+    batch: { queue: string; messages: { body: SyncMessage; ack(): void; retry(): void }[] },
+    env: Env
+  ): Promise<void> {
+    if (batch.queue === 'esperanza-sync-queue-dlq') {
+      await handleDlqBatch(batch, env);
+      return;
+    }
     await handleQueueBatch(batch, env);
   },
 
@@ -181,8 +190,8 @@ export default {
       // over-published FRACTION heuristic only; truncation protection still applies).
       const force = url.searchParams.get('force') === '1';
       try {
-        await runIngest(env, { forceUnpublish: force });
-        return new Response(JSON.stringify({ ok: true, ran: 'ingest', force }), { headers: { 'content-type': 'application/json' } });
+        const result = await runIngest(env, { forceUnpublish: force });
+        return new Response(JSON.stringify({ ok: true, ran: 'ingest', force, ...result }), { headers: { 'content-type': 'application/json' } });
       } catch (err) {
         return new Response(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) }), { status: 502, headers: { 'content-type': 'application/json' } });
       }
@@ -191,12 +200,44 @@ export default {
   },
 };
 
+// ── Single-flight sync lock (migration 0029) ────────────────────────────────
+// The cron and the manual POST /run can otherwise overlap: double-enqueued
+// messages plus a race on the wholesale community_elevation_prices rebuild.
+// A stale row older than the TTL is treated as a crashed run and taken over,
+// so a wedged lock self-heals within 15 min.
+const SYNC_LOCK_TTL_MS = 15 * 60 * 1000;
+
+export async function acquireSyncLock(db: D1Like, now = Date.now()): Promise<boolean> {
+  const staleBefore = new Date(now - SYNC_LOCK_TTL_MS).toISOString();
+  // One atomic UPSERT: inserts when absent, steals only an expired lock.
+  // changes=0 → someone else holds a live lock.
+  const res = await db
+    .prepare(
+      `INSERT INTO sync_lock (name, locked_at) VALUES ('ingest', ?)
+       ON CONFLICT(name) DO UPDATE SET locked_at = excluded.locked_at
+       WHERE sync_lock.locked_at < ?`
+    )
+    .bind(new Date(now).toISOString(), staleBefore)
+    .run();
+  // D1 reports writes under meta.changes; better-sqlite3 (tests) under changes.
+  const r = res as { meta?: { changes?: number }; changes?: number } | null;
+  return (r?.meta?.changes ?? r?.changes ?? 0) > 0;
+}
+
+export async function releaseSyncLock(db: D1Like): Promise<void> {
+  await db.prepare(`DELETE FROM sync_lock WHERE name = 'ingest'`).bind().run();
+}
+
 export async function runIngest(
   env: Env,
   opts: { forceUnpublish?: boolean } = {}
-): Promise<void> {
+): Promise<{ skipped?: string } | void> {
   const startedAt = new Date().toISOString();
   const start = Date.now();
+  if (!(await acquireSyncLock(env.DB))) {
+    console.warn('ingest skipped: already running (sync_lock held)');
+    return { skipped: 'already running' };
+  }
   try {
     const token = await snowflakeLogin(env);
     await snowflakeQuery(token, env, `USE WAREHOUSE ${env.SNOWFLAKE_WAREHOUSE}`);
@@ -296,5 +337,7 @@ export async function runIngest(
       errorMessage: err instanceof Error ? err.message : String(err),
     });
     throw err;
+  } finally {
+    await releaseSyncLock(env.DB);
   }
 }

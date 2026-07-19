@@ -7,8 +7,9 @@
 
 import { describe, it, expect } from 'vitest';
 import { parseFloorPlanElevationRows } from '../src/snowflake.js';
-import { buildElevationPriceRows } from '../src/elevation-prices.js';
+import { buildElevationPriceRows, writeElevationPrices, type ElevationPriceRow } from '../src/elevation-prices.js';
 import type { Lookups } from '../src/diff.js';
+import { freshDb, d1 } from './helpers.js';
 
 function lookups(): Lookups {
   return {
@@ -79,5 +80,37 @@ describe('buildElevationPriceRows', () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]?.salesPrice).toBe(455000);
+  });
+});
+
+describe('writeElevationPrices', () => {
+  const row = (id: string, price: number): ElevationPriceRow => ({
+    id,
+    communityId: 'recCOM1',
+    floorPlanId: 'recFP1',
+    elevationType: 'Tuscan',
+    materialType: 'Stucco',
+    elevationLabel: 'Tuscan / Stucco',
+    salesPrice: price,
+  });
+  const count = (db: ReturnType<typeof freshDb>): number =>
+    (db.prepare(`SELECT COUNT(*) n FROM community_elevation_prices`).get() as { n: number }).n;
+
+  it('replaces the whole table atomically (one batch: DELETE + INSERTs)', async () => {
+    const db = freshDb();
+    await writeElevationPrices(d1(db), [row('a', 100), row('b', 200)]);
+    expect(count(db)).toBe(2);
+    await writeElevationPrices(d1(db), [row('c', 300)]);
+    const rows = db.prepare(`SELECT id, sales_price FROM community_elevation_prices`).all() as any[];
+    expect(rows).toEqual([{ id: 'c', sales_price: 300 }]);
+    db.close();
+  });
+
+  it('empty guard: 0 resolved rows skips the rebuild and keeps the existing table', async () => {
+    const db = freshDb();
+    await writeElevationPrices(d1(db), [row('keep-me', 100)]);
+    await writeElevationPrices(d1(db), []);
+    expect(count(db)).toBe(1);
+    db.close();
   });
 });
