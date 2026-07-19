@@ -17,6 +17,7 @@ import { useRef, useState, useTransition } from 'react';
 import { uploadGalleryImage } from '../../lib/actions';
 import { filterAcceptedFiles } from '../../lib/dropped-files';
 import { prepareForUpload } from '../../lib/prepare-upload';
+import { runWithConcurrency, UPLOAD_CONCURRENCY } from '../../lib/upload-pool';
 import { parseTypedGallery, deriveElevationType, ELEVATION_TYPES, type TypedImage } from '../../lib/elevation-types';
 import { cn } from '@/lib/utils';
 import { FieldLabel } from './FieldLabel';
@@ -44,6 +45,7 @@ export function ElevationGalleryEditor({
   const [items, setItems] = useState<TypedImage[]>(() => parseTypedGallery(initialValue));
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -73,28 +75,44 @@ export function ElevationGalleryEditor({
       return;
     }
     setErr(null);
-    let index = items.length; // slot for the first new image
+    const baseIndex = items.length; // slot for the first new image
+    setProgress({ done: 0, total: files.length });
     startTransition(async () => {
       const errors: string[] = [];
-      for (const file of files) {
-        const prepared = await prepareForUpload(file);
-        if (!prepared.ok) {
-          errors.push(prepared.error);
-          continue;
+      // Collected per input slot so the gallery keeps the drop order even
+      // though uploads finish out of order.
+      const uploaded: (TypedImage | null)[] = files.map(() => null);
+      await runWithConcurrency(files, UPLOAD_CONCURRENCY, async (file, i) => {
+        try {
+          const prepared = await prepareForUpload(file);
+          if (!prepared.ok) {
+            errors.push(prepared.error);
+            return;
+          }
+          const res = await uploadGalleryImage(entity, id, baseIndex + i, prepared.file);
+          if (res.ok) {
+            // Derive the type from the ORIGINAL file's name (downscale renames it).
+            const type = deriveElevationType(file.name) ?? deriveElevationType(res.url) ?? '';
+            uploaded[i] = { url: res.url, type };
+          } else {
+            errors.push(`${file.name}: ${res.error}`);
+          }
+        } catch {
+          errors.push(`${file.name}: upload failed`);
+        } finally {
+          setProgress((p) => (p ? { ...p, done: p.done + 1 } : p));
         }
-        const res = await uploadGalleryImage(entity, id, index, prepared.file);
-        if (res.ok) {
-          // Derive the type from the ORIGINAL file's name (downscale renames it).
-          const type = deriveElevationType(file.name) ?? deriveElevationType(res.url) ?? '';
-          setItems((prev) => [...prev, { url: res.url, type }]);
-          index += 1;
-        } else {
-          errors.push(res.error);
-        }
-      }
+      });
+      const added = uploaded.filter((u): u is TypedImage => u !== null);
+      if (added.length > 0) setItems((prev) => [...prev, ...added]);
       if (errors.length > 0) {
-        setErr(errors.length === 1 ? errors[0]! : `${errors.length} uploads failed: ${errors[0]}`);
+        setErr(
+          errors.length === 1
+            ? errors[0]!
+            : `${errors.length} of ${files.length} uploads failed — ${errors.join(' · ')}`
+        );
       }
+      setProgress(null);
       if (fileRef.current) fileRef.current.value = '';
     });
   }
@@ -229,7 +247,11 @@ export function ElevationGalleryEditor({
           className="w-fit"
         >
           <UploadIcon />
-          {pending ? 'Uploading…' : 'Add images'}
+          {progress
+            ? `Uploading ${progress.done} of ${progress.total}…`
+            : pending
+              ? 'Uploading…'
+              : 'Add images'}
         </Button>
       </div>
 

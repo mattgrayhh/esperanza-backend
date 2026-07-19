@@ -32,6 +32,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import { uploadGalleryImage } from '../../lib/actions';
+import { prepareForUpload } from '../../lib/prepare-upload';
 import { toEditorHtml } from '../../lib/markdown';
 import { FieldLabel } from './FieldLabel';
 import { Button } from '@/components/ui/button';
@@ -338,7 +339,12 @@ export function RichTextEditor({
       setErr(null);
       setUploading(true);
       try {
-        const res = await uploadGalleryImage(entity, id, imgIndex.current++, file);
+        const prepared = await prepareForUpload(file);
+        if (!prepared.ok) {
+          setErr(prepared.error);
+          return;
+        }
+        const res = await uploadGalleryImage(entity, id, imgIndex.current++, prepared.file);
         if (res.ok) editor.chain().focus().setImage({ src: res.url, alt: file.name }).run();
         else setErr(res.error);
       } finally {

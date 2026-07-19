@@ -80,7 +80,9 @@ sees an infinite "Uploading…" spinner (reported as *"sat 8–10 minutes, would
 on the Masseto plan, which had print-resolution renderings well over 15 MB).
 
 Fix lives in **`packages/admin/lib/prepare-upload.ts`**, called by every uploader
-(`ImageUploader`, `ImageGalleryEditor`, `ElevationGalleryEditor`) **before** the action:
+(`ImageUploader`, `ImageGalleryEditor`, `ElevationGalleryEditor`, `ImageGrid` (the IMAGES
+DAM, upload + replace), `RichTextEditor` inline images, `JsonBlocksEditor` image blocks,
+`HoaLinksEditor`) **before** the action:
 
 - **Oversized raster images** (jpeg/png/webp/avif over ~8 MB) are **canvas-downscaled** to
   a 2560 px longest edge (web size) and re-encoded — PNG stays PNG to keep alpha, else JPEG
@@ -94,6 +96,14 @@ Fix lives in **`packages/admin/lib/prepare-upload.ts`**, called by every uploade
 This partially delivers the compress-at-upload TODO above (client-side, for hang-prevention
 + web-sizing). A server-side `sharp` pipeline is still the sanctioned direction if we want
 canonical optimized renditions shared by PDFs and the site.
+
+**Multi-file batches** (`ImageGalleryEditor`, `ElevationGalleryEditor`, `ImageGrid`) upload
+**3 files at a time** (`packages/admin/lib/upload-pool.ts` — one Server Action call per file,
+bounded concurrency instead of the old serial loop), show **"Uploading n of N…"** on the
+upload button/dropzone while the batch runs, and **continue past failures** — a rejected or
+failed file is reported by name in the error line and the rest of the batch still uploads.
+Gallery order still matches the drop order (results are collected per slot, appended once
+at the end).
 
 ---
 

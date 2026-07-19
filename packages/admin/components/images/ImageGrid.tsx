@@ -23,6 +23,8 @@ import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createImageAsset, uploadImage, deleteImageAsset } from '../../lib/actions';
+import { prepareForUpload } from '../../lib/prepare-upload';
+import { runWithConcurrency, UPLOAD_CONCURRENCY } from '../../lib/upload-pool';
 import type { ImageAsset } from '../../lib/images-library';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -68,6 +70,7 @@ export function ImageGrid({
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -93,16 +96,34 @@ export function ImageGrid({
     if (!files || files.length === 0) return;
     setError(null);
     const list = Array.from(files);
+    setProgress({ done: 0, total: list.length });
     startTransition(async () => {
-      for (const file of list) {
-        const fd = new FormData();
-        fd.set('file', file);
-        const res = await createImageAsset(fd);
-        if (!res.ok) {
-          setError(res.error);
-          break;
+      const errors: string[] = [];
+      await runWithConcurrency(list, UPLOAD_CONCURRENCY, async (file) => {
+        try {
+          const prepared = await prepareForUpload(file);
+          if (!prepared.ok) {
+            errors.push(prepared.error);
+            return;
+          }
+          const fd = new FormData();
+          fd.set('file', prepared.file);
+          const res = await createImageAsset(fd);
+          if (!res.ok) errors.push(`${file.name}: ${res.error}`);
+        } catch {
+          errors.push(`${file.name}: upload failed`);
+        } finally {
+          setProgress((p) => (p ? { ...p, done: p.done + 1 } : p));
         }
+      });
+      if (errors.length > 0) {
+        setError(
+          errors.length === 1
+            ? errors[0]!
+            : `${errors.length} of ${list.length} uploads failed — ${errors.join(' · ')}`
+        );
       }
+      setProgress(null);
       if (uploadRef.current) uploadRef.current.value = '';
       router.refresh();
     });
@@ -115,7 +136,15 @@ export function ImageGrid({
     setError(null);
     setBusyId(id);
     startTransition(async () => {
-      const res = await uploadImage('images', id, 'file_url', file);
+      const prepared = await prepareForUpload(file);
+      if (!prepared.ok) {
+        setError(prepared.error);
+        setBusyId(null);
+        replaceTargetId.current = null;
+        if (replaceRef.current) replaceRef.current.value = '';
+        return;
+      }
+      const res = await uploadImage('images', id, 'file_url', prepared.file);
       if (!res.ok) setError(res.error);
       setBusyId(null);
       replaceTargetId.current = null;
@@ -177,7 +206,7 @@ export function ImageGrid({
           </div>
           <Button onClick={() => uploadRef.current?.click()} disabled={pending}>
             <UploadCloudIcon />
-            {pending ? 'Uploading…' : 'Upload'}
+            {progress ? `Uploading ${progress.done} of ${progress.total}…` : pending ? 'Uploading…' : 'Upload'}
           </Button>
         </div>
       </header>
@@ -224,7 +253,11 @@ export function ImageGrid({
       >
         <UploadCloudIcon className="size-7 text-muted-foreground" />
         <div className="text-sm font-medium text-foreground">
-          {pending ? 'Uploading…' : 'Drop images here or click to upload'}
+          {progress
+            ? `Uploading ${progress.done} of ${progress.total}…`
+            : pending
+              ? 'Uploading…'
+              : 'Drop images here or click to upload'}
         </div>
         <div className="text-xs text-muted-foreground">
           PNG, JPG, WebP, AVIF — multiple files supported. Stored as stable public assets.
