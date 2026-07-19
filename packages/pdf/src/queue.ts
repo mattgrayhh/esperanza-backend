@@ -36,9 +36,11 @@ export async function enqueueStaleLists(env: Env): Promise<number> {
   return rows.length;
 }
 
-/** Nightly backstop: enqueue every render across ALL types that isn't currently fresh
- *  (status != live, or theme_version IS NULL, or theme_version != active theme version). */
-export async function enqueueAllStale(env: Env): Promise<number> {
+/** Full-fleet backstop: enqueue every render across ALL types that isn't currently fresh
+ *  (status != live — includes not_built/stale/error — or theme_version IS NULL, or
+ *  theme_version != active theme version). Used by the nightly cron and the manual
+ *  POST /warm route. Batched sends: sendBatch caps at 100 messages per call. */
+export async function enqueueAllStale(env: Env, reason = 'nightly'): Promise<number> {
   if (!env.RENDER_Q) return 0;
   const active = await env.DB.prepare(`SELECT version FROM pdf_themes WHERE kind='active'`).first<{ version: number }>();
   const av = active?.version ?? 1;
@@ -46,6 +48,8 @@ export async function enqueueAllStale(env: Env): Promise<number> {
     `SELECT type, slug FROM pdf_renders WHERE status<>'live' OR theme_version IS NULL OR theme_version<>?`
   ).bind(av).all<{ type: PdfType; slug: string }>();
   const rows = res.results ?? [];
-  for (const r of rows) await env.RENDER_Q.send({ type: r.type, slug: r.slug, reason: 'nightly' });
+  for (let i = 0; i < rows.length; i += 100) {
+    await env.RENDER_Q.sendBatch(rows.slice(i, i + 100).map((r) => ({ body: { type: r.type, slug: r.slug, reason } })));
+  }
   return rows.length;
 }

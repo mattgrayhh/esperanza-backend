@@ -75,7 +75,7 @@ describe('enqueueAllStale', () => {
 
   it('enqueues exactly the 3 non-fresh rows across all types, skips the fresh one', async () => {
     const sent: any[] = [];
-    const env = { DB: mkStaleDb(), RENDER_Q: { send: async (m: any) => { sent.push(m); } } };
+    const env = { DB: mkStaleDb(), RENDER_Q: { sendBatch: async (ms: any[]) => { sent.push(...ms.map((m) => m.body)); } } };
     const n = await enqueueAllStale(env as any);
     expect(n).toBe(3);
     const slugs = sent.map((m: any) => m.slug).sort();

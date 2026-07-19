@@ -5,6 +5,7 @@ import { serve, loadData } from './serve';
 import { preview } from './preview';
 import { verifyPreviewToken } from './token';
 import { processJob, enqueueStaleLists, enqueueAllStale } from './queue';
+import { markError } from './store';
 import { renderTemplate } from './templates';
 import { loadActiveTheme } from './theme';
 import type { FilteredKind } from './data/list';
@@ -17,6 +18,17 @@ export default {
     const url = new URL(request.url);
     if (request.method === 'GET' && url.pathname === '/health') {
       return new Response('ok', { status: 200 });
+    }
+    if (request.method === 'POST' && url.pathname === '/warm') {
+      // Manual pre-launch / post-deploy warm: enqueue every render that isn't currently
+      // fresh (not_built, stale, error — errored docs get retried too). This is THE warm
+      // path while the nightly cron in wrangler.toml stays disabled (5-cron account cap).
+      const auth = request.headers.get('authorization') ?? '';
+      if (!env.PDF_PREVIEW_SECRET || auth !== `Bearer ${env.PDF_PREVIEW_SECRET}`) {
+        return new Response('Forbidden', { status: 403 });
+      }
+      const enqueued = await enqueueAllStale(env, 'warm');
+      return Response.json({ enqueued });
     }
     if (request.method === 'GET' && url.pathname === '/debug/limits') {
       // Non-destructive probe: reads account limits + live sessions WITHOUT launching a
@@ -136,6 +148,19 @@ export default {
   },
 
   async queue(batch: MessageBatch<RenderJob>, env: Env): Promise<void> {
+    if (batch.queue === 'esperanza-pdf-render-dlq') {
+      // Thrice-failed jobs land here. Mark the row status='error' (with a DLQ note) so it's
+      // visible in D1, and log a structured line for Workers Logs. decideFreshness serves the
+      // last-good R2 object for 'error' rows (stale-present), so dead docs never trap
+      // visitors on the "Building…" poll page.
+      for (const msg of batch.messages) {
+        const { type, slug, reason } = msg.body;
+        console.error(JSON.stringify({ event: 'pdf_render_dlq', type, slug, reason }));
+        await markError(env.DB, type, slug, `DLQ: render failed after max retries (reason=${reason})`);
+        msg.ack();
+      }
+      return;
+    }
     for (const msg of batch.messages) {
       try { await processJob(env, msg.body); msg.ack(); }
       catch { msg.retry(); }

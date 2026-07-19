@@ -38,14 +38,22 @@ queue = "esperanza-pdf-render"
 max_batch_size = 3
 max_retries = 3
 dead_letter_queue = "esperanza-pdf-render-dlq"
-# Cap simultaneous render invocations to 1: with launch-per-render, Browser Rendering's
-# new-instance RATE limit is the bottleneck (concurrency 2 fails ~26%). One render at a
-# time (~8/min) stays under it; retries + DLQ catch stragglers. Raise this only after
-# switching to a reused/keep-alive browser (Durable Object) — see DEPLOY.md.
+# Cap simultaneous render invocations to 1. Renders go through the reused keep-alive
+# browser in the BrowserRenderer Durable Object (~18-26/min), so one consumer drains the
+# full fleet (~249 docs) in ~10-15 min; retries + DLQ catch stragglers. See DEPLOY.md.
 max_concurrency = 1
+
+# DLQ consumer: thrice-failed jobs are marked status='error' (DLQ note in last_error) and
+# logged, so the serve path falls back to the last-good R2 object instead of an infinite
+# "Building…" poll page. No dead_letter_queue here — a failed mark just redelivers.
+[[queues.consumers]]
+queue = "esperanza-pdf-render-dlq"
+max_batch_size = 10
 
 # Nightly list warm/rebuild. GATED: the account is at its 5-cron-trigger cap until the
 # legacy crons are disabled at cutover. Uncomment + deploy ONLY after a slot is freed.
+# Until then, POST /warm (Authorization: Bearer <PDF_PREVIEW_SECRET>) is the manual
+# warm path — same enqueueAllStale logic, run by hand pre-launch / post-deploy.
 # [triggers]
 # crons = ["0 7 * * *"]
 
