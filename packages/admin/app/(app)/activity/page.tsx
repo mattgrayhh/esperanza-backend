@@ -3,7 +3,8 @@
 //
 // The "where did my change go?" page the dashboard links to. Two reads, both via
 // getReadDb() (read-your-writes), both READ-only:
-//   • sync_log  — one row per ingest run (Snowflake → D1). Records sync health.
+//   • sync_log  — one row per ingest run (Snowflake → D1). Legacy Framer-sync rows
+//                 are hidden — that pipeline is retired.
 //   • audit_log — every admin edit, grouped into human activity lines.
 // =============================================================================
 
@@ -57,6 +58,7 @@ async function load(): Promise<{ runs: SyncRun[]; audit: AuditRow[] }> {
     sql.raw(
       `SELECT source, status, at, duration_s AS durationS, notes, error_message AS errorMessage
        FROM sync_log
+       WHERE source IS NULL OR source != 'framer'
        ORDER BY at DESC, id DESC
        LIMIT 30`
     )
@@ -99,7 +101,7 @@ export default async function ActivityPage() {
           Activity
         </h1>
         <p className="text-sm text-muted-foreground">
-          Sync and publish batches, plus every edit across the collections.
+          Background sync runs and every edit across the collections.
         </p>
       </header>
 
@@ -121,7 +123,7 @@ export default async function ActivityPage() {
                     <ListChecksIcon />
                   </EmptyMedia>
                   <EmptyTitle>No runs recorded yet</EmptyTitle>
-                  <EmptyDescription>Sync and push batches will appear here.</EmptyDescription>
+                  <EmptyDescription>Sync batches will appear here.</EmptyDescription>
                 </EmptyHeader>
               </Empty>
             </div>
