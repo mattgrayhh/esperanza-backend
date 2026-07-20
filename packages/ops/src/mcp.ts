@@ -35,7 +35,7 @@ export class OpsMcpAgent extends McpAgent<Env, unknown, OpsProps> {
     // ---- read tier ----
     this.server.tool(
       'sync_status',
-      { source: z.enum(['ingest', 'snowflake']).optional(), limit: z.number().optional() },
+      { source: z.enum(['ingest', 'snowflake', 'import']).optional(), limit: z.number().optional() },
       async ({ source, limit }) => {
         try {
           const data = await syncStatus(db, source, limit ?? 20);

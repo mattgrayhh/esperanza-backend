@@ -271,6 +271,18 @@ plan, live PDF render. Data is server-rendered from D1 in `app/(app)/page.tsx`.
 
 ---
 
+## Activity (`/activity`)
+
+Background sync history plus grouped edit history (from `audit_log`).
+
+- **Sync runs** — latest Snowflake → D1 ingest batches from `sync_log`. Legacy
+  `source='framer'` rows are hidden; that pipeline is retired.
+- **Edit history** — who changed what, grouped by entity/action, newest first.
+
+Linked from the dashboard “Recent activity” block.
+
+---
+
 ## Status page (`/status`)
 
 Infra / site-service health for the stack marketing and ops rely on. Entry points:
