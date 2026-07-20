@@ -237,7 +237,7 @@ To add a brand-new field **type** (not just a field), touch `lib/field-builder.t
 
 ---
 
-## On every write: audit log + cache purge
+## On every write: audit log + cache purge + site rebuild
 
 All writes go through Server Actions in **`lib/actions.ts`**, which call `postWrite()`
 after the D1 commit. `postWrite()`:
@@ -246,9 +246,16 @@ after the D1 commit. `postWrite()`:
   `lib/audit-chunk.ts`);
 - purges the affected `esperanza-api` public-cache entities via the **API service
   binding** (falls back to `API_PUBLIC_URL`) with an authenticated `?purge=1`
-  request — including `sitesearch` on every write — so the site picks up the change
-  without waiting out the TTL. The api returns `X-Purge-Applied: 1` when the bust lands;
+  request — including `sitesearch` on every write — and, when `FRONTEND_PUBLIC_URL`
+  is set, repeats the purge against the frontend worker's `/api/public/*` proxy cache;
+  the api returns `X-Purge-Applied: 1` when the bust lands;
+- POSTs `FRONTEND_DEPLOY_HOOK_URL` (when set) so `esperanzahomes-frontend` rebuilds
+  baked HTML — most page copy/galleries/list grids are static snapshots, not live fetches;
 - for entities with brochures, marks PDFs stale via the render queue.
+
+**Preview links** in the admin placement rail target **`esperanzahomes.hazardhouse.ai`**
+(the new frontend). `www.esperanzahomes.com` is still the legacy O'Neil site until DNS
+cutover — admin edits never appear there.
 
 **Exception:** unpublished draft creates (`createEntity` / `createCommunityDraft`) pass
 `{ sync: false }` — audit only. Empty drafts stay local until the operator saves or

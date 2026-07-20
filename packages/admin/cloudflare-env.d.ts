@@ -34,6 +34,8 @@ declare global {
     INGEST_URL?: string;
     RHODES_API_URL?: string;
     API_PUBLIC_URL?: string;
+    /** Public origin of esperanza-frontend (proxy cache purge target). */
+    FRONTEND_PUBLIC_URL?: string;
     MAILLAYER_API_URL?: string;
 
     // --- secrets (wrangler secret put) ---
@@ -46,6 +48,8 @@ declare global {
     MAILLAYER_API_KEY?: string;
     /** Shared secret for authenticated esperanza-api cache purges. Must match the api worker. */
     PURGE_KEY?: string;
+    /** Deploy hook that rebuilds esperanza-frontend after admin saves. */
+    FRONTEND_DEPLOY_HOOK_URL?: string;
 
     // --- local-only (.dev.vars) ---
     /** Local dev login bypass — attributes writes to this email under `next dev`.

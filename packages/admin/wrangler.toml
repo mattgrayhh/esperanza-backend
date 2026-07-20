@@ -112,6 +112,10 @@ RHODES_API_URL = "https://rhodes-availability.round-base-ed8c.workers.dev"
 # save so the public site calculators pick the new Mortgage Rate up immediately (the 5-minute
 # edge TTL is the backstop if the purge fails).
 API_PUBLIC_URL = "https://esperanza-api.round-base-ed8c.workers.dev"
+# Static frontend worker — postWrite() also purges this origin's /api/public/* proxy
+# cache (separate from esperanza-api's own edge cache) and triggers a redeploy via
+# FRONTEND_DEPLOY_HOOK_URL so baked HTML picks up admin edits.
+FRONTEND_PUBLIC_URL = "https://esperanzahomes.hazardhouse.ai"
 # MailLayer transactional-email endpoint. lib/maillayer.ts emails a generated password
 # to a user on create / reset. Defaulted in code; override here only if it ever changes.
 MAILLAYER_API_URL = "https://mailer.hazardhouse.ai/api/transactional/send"
@@ -155,6 +159,14 @@ MAILLAYER_API_URL = "https://mailer.hazardhouse.ai/api/transactional/send"
 #                   deployed esperanza-admin worker. Set with:
 #                     wrangler secret put PURGE_KEY --config packages/admin/wrangler.toml
 #                   (locally, put PURGE_KEY=... in packages/admin/.dev.vars).
+#
+#   FRONTEND_DEPLOY_HOOK_URL — POST target that redeploys esperanza-frontend after an
+#                   admin save (Cloudflare Pages/Workers deploy hook or CI dispatch).
+#                   Most public pages are static HTML baked at build time; purging the
+#                   api cache alone only updates live JS islands (maps, settings, QMI
+#                   card reconciliation). Without this hook, operators must redeploy the
+#                   frontend manually to see copy/gallery/list changes. Set with:
+#                     wrangler secret put FRONTEND_DEPLOY_HOOK_URL --config packages/admin/wrangler.toml
 #
 #   MAILLAYER_API_KEY — the ENABLED Esperanza MailLayer template's `txn_…` key. Used by
 #                   lib/maillayer.ts to email a generated password to a user on create /

@@ -1,7 +1,7 @@
 import { qmiPublicSlug } from '@esperanza/db/slug';
 import type { EntityKey } from './entities';
 
-export const LIVE_SITE_ORIGIN = 'https://www.esperanzahomes.com';
+export const LIVE_SITE_ORIGIN = 'https://esperanzahomes.hazardhouse.ai';
 
 /** Staging Worker (workers.dev only — can never touch prod). Its /api proxy adds the
  *  preview secret, so the QMI detail island there renders DRAFT homes. Used to offer a

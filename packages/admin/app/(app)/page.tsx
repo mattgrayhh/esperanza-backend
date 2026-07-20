@@ -94,8 +94,8 @@ interface QmiBreakdown {
   pdfPending: number; // matched + plan complete, PDFs not rendered
 }
 
-// Public Caddy site the dashboard pings for reachability (chosen by ops).
-const SITE_URL = 'https://esperanzahomes.com';
+// Public frontend the dashboard pings for reachability.
+const SITE_URL = 'https://esperanzahomes.hazardhouse.ai';
 
 interface SiteHealth {
   online: boolean;
@@ -103,10 +103,8 @@ interface SiteHealth {
   detail: string | null;
 }
 
-// Live reachability check, run on each dashboard load. Framer is gone; the public
-// site now reads D1 live, so the only meaningful "is the site OK" signal is whether
-// it actually responds. Short timeout so a dead site can't hang the dashboard.
-// ponytail: page-load ping, no separate cron/checker until one's actually needed.
+// Live reachability check, run on each dashboard load. Short timeout so a dead site
+// can't hang the dashboard.
 async function checkSite(): Promise<SiteHealth> {
   const checkedAt = new Date().toISOString();
   try {

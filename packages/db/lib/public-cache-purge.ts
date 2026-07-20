@@ -31,6 +31,8 @@ export function publicCacheEntitiesFor(collection: string): string[] {
 export interface PublicCachePurgeEnv {
   API_PUBLIC_URL?: string;
   PURGE_KEY?: string;
+  /** Public origin of the esperanza-frontend worker (also caches /api/public/*). */
+  FRONTEND_PUBLIC_URL?: string;
   /** Cloudflare service binding to esperanza-api (preferred over the public URL). */
   API?: { fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> };
 }
@@ -53,21 +55,40 @@ export async function purgePublicCacheEntities(
   }
 
   const headers = { 'X-Purge-Key': env.PURGE_KEY };
-  await Promise.all(
-    list.map(async (entity) => {
-      try {
-        const path = `/api/public/${entity}?purge=1`;
-        const res = env.API
-          ? await env.API.fetch(new Request(`https://esperanza-api.internal${path}`, { method: 'GET', headers }))
-          : await fetch(`${base}${path}`, { method: 'GET', headers });
-        if (res.headers.get('X-Purge-Applied') !== '1') {
-          console.error(
-            `[purge] ${entity}: purge not applied (HTTP ${res.status}, X-Cache=${res.headers.get('X-Cache') ?? '—'})`
-          );
-        }
-      } catch (err) {
-        console.error('[purge]', entity, err);
+  const frontendBase = (env.FRONTEND_PUBLIC_URL ?? '').replace(/\/+$/, '');
+
+  async function purgeOne(label: string, fetcher: () => Promise<Response>): Promise<void> {
+    try {
+      const res = await fetcher();
+      if (res.headers.get('X-Purge-Applied') !== '1') {
+        console.error(
+          `[purge] ${label}: purge not applied (HTTP ${res.status}, X-Cache=${res.headers.get('X-Cache') ?? '—'})`
+        );
       }
+    } catch (err) {
+      console.error('[purge]', label, err);
+    }
+  }
+
+  await Promise.all(
+    list.flatMap((entity) => {
+      const path = `/api/public/${entity}?purge=1`;
+      const targets: Array<{ label: string; fetcher: () => Promise<Response> }> = [
+        {
+          label: entity,
+          fetcher: () =>
+            env.API
+              ? env.API.fetch(new Request(`https://esperanza-api.internal${path}`, { method: 'GET', headers }))
+              : fetch(`${base}${path}`, { method: 'GET', headers }),
+        },
+      ];
+      if (frontendBase) {
+        targets.push({
+          label: `${entity} (frontend proxy)`,
+          fetcher: () => fetch(`${frontendBase}${path}`, { method: 'GET', headers }),
+        });
+      }
+      return targets.map(({ label, fetcher }) => purgeOne(label, fetcher));
     })
   );
 }

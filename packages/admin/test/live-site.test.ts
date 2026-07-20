@@ -26,7 +26,7 @@ describe('buildLiveSitePlacement', () => {
   it('includes visitor status for drafts', () => {
     const p = buildLiveSitePlacement('blogs', { title: 'T', slug: 't' }, { published: false });
     expect(p.pageLabel).toBe('Blog post');
-    expect(p.fullUrl).toBe('https://www.esperanzahomes.com/blog/t');
+    expect(p.fullUrl).toBe('https://esperanzahomes.hazardhouse.ai/blog/t');
     expect(p.visitorStatus).toBe('Draft');
     expect(p.sections.length).toBeGreaterThan(0);
   });
