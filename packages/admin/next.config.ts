@@ -10,6 +10,7 @@
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import type { NextConfig } from 'next';
+import { withSentryConfig } from '@sentry/nextjs';
 import { initOpenNextCloudflareForDev } from '@opennextjs/cloudflare';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -47,4 +48,14 @@ void initOpenNextCloudflareForDev({
   remoteBindings: false,
 });
 
-export default nextConfig;
+// Sentry: injects release + (when SENTRY_AUTH_TOKEN is set in CI) uploads source maps
+// so stack traces show original code. No tunnelRoute — the admin is Access-gated and
+// client events post directly to Sentry ingest, so a proxy route would only collide
+// with the auth middleware. Source-map upload is skipped gracefully without the token.
+export default withSentryConfig(nextConfig, {
+  org: 'rhodes-enterprises',
+  project: 'esperanza-homes',
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  widenClientFileUpload: true,
+  silent: !process.env.CI,
+});
