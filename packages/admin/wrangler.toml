@@ -14,7 +14,9 @@ name = "esperanza-admin"
 main = ".open-next/worker.js"
 # OpenNext 1.x requires a recent compatibility_date + nodejs_compat. nodejs_compat also
 # backs the Web Crypto / Node APIs Auth.js and the Next.js standalone server use in workerd.
-compatibility_date = "2025-05-20"
+# 2025-08-16+ is required by @sentry/nextjs on Workers (introduces https.request, used by
+# the Sentry SDK's server transport).
+compatibility_date = "2025-08-16"
 compatibility_flags = ["nodejs_compat"]
 
 # OpenNext static assets binding.
