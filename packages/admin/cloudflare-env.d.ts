@@ -25,6 +25,8 @@ declare global {
     INGEST?: Service;
     /** Service binding to the rhodes-availability worker. */
     RHODES?: Service;
+    /** Service binding to esperanza-api (post-write cache purges). */
+    API?: Fetcher;
 
     // --- vars ---
     IMAGES_PUBLIC_BASE_URL: string;
@@ -42,6 +44,8 @@ declare global {
     INGEST_TRIGGER_TOKEN?: string;
     RHODES_ADMIN_KEY?: string;
     MAILLAYER_API_KEY?: string;
+    /** Shared secret for authenticated esperanza-api cache purges. Must match the api worker. */
+    PURGE_KEY?: string;
 
     // --- local-only (.dev.vars) ---
     /** Local dev login bypass — attributes writes to this email under `next dev`.

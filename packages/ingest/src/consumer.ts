@@ -28,6 +28,7 @@
 import { deriveAvailabilityText, isAutoAvailabilityText } from './availability.js';
 import { ensurePdfRender } from '@esperanza/db/pdf-ensure';
 import { affectedRenderKeys } from '@esperanza/db/pdf-invalidate';
+import { PUBLIC_CACHE_ALWAYS, purgePublicCacheEntities } from '@esperanza/db/public-cache-purge';
 import {
   applySynced,
   assertQmiPatchAllowed,
@@ -74,6 +75,8 @@ export interface ConsumerEnv {
   API_PUBLIC_URL?: string;
   /** Secret the api requires on authenticated purges (X-Purge-Key header). */
   PURGE_KEY?: string;
+  /** Service binding to esperanza-api (preferred for post-batch cache purges). */
+  API?: { fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> };
 }
 
 /** kebab slug from an address (worker.js:503-505): lower, [^a-z0-9]+→'-', strip trailing '-'. */
@@ -468,13 +471,7 @@ export interface MessageBatchLike<Body> {
   messages: QueueMessageLike<Body>[];
 }
 
-// Public api (esperanza-api) edge-cache purge. The api caches each
-// /api/public/<entity> for its TTL; without a purge a synced change only shows
-// after the TTL expires. Message kind → the api entities it invalidates —
-// mirrors the admin's PUBLIC_CACHE_DEPS (packages/admin/lib/actions.ts): a
-// community change flattens onto city + qmi payloads, a floor-plan change onto
-// qmi. `promotions` is purged whenever anything was touched, since promos embed
-// community/plan/qmi data (resolveEffectivePromo). Note api path `floorplans`.
+// Message kind → api entities to purge (mirrors @esperanza/db/public-cache-purge deps).
 const PURGE_DEPS: Record<SyncMessage['kind'], string[]> = {
   'qmi.upsert': ['qmi'],
   'qmi.unpublish': ['qmi'],
@@ -482,19 +479,11 @@ const PURGE_DEPS: Record<SyncMessage['kind'], string[]> = {
   'floorplan.upsert': ['floorplans', 'qmi'],
 };
 
-/** Best-effort: a purge failure must never fail the batch (the TTL is the backstop). */
-async function purgePublicCache(env: ConsumerEnv, kinds: Set<SyncMessage['kind']>): Promise<void> {
-  const base = (env.API_PUBLIC_URL ?? '').replace(/\/+$/, '');
-  if (!base || kinds.size === 0) return;
-  const entities = new Set<string>(['promotions']);
+async function purgeTouchedEntities(env: ConsumerEnv, kinds: Set<SyncMessage['kind']>): Promise<void> {
+  if (kinds.size === 0) return;
+  const entities = new Set<string>(['promotions', ...PUBLIC_CACHE_ALWAYS]);
   for (const k of kinds) for (const e of PURGE_DEPS[k]) entities.add(e);
-  await Promise.all(
-    [...entities].map((e) =>
-      fetch(`${base}/api/public/${e}?purge=1`, {
-        headers: env.PURGE_KEY ? { 'X-Purge-Key': env.PURGE_KEY } : undefined,
-      }).catch((err) => console.error('[ingest:purge]', e, err))
-    )
-  );
+  await purgePublicCacheEntities(env, entities);
 }
 
 /**
@@ -533,7 +522,7 @@ export async function handleQueueBatch(
 
   // Purge the public api edge cache for the entity types this batch changed so
   // synced edits show before the TTL. One fetch per distinct entity, best-effort.
-  await purgePublicCache(env, touchedKinds);
+  await purgeTouchedEntities(env, touchedKinds);
 
   await writeSyncLog(env, {
     runId: crypto.randomUUID(),

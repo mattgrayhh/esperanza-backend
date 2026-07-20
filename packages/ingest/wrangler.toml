@@ -67,6 +67,11 @@ PDF_PUBLIC_BASE_URL = "https://esperanza-pdf.round-base-ed8c.workers.dev"
 # batch touched, so synced changes show before the TTL (consumer.ts).
 API_PUBLIC_URL = "https://esperanza-api.round-base-ed8c.workers.dev"
 
+# Service binding to the public read API (post-batch cache purge).
+[[services]]
+binding = "API"
+service = "esperanza-api"
+
 # Secrets (set via `wrangler secret put`):
 #   SNOWFLAKE_PASSWORD   — Snowflake REST login password
 #   PURGE_KEY            — X-Purge-Key the api requires on authenticated cache

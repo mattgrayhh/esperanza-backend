@@ -1001,6 +1001,7 @@ async function buildPayload(
 const DEFAULT_ALLOWED = [
   'https://www.esperanzahomes.com',
   'https://esperanzahomes.com',
+  'https://*.hazardhouse.ai',
 ];
 
 function originAllowed(origin: string, pattern: string): boolean {
@@ -1137,9 +1138,11 @@ const apiHandler = {
       wantsPurge && previewAuthorized(env.PURGE_KEY, request.headers.get('X-Purge-Key'));
 
     if (purgeAuthorized) {
-      // Admin cache-busting hook: DELETE the cached body so the next read repopulates.
-      // (The admin Worker calls this service-to-service after a write; see runbook.)
-      ctx.waitUntil(cache.delete(cacheKey));
+      // Admin cache-busting hook: DELETE the cached body (and the 24h backup) so the
+      // next read repopulates from D1. (The admin Worker calls this after a write.)
+      ctx.waitUntil(
+        Promise.all([cache.delete(cacheKey), cache.delete(backupKeyFor(cacheKeyUrl))])
+      );
     } else {
       const hit = await cache.match(cacheKey);
       if (hit) {
@@ -1188,6 +1191,7 @@ const apiHandler = {
       const out = new Response(body, { status: 200 });
       out.headers.set('Content-Type', 'application/json');
       out.headers.set('X-Cache', 'MISS');
+      if (purgeAuthorized) out.headers.set('X-Purge-Applied', '1');
       for (const [k, v] of cors) out.headers.set(k, v);
       return out;
     } catch (err) {
