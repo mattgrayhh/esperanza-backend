@@ -8,20 +8,31 @@ of commands. Part 3 is the glossary of every name and identifier in the system.
 ## Part 1 — Symptom → likely cause → fix
 
 ### "I edited a field in the admin but the website didn't change"
-1. Is the record **published**? The public API serves `v_public_*` views — drafts are
+1. **Which site are you checking?** Marketing edits flow to **`esperanzahomes.hazardhouse.ai`**
+   (the new static frontend reading `esperanza-api`). **`www.esperanzahomes.com` is still the
+   legacy O'Neil Interactive site** — it does not read D1 and will never show admin edits
+   until DNS cutover.
+2. Is the record **published**? The public API serves `v_public_*` views — drafts are
    hidden until published (`togglePublished` or the publish toggle on the record).
-2. Check admin Worker logs for **`[purge]`** after saving. A successful cache bust returns
-   `X-Purge-Applied: 1` from `esperanza-api`. Common failures:
+3. **Static vs live content:** Most page HTML (copy, galleries, list grids) is **baked at
+   frontend build time**. Admin saves purge the api cache (updating live JS islands like
+   maps, mortgage-rate calculators, and QMI card reconciliation) and POST
+   `FRONTEND_DEPLOY_HOOK_URL` to redeploy `esperanzahomes-frontend`. Without the deploy
+   hook configured, operators must redeploy the frontend manually to see baked-content
+   changes. The admin **Preview live page** link targets `esperanzahomes.hazardhouse.ai`.
+4. Check admin Worker logs for **`[purge]`** and **`[site-rebuild]`** after saving. A
+   successful cache bust returns `X-Purge-Applied: 1` from `esperanza-api`. Common failures:
    - `PURGE_KEY unset` — set the same secret on `esperanza-admin` and `esperanza-api`
    - `purge not applied` — key mismatch or the api worker wasn't redeployed after the
      authenticated-purge change (PR #150, 2026-07-19)
-3. Is there a **stale redirect** shadowing the page? Some legacy URLs 308-redirect and hide
+   - `FRONTEND_DEPLOY_HOOK_URL unset` — baked HTML won't rebuild automatically
+5. Is there a **stale redirect** shadowing the page? Some legacy URLs 308-redirect and hide
    the live page. That's an operator config issue.
-4. Is the page driven by a **no-code Fetch** (e.g. company rates, or a community's resolved
-   promo banner/badge) rather than CMS? Those read `esperanza-api` (`/api/public/<entity>`),
-   which caches each entity (qmi 60s, the rest 300s). Admin writes auto-purge that cache
-   (`postWrite` → shared `purgePublicCache`; promotions edits also purge `communities`/`cities`/`qmi`
-   because the resolved promo is flattened onto those). If a Fetch-driven surface still lags,
+6. Is the page driven by a **live fetch island** (maps, settings, QMI card grid reconcile)
+   rather than baked HTML? Those read `/api/public/<entity>` through the frontend worker
+   proxy, which caches ~60s independently — admin purges both layers when
+   `FRONTEND_PUBLIC_URL` is set. Promotions edits also purge `communities`/`cities`/`qmi`
+   because the resolved promo is flattened onto those. If a fetch-driven surface still lags,
    the purge is best-effort and the TTL (≤5 min) is the backstop — wait it out or hit
    `GET {API_PUBLIC_URL}/api/public/<entity>?purge=1` with `X-Purge-Key`.
 

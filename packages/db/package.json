@@ -14,7 +14,8 @@
     "./override": "./lib/override.ts",
     "./pdf-invalidate": "./lib/pdf-invalidate.ts",
     "./pdf-ensure": "./lib/pdf-ensure.ts",
-    "./public-cache-purge": "./lib/public-cache-purge.ts"
+    "./public-cache-purge": "./lib/public-cache-purge.ts",
+    "./site-rebuild": "./lib/site-rebuild.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",

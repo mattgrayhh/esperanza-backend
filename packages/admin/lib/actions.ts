@@ -67,6 +67,7 @@ import {
 } from './field-builder';
 import { chunk, AUDIT_ROWS_PER_INSERT } from './audit-chunk';
 import { purgePublicCache } from '@esperanza/db/public-cache-purge';
+import { triggerFrontendRebuild } from '@esperanza/db/site-rebuild';
 
 // =============================================================================
 // Shared post-write step: audit_log rows + public-cache purge + PDF refresh.
@@ -121,7 +122,8 @@ async function postWrite(
 
   const env = getCloudflareContext().env;
   // Purge the public api edge cache for this entity (+ promo-coupled dependents)
-  // so the edit shows before the TTL instead of after it. Best-effort.
+  // so live islands pick up the change before the TTL. Also purge the frontend
+  // worker's /api/public proxy cache when FRONTEND_PUBLIC_URL is set. Best-effort.
   try {
     await purgePublicCache(
       env as unknown as Parameters<typeof purgePublicCache>[0],
@@ -129,6 +131,14 @@ async function postWrite(
     );
   } catch {
     /* TTL backstop */
+  }
+
+  // Most page HTML is baked at frontend build time — queue a redeploy so copy,
+  // galleries, and list grids reflect the edit (live islands update via purge above).
+  try {
+    await triggerFrontendRebuild(env as unknown as Parameters<typeof triggerFrontendRebuild>[0]);
+  } catch {
+    /* operator can redeploy manually */
   }
 
   // Mark affected PDF brochures stale + enqueue re-renders (best-effort, event-driven freshness).
