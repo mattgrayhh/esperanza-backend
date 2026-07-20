@@ -8,15 +8,22 @@ of commands. Part 3 is the glossary of every name and identifier in the system.
 ## Part 1 — Symptom → likely cause → fix
 
 ### "I edited a field in the admin but the website didn't change"
-1. Is there a **stale redirect** shadowing the page? Some legacy URLs 308-redirect and hide
+1. Is the record **published**? The public API serves `v_public_*` views — drafts are
+   hidden until published (`togglePublished` or the publish toggle on the record).
+2. Check admin Worker logs for **`[purge]`** after saving. A successful cache bust returns
+   `X-Purge-Applied: 1` from `esperanza-api`. Common failures:
+   - `PURGE_KEY unset` — set the same secret on `esperanza-admin` and `esperanza-api`
+   - `purge not applied` — key mismatch or the api worker wasn't redeployed after the
+     authenticated-purge change (PR #150, 2026-07-19)
+3. Is there a **stale redirect** shadowing the page? Some legacy URLs 308-redirect and hide
    the live page. That's an operator config issue.
-2. Is the page driven by a **no-code Fetch** (e.g. company rates, or a community's resolved
+4. Is the page driven by a **no-code Fetch** (e.g. company rates, or a community's resolved
    promo banner/badge) rather than CMS? Those read `esperanza-api` (`/api/public/<entity>`),
-   which caches each entity (qmi 60s, the rest 300s). Admin writes now auto-purge that cache
-   (`postWrite` → `purgePublicCache`; promotions edits also purge `communities`/`cities`/`qmi`
+   which caches each entity (qmi 60s, the rest 300s). Admin writes auto-purge that cache
+   (`postWrite` → shared `purgePublicCache`; promotions edits also purge `communities`/`cities`/`qmi`
    because the resolved promo is flattened onto those). If a Fetch-driven surface still lags,
    the purge is best-effort and the TTL (≤5 min) is the backstop — wait it out or hit
-   `GET {API_PUBLIC_URL}/api/public/<entity>?purge=1`.
+   `GET {API_PUBLIC_URL}/api/public/<entity>?purge=1` with `X-Purge-Key`.
 
 ### "I added a field but it's not in the admin form"
 You deployed code but didn't **seed a `field_definitions` row**. Run

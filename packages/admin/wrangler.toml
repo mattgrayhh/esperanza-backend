@@ -47,6 +47,12 @@ bucket_name = "esperanza-cms"
 binding = "RENDER_Q"
 queue = "esperanza-pdf-render"
 
+# Service binding to the public read API. postWrite() purges edge cache via this
+# binding (preferred over the public API_PUBLIC_URL fetch).
+[[services]]
+binding = "API"
+service = "esperanza-api"
+
 # Service binding to the PDF renderer worker (same-origin preview proxy).
 # The admin's /api/pdf-preview/... route fetches via this binding instead of a
 # public URL so the preview never traverses the public internet.

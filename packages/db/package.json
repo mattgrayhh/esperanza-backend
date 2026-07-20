@@ -13,7 +13,8 @@
     "./slug": "./lib/slug.ts",
     "./override": "./lib/override.ts",
     "./pdf-invalidate": "./lib/pdf-invalidate.ts",
-    "./pdf-ensure": "./lib/pdf-ensure.ts"
+    "./pdf-ensure": "./lib/pdf-ensure.ts",
+    "./public-cache-purge": "./lib/public-cache-purge.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",

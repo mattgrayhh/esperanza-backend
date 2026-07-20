@@ -66,6 +66,7 @@ import {
   reservedKeysForEntity,
 } from './field-builder';
 import { chunk, AUDIT_ROWS_PER_INSERT } from './audit-chunk';
+import { purgePublicCache } from '@esperanza/db/public-cache-purge';
 
 // =============================================================================
 // Shared post-write step: audit_log rows + public-cache purge + PDF refresh.
@@ -81,43 +82,7 @@ interface AuditInput {
   actor: string;
 }
 
-// Public api (esperanza-api) edge-cache purge. The api Worker caches each
-// /api/public/<entity> for its TTL (qmi 60s, the rest 300s) and exposes a
-// ?purge=1 hook. Admin writes must purge or an edit only shows after the TTL —
-// the "I changed it but it still shows" class. Mirrors saveSiteSettings.
-// A promotions edit (publish/targeting/fields) flattens onto community + city +
-// qmi rows via the api's resolveEffectivePromo, so it purges those dependents
-// too — not just /promotions. Note admin `floor_plans` → api path `floorplans`.
-const PUBLIC_CACHE_DEPS: Record<string, string[]> = {
-  promotions: ['promotions', 'communities', 'cities', 'qmi'],
-  communities: ['communities', 'cities', 'qmi'],
-  floor_plans: ['floorplans', 'qmi'],
-  qmi: ['qmi'],
-  cities: ['cities'],
-  collections: ['collections'],
-  images: ['images'],
-  blogs: ['blogs'],
-  testimonials: ['testimonials'],
-  settings: ['settings'],
-};
-
-/** Best-effort: a purge failure must never fail the save (the TTL is the backstop).
- * The api worker requires `X-Purge-Key: <PURGE_KEY secret>` and IGNORES
- * unauthenticated ?purge=1, so the header must be present for the purge to land. */
-async function purgePublicCache(
-  env: { API_PUBLIC_URL?: string; PURGE_KEY?: string },
-  collection: string
-): Promise<void> {
-  const base = (env.API_PUBLIC_URL ?? '').replace(/\/+$/, '');
-  const entities = PUBLIC_CACHE_DEPS[collection];
-  if (!base || !entities) return;
-  const headers = env.PURGE_KEY ? { 'X-Purge-Key': env.PURGE_KEY } : undefined;
-  await Promise.all(
-    entities.map((e) =>
-      fetch(`${base}/api/public/${e}?purge=1`, { method: 'GET', headers }).catch(() => {})
-    )
-  );
-}
+// Public api (esperanza-api) edge-cache purge. See @esperanza/db/public-cache-purge.
 
 /**
  * Insert audit rows and (optionally) fan out site side effects. Call AFTER the
@@ -159,7 +124,7 @@ async function postWrite(
   // so the edit shows before the TTL instead of after it. Best-effort.
   try {
     await purgePublicCache(
-      env as unknown as { API_PUBLIC_URL?: string; PURGE_KEY?: string },
+      env as unknown as Parameters<typeof purgePublicCache>[0],
       collection
     );
   } catch {

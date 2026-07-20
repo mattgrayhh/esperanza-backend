@@ -244,8 +244,10 @@ after the D1 commit. `postWrite()`:
 - inserts `audit_log` rows — `{entity, entityId, field, action, oldValue, newValue, actor,
   created_at}` — chunked at **≤14 rows per INSERT** (D1 bind-parameter limit;
   `lib/audit-chunk.ts`);
-- purges the affected `esperanza-api` public-cache entity (`purgePublicCache`) so the site
-  picks up the change without waiting out the TTL;
+- purges the affected `esperanza-api` public-cache entities via the **API service
+  binding** (falls back to `API_PUBLIC_URL`) with an authenticated `?purge=1`
+  request — including `sitesearch` on every write — so the site picks up the change
+  without waiting out the TTL. The api returns `X-Purge-Applied: 1` when the bust lands;
 - for entities with brochures, marks PDFs stale via the render queue.
 
 **Exception:** unpublished draft creates (`createEntity` / `createCommunityDraft`) pass
