@@ -40,6 +40,7 @@ import {
   timeAgo,
 } from '@/lib/activity-format';
 import { cn } from '@/lib/utils';
+import { SYNC_LOG_ACTIVITY_WHERE, filterAuditRows, isHiddenSyncSource } from '@/lib/activity-filter';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,7 +59,7 @@ async function load(): Promise<{ runs: SyncRun[]; audit: AuditRow[] }> {
     sql.raw(
       `SELECT source, status, at, duration_s AS durationS, notes, error_message AS errorMessage
        FROM sync_log
-       WHERE source IS NULL OR source != 'framer'
+       WHERE ${SYNC_LOG_ACTIVITY_WHERE}
        ORDER BY at DESC, id DESC
        LIMIT 30`
     )
@@ -71,7 +72,7 @@ async function load(): Promise<{ runs: SyncRun[]; audit: AuditRow[] }> {
        LIMIT 80`
     )
   );
-  return { runs: runs ?? [], audit: audit ?? [] };
+  return { runs: (runs ?? []).filter((r) => !isHiddenSyncSource(r.source)), audit: filterAuditRows(audit ?? []) };
 }
 
 function statusVariant(status: string | null): 'default' | 'secondary' | 'destructive' | 'outline' {

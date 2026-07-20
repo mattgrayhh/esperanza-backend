@@ -29,6 +29,17 @@ can look like a flood of "sold" homes; the guard skips unpublishes but check whe
 earlier run slipped through. Recovery is to republish the legacy-live set. See
 [doc 02](./02-module-ingest.md).
 
+### "The admin Activity tab still shows Framer sync or edits"
+PR #154+ filters legacy `sync_log` rows (`source='framer'`) and audit rows whose
+entity/field/actor mention Framer. After deploy, hard-refresh `/activity`.
+
+If **new** Framer sync rows keep appearing (recent timestamps), the orphaned
+`esperanza-framer-push` worker may still be deployed on Cloudflare even though the
+package was removed from the repo. Delete that worker and its queue consumer in the
+Cloudflare dashboard (or `wrangler delete esperanza-framer-push`), and drain/delete
+`esperanza-framer-queue` if it still exists. Nothing in the current codebase enqueues
+to it.
+
 ### "My remote migration failed but local passed"
 You likely hit the **D1 100-column limit** (or another remote-only limit) that local SQLite
 doesn't enforce. Split the table / move columns into a view. Always `--local` first. See

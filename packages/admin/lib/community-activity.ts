@@ -14,6 +14,7 @@
 import { sql } from 'drizzle-orm';
 import type { Db } from './db';
 import { groupActivity, type AuditRow, type ActivityGroup } from './activity-format';
+import { filterAuditRows } from './activity-filter';
 import { parseCommunityNames } from './community-floor-plans';
 
 /**
@@ -70,5 +71,5 @@ export async function loadCommunityActivity(
     .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
     .slice(0, limit);
 
-  return groupActivity(merged);
+  return groupActivity(filterAuditRows(merged));
 }

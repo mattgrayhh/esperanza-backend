@@ -67,6 +67,7 @@ import { Button } from '@/components/ui/button';
 import { SyncNowButton } from '@/components/SyncNowButton';
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import { cn } from '@/lib/utils';
+import { filterAuditRows } from '@/lib/activity-filter';
 
 // Admin pages are always dynamic + auth-gated; never statically cache.
 export const dynamic = 'force-dynamic';
@@ -244,7 +245,7 @@ async function loadDashboard(): Promise<DashboardData> {
 // =============================================================================
 export default async function DashboardPage() {
   const d = await loadDashboard();
-  const groups = groupActivity(d.recent).slice(0, 7);
+  const groups = groupActivity(filterAuditRows(d.recent)).slice(0, 7);
   const drafts = d.qmi.unmatched + d.qmi.planGaps + d.qmi.pdfPending;
 
   const siteOffline = !d.site.online;
