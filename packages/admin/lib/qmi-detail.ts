@@ -441,13 +441,22 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
     bannerText: string | null;
     showCardBadge: number | boolean | null;
   }>;
-  const promoTargetRows = (await db
+  const promoTargetRowsRaw = (await db
     .select({
       promotionId: promotionTargets.promotionId,
       targetType: promotionTargets.targetType,
       targetId: promotionTargets.targetId,
     })
-    .from(promotionTargets)) as PromoTargetLike[];
+    .from(promotionTargets)) as Array<{
+    promotionId: string;
+    targetType: string;
+    targetId: string | null;
+  }>;
+  const promoTargetRows: PromoTargetLike[] = promoTargetRowsRaw.map((t) => ({
+    promotion_id: t.promotionId,
+    target_type: t.targetType as PromoTargetLike['target_type'],
+    target_id: t.targetId,
+  }));
 
   const winner = resolveEffectivePromo(
     'qmi',

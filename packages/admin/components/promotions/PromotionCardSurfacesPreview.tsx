@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  classifyPromoBannerStyle,
+  promoBannerStyleFromCopy,
   PROMO_BANNER_STYLE_CLASSES,
 } from '@esperanza/db/promo-banner-style';
 import { cn } from '@/lib/utils';
@@ -28,7 +28,7 @@ function regionDimmed(
 
 /**
  * Admin preview of community/home card promo surfaces:
- * corner badge + tan incentive line (Show Card Badge), green promo line + Learn More pill (Show Card CTA).
+ * corner badge + green/gold incentive line (Show Card Badge), promo line + Learn More pill (Show Card CTA).
  */
 export function PromotionCardSurfacesPreview({
   badgeText,
@@ -42,7 +42,7 @@ export function PromotionCardSurfacesPreview({
 }: PromotionCardSurfacesPreviewProps) {
   const badge = badgeText.trim();
   const incentive = incentiveText.trim();
-  const incentiveStyle = classifyPromoBannerStyle(incentive);
+  const incentiveStyle = promoBannerStyleFromCopy(incentive, badge);
   const cta = ctaLabel.trim() || 'Learn More';
   const dimRest = spotlight != null;
 
@@ -112,7 +112,7 @@ export function PromotionCardSurfacesPreview({
               )}
             >
               {incentive || badge ? (
-                <p className="text-[11px] font-semibold tracking-wide text-[#2f5d4a] uppercase">
+                <p className="text-[11px] font-semibold tracking-wide text-brand uppercase">
                   {incentive || badge}
                 </p>
               ) : (

@@ -2,12 +2,16 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* Scan shared db helpers so promo preview utility classes are emitted at build time. */
+@source "../../../packages/db/lib/**/*.ts";
+
 @custom-variant dark (&:is(.dark *));
 
 /* Tailwind v4: theme tokens live here via @theme. Minimal admin palette. */
 @theme {
   --color-brand: #2f5d4a;
   --color-brand-foreground: #ffffff;
+  --color-promo-gold: #c4b59a;
   --color-surface: #f3f1ed;
   --color-mint: #dfefe4;
   /* Warning/override state — warm amber, distinct from brand green and destructive terracotta.

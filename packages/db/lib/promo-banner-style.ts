@@ -13,8 +13,8 @@ export type PromoBannerStyle = 'green' | 'gold';
 
 /** Tailwind classes matching the live-site promo bar colors. */
 export const PROMO_BANNER_STYLE_CLASSES: Record<PromoBannerStyle, string> = {
-  green: 'bg-[#2f5d4a] text-white',
-  gold: 'bg-[#c4b59a] text-black',
+  green: 'bg-brand text-brand-foreground',
+  gold: 'bg-promo-gold text-black',
 };
 
 /**
@@ -27,6 +27,17 @@ export function classifyPromoBannerStyle(text: string): PromoBannerStyle {
   if (/4\.99\s*%?/i.test(t)) return 'green';
   if (/flex/i.test(t)) return 'gold';
   return 'green';
+}
+
+/** Classify from one or more promo copy fields (headline, badge, title, …). */
+export function promoBannerStyleFromCopy(
+  ...parts: Array<string | null | undefined>
+): PromoBannerStyle {
+  const combined = parts
+    .map((p) => (p ?? '').trim())
+    .filter(Boolean)
+    .join(' ');
+  return classifyPromoBannerStyle(combined);
 }
 
 /** Text shown on the listing-card promo bar: per-home incentive overrides resolved promo. */
