@@ -7,6 +7,21 @@ of commands. Part 3 is the glossary of every name and identifier in the system.
 
 ## Part 1 — Symptom → likely cause → fix
 
+### "Community page shows no Quick Move-In cards (legacy site has them)"
+1. **Confirm the API:** `GET /api/public/qmi` and filter by community name. Only
+   **published** homes appear — if D1 has `published = 0`, the card will not render.
+2. **Missing baked section:** Some community pages (e.g. Texas Heights) were built without
+   a `#specs` section. The shipped `community-homes-live.js` used to exit immediately when
+   no `[data-qmi-slug]` elements existed, so nothing rendered. Patch
+   `packages/api/live-scripts/community-homes-live.js` (mirrored in `esperanza-frontend`)
+   so it fetches published QMIs for the page's community and injects the `#specs` grid at
+   runtime when baked cards are absent.
+3. **Publish the homes:** If legacy O'Neill shows more cards than the new site, the extra
+   homes are likely still **unpublished in D1**. Publish them in the admin (or verify they
+   should not be live — sold/early-stage homes).
+4. **Deploy:** redeploy `esperanzahomes-frontend` so the updated
+   `community-homes-live.js` asset is served. Purging the api cache alone is not enough.
+
 ### "I edited a field in the admin but the website didn't change"
 1. **Which site are you checking?** Marketing edits flow to **`esperanzahomes.hazardhouse.ai`**
    (the new static frontend reading `esperanza-api`). **`www.esperanzahomes.com` is still the
