@@ -36,6 +36,21 @@ of commands. Part 3 is the glossary of every name and identifier in the system.
    the purge is best-effort and the TTL (≤5 min) is the backstop — wait it out or hit
    `GET {API_PUBLIC_URL}/api/public/<entity>?purge=1` with `X-Purge-Key`.
 
+### "4.99% promo banners show gold/tan instead of green on the live site"
+1. **Confirm the API first:** `GET /api/public/qmi` must return `promo_banner_style: "green"`
+   for 4.99% homes (e.g. 2434 Nilgai Trail). If it says `green` but the site is gold, the
+   bug is in **`esperanza-frontend` runtime JS**, not D1 or the admin.
+2. **Detail pages** bake `<div class="status-banner overlay-promo … tan" data-live="promo">`.
+   `hydrate-live.js` updates the text from the API but (on the shipped build) does **not**
+   swap `tan` → `green`. Patch `packages/api/live-scripts/hydrate-live.js` in this repo
+   (mirrored in `esperanza-frontend`) so hydration also sets the bar class from
+   `promo_banner_style`, then redeploy the frontend worker.
+3. **Listing cards** (`available-live.js`) must prefer `promo_banner_style` over stale
+   `live-facts.json` badge colors — see `packages/api/live-scripts/available-live.js`.
+4. **Deploy:** merge the backend PR, then redeploy `esperanzahomes-frontend` (GitHub Actions
+   `deploy.yml` or the admin's `FRONTEND_DEPLOY_HOOK_URL`). Purging the api cache alone is
+   not enough — the JS assets are baked on the frontend worker.
+
 ### "A published home has a page but doesn't appear in the header search bar"
 1. **Which search data source is the page using?** `sitesearch-live.js` fetches
    `/sitesearch.json`. The live index is now served at **`/api/public/sitesearch.json`**
