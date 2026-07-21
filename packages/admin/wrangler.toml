@@ -113,9 +113,19 @@ RHODES_API_URL = "https://rhodes-availability.round-base-ed8c.workers.dev"
 # edge TTL is the backstop if the purge fails).
 API_PUBLIC_URL = "https://esperanza-api.round-base-ed8c.workers.dev"
 # Static frontend worker — postWrite() also purges this origin's /api/public/* proxy
-# cache (separate from esperanza-api's own edge cache) and triggers a redeploy via
-# FRONTEND_DEPLOY_HOOK_URL so baked HTML picks up admin edits.
+# cache (separate from esperanza-api's own edge cache).
 FRONTEND_PUBLIC_URL = "https://esperanzahomes.hazardhouse.ai"
+# Publish → rebuild: postWrite() triggers a frontend redeploy so baked HTML (copy,
+# galleries, list grids, community/floor-plan pages) reflects the edit — live islands
+# already update via the cache purge above. The frontend deploys via GitHub Actions
+# (deploy.yml, workflow_dispatch), so we dispatch that workflow on each ref below using
+# the GITHUB_DISPATCH_TOKEN secret. Both refs during the domain transition: `main`
+# (prod worker) + `staging` (the worker esperanzahomes.hazardhouse.ai currently serves).
+# Narrow to "main" once the public domain points at the prod worker. See
+# @esperanza/db/lib/site-rebuild.ts. (A plain FRONTEND_DEPLOY_HOOK_URL POST hook, e.g. a
+# Cloudflare Workers Build hook, is used instead if that var is set.)
+FRONTEND_REPO = "Hazard-House/esperanza-frontend"
+FRONTEND_DEPLOY_REFS = "main,staging"
 # MailLayer transactional-email endpoint. lib/maillayer.ts emails a generated password
 # to a user on create / reset. Defaulted in code; override here only if it ever changes.
 MAILLAYER_API_URL = "https://mailer.hazardhouse.ai/api/transactional/send"
@@ -160,12 +170,22 @@ MAILLAYER_API_URL = "https://mailer.hazardhouse.ai/api/transactional/send"
 #                     wrangler secret put PURGE_KEY --config packages/admin/wrangler.toml
 #                   (locally, put PURGE_KEY=... in packages/admin/.dev.vars).
 #
-#   FRONTEND_DEPLOY_HOOK_URL — POST target that redeploys esperanza-frontend after an
-#                   admin save (Cloudflare Pages/Workers deploy hook or CI dispatch).
-#                   Most public pages are static HTML baked at build time; purging the
-#                   api cache alone only updates live JS islands (maps, settings, QMI
-#                   card reconciliation). Without this hook, operators must redeploy the
-#                   frontend manually to see copy/gallery/list changes. Set with:
+#   GITHUB_DISPATCH_TOKEN — (publish → rebuild, ACTIVE PATH) a fine-grained GitHub PAT
+#                   with `Actions: Read and write` (+ Metadata: read) scoped to
+#                   Hazard-House/esperanza-frontend. postWrite() uses it to trigger that
+#                   repo's deploy.yml workflow_dispatch on FRONTEND_DEPLOY_REFS, so a
+#                   publish re-bakes the static site. Most public pages are static HTML
+#                   baked at build time; purging the api cache alone only updates live JS
+#                   islands (maps, settings, QMI card reconciliation) — WITHOUT this
+#                   token, copy/gallery/list/community/floor-plan edits do NOT appear
+#                   until someone redeploys manually. Create the PAT at
+#                   github.com/settings/personal-access-tokens → Fine-grained, then:
+#                     wrangler secret put GITHUB_DISPATCH_TOKEN --config packages/admin/wrangler.toml
+#                   (locally, put GITHUB_DISPATCH_TOKEN=... in packages/admin/.dev.vars).
+#
+#   FRONTEND_DEPLOY_HOOK_URL — (OPTIONAL alt to GITHUB_DISPATCH_TOKEN) a plain POST
+#                   deploy hook (e.g. a Cloudflare Workers Build hook). If set, it is used
+#                   instead of the GitHub dispatch. Set with:
 #                     wrangler secret put FRONTEND_DEPLOY_HOOK_URL --config packages/admin/wrangler.toml
 #
 #   MAILLAYER_API_KEY — the ENABLED Esperanza MailLayer template's `txn_…` key. Used by
