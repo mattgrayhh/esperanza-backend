@@ -512,7 +512,7 @@ const floor_plans: EntityFieldConfig = {
     { field: 'description', label: 'Description', widget: 'richtext', bucket: 'admin' },
     { field: 'plan_viewer_url', label: 'Plan Viewer URL', widget: 'text', bucket: 'admin' },
     { field: 'virtual_tour_url', label: 'Virtual Tour URL', widget: 'text', bucket: 'admin' },
-    { field: 'brochure_pdf_url', label: 'Brochure PDF', widget: 'text', bucket: 'admin' },
+    { field: 'brochure_pdf_url', label: 'Brochure PDF', widget: 'image', bucket: 'admin', help: 'The floor-plan brochure PDF. Drag/drop or choose a PDF to upload (or replace the auto-generated one). Whatever is set here is what downloads on the plan page.' },
     { field: 'brochure_pdf', label: 'Brochure PDF (legacy)', widget: 'text', bucket: 'admin', visibleInForm: false }, // [P2] retired dup of brochure_pdf_url — hidden; column kept
     // [34] incentive removed from the admin form (D1 column + sync unchanged).
     { field: 'energy_cost_low', label: 'Energy Cost Low', widget: 'number', bucket: 'admin', step: 'any', halfWidth: true },
