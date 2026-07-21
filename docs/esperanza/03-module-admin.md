@@ -418,26 +418,26 @@ rows.
 
 ### Draft preview link (QMI → staging)
 
-A **published** QMI shows "Preview live page" (the real public URL). A **draft** now shows
-**"Preview draft (staging)"** — a shareable link that renders the unpublished home on the
-staging Worker without touching production. Flow:
+**Published** QMIs show **Preview live page** (the baked public URL) and **Preview on
+staging** (same page on the staging Worker). **Draft** QMIs show only the staging preview.
 
-- `live-site.ts` `buildLiveSitePlacement` emits `previewUrl` for QMI:
-  `https://esperanzahomes-staging.round-base-ed8c.workers.dev/new-homes/available/home/?slug=<slug>` (the
-  client-rendered detail shell renders any home by `?slug=`). `RecordEditShell` renders the
-  link for non-live QMIs.
-- The **staging** frontend Worker's `/api/*` proxy (`worker.js`) rewrites `/api/public/qmi`
-  → **`/api/preview/qmi`** and attaches the secret header **only when `env.PREVIEW_SECRET`
-  is bound** (staging only). So the detail island's normal `/api/public/qmi` fetch returns
-  drafts on staging, and nothing changes on prod.
-- The API's `/api/preview/qmi` (packages/api) reads **`v_preview_qmi`** (identical to
-  `v_public_qmi` minus the publish gate) and returns published + drafts, but ONLY when
-  `X-Esperanza-Preview` matches `env.PREVIEW_SECRET` (constant-time; unit-tested in
-  `preview-auth.test.ts`). Unset secret (prod) → 404, so drafts can never leak publicly.
+Public QMI detail pages live at the hierarchical path the frontend ships:
 
-**Provisioning:** `PREVIEW_SECRET` is a `wrangler secret` set on `esperanza-api` and the
-staging frontend Worker only. `v_public_qmi` is untouched — the live gate is unchanged.
-Activation needs a staging deploy (push to the `staging` branch).
+`/new-homes/tx/{city-slug}/{community-slug}/{home-slug}/`
+
+(e.g. `/new-homes/tx/mcallen/harvest-coves/3909-westway-ave/`). The admin placement rail
+builds that path from the QMI's `slug` column plus the linked city/community slugs. The
+legacy `/new-homes/available/{underscore_slug}` pattern 404s on the live site.
+
+- **Published + city/community known:** `previewUrl` opens the baked page on staging
+  (`esperanzahomes-staging.round-base-ed8c.workers.dev` + the same tx path).
+- **Draft or missing location slugs:** `previewUrl` falls back to the runtime shell
+  `/new-homes/available/home/?slug={dash-slug}&preview=1`. The shell's `qmi-detail-live.js`
+  matches on the **dash** `slug` column — not `viewer_slug` underscores — or it shows
+  "This home is no longer available".
+- The **staging** frontend Worker's `/api/*` proxy attaches `PREVIEW_SECRET` for
+  `/api/preview/*` so the shell can fetch drafts. Published pages on staging use the same
+  static HTML as prod and do not need the shell.
 
 ### Community HOA links + floor plans save with the page Save
 

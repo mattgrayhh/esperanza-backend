@@ -7,8 +7,13 @@ export const LIVE_SITE_ORIGIN = 'https://esperanzahomes.hazardhouse.ai';
  *  preview secret, so the QMI detail island there renders DRAFT homes. Used to offer a
  *  shareable "Preview draft" link for unpublished QMI homes. */
 export const STAGING_ORIGIN = 'https://esperanzahomes-staging.round-base-ed8c.workers.dev';
-/** The client-rendered QMI detail shell — renders any home by ?slug=, incl. drafts on staging. */
+/** Runtime QMI detail shell — fetches live API data by ?slug= (dash slug). Used for drafts
+ *  that do not yet have a baked static page. */
 const QMI_PREVIEW_SHELL = '/new-homes/available/home/';
+
+/** Canonical public QMI paths on esperanza-frontend: /new-homes/tx/{city}/{community}/{slug}/.
+ *  The legacy /new-homes/available/{underscore_slug} pattern 404s on the live site. */
+const QMI_TX_PREFIX = '/new-homes/tx';
 
 /** Path prefixes — mirrors packages/api/src/sitesearch.ts DEFAULT_BASE_URLS. */
 export const LIVE_SITE_PATHS = {
@@ -59,6 +64,46 @@ function fullUrl(path: string | null): string | null {
   return `${LIVE_SITE_ORIGIN}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
+/** Dash slug from qmi.slug — the segment the frontend hierarchical URL and API use. */
+export function qmiDashSlug(row: Record<string, unknown>): string {
+  return str(col(row, 'slug'));
+}
+
+/**
+ * Build the live-site QMI detail path. Prefer the baked hierarchical route the frontend
+ * ships (/new-homes/tx/{city}/{community}/{dash-slug}/), which qmi-links.json indexes.
+ * Falls back to page_url when it already points at a short tx path, then the legacy
+ * /new-homes/available/{underscore_slug} pattern (may 404 until a frontend rebuild).
+ *
+ * Optional row keys: city_slug, community_slug (from joined cities/communities).
+ */
+export function qmiDetailPath(row: Record<string, unknown>): string | null {
+  const dashSlug = qmiDashSlug(row);
+  const citySlug = str(col(row, 'city_slug'));
+  const communitySlug = str(col(row, 'community_slug'));
+  if (dashSlug && citySlug && communitySlug) {
+    return `${QMI_TX_PREFIX}/${citySlug}/${communitySlug}/${dashSlug}/`;
+  }
+
+  const pageUrl = str(col(row, 'page_url'));
+  if (pageUrl) {
+    try {
+      const pathname = pageUrl.startsWith('http')
+        ? new URL(pageUrl).pathname
+        : pageUrl.startsWith('/')
+          ? pageUrl
+          : `/${pageUrl}`;
+      const short = pathname.match(/^(\/new-homes\/tx\/[^/]+\/[^/]+\/[^/]+)\/?$/);
+      if (short) return short[1]!.endsWith('/') ? short[1]! : `${short[1]}/`;
+    } catch {
+      /* ignore malformed page_url */
+    }
+  }
+
+  const legacy = resolveSlug('qmi', row);
+  return legacy ? joinPath(LIVE_SITE_PATHS.qmi, legacy) : null;
+}
+
 export function resolveSlug(entity: EntityKey, row: Record<string, unknown>): string {
   switch (entity) {
     case 'qmi':
@@ -87,11 +132,10 @@ export function resolveSlug(entity: EntityKey, row: Record<string, unknown>): st
 }
 
 export function liveSitePath(entity: EntityKey, row: Record<string, unknown>): string | null {
+  if (entity === 'qmi') return qmiDetailPath(row);
   const slug = resolveSlug(entity, row);
   if (!slug) return null;
   switch (entity) {
-    case 'qmi':
-      return joinPath(LIVE_SITE_PATHS.qmi, slug);
     case 'communities':
       return joinPath(LIVE_SITE_PATHS.community, slug);
     case 'floor_plans':
@@ -187,12 +231,22 @@ export function buildLiveSitePlacement(
   // 404s. Coming-soon counts as live (the page renders). Fall back to `active` for
   // entities gated on that instead of `published`.
   const isLive = Boolean(path) && Boolean(gate?.published ?? gate?.active ?? false);
-  // QMI-only staging preview (item 5). The staging Worker's /api proxy injects the preview
-  // secret, so its detail island renders drafts. Shareable, no login, never touches prod.
-  const qmiSlug = entity === 'qmi' ? resolveSlug(entity, row) : '';
-  const previewUrl = qmiSlug
-    ? `${STAGING_ORIGIN}${QMI_PREVIEW_SHELL}?slug=${encodeURIComponent(qmiSlug)}&preview=1`
-    : null;
+  // QMI staging preview: published homes with a hierarchical path open the baked page on
+  // staging (same static assets as prod). Drafts / homes without city+community use the
+  // runtime shell — MUST pass the dash slug (qmi.slug); the API matches on dashes, not
+  // viewer_slug underscores, or the island shows "This home is no longer available".
+  let previewUrl: string | null = null;
+  if (entity === 'qmi') {
+    const dashSlug = qmiDashSlug(row);
+    const txPath = qmiDetailPath(row);
+    const txLooksCanonical =
+      txPath?.startsWith(`${QMI_TX_PREFIX}/`) && txPath.split('/').filter(Boolean).length >= 5;
+    if (isLive && txLooksCanonical && txPath) {
+      previewUrl = `${STAGING_ORIGIN}${txPath}`;
+    } else if (dashSlug) {
+      previewUrl = `${STAGING_ORIGIN}${QMI_PREVIEW_SHELL}?slug=${encodeURIComponent(dashSlug)}&preview=1`;
+    }
+  }
   return {
     pageLabel: PAGE_LABELS[entity],
     path,
