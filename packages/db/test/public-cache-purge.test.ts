@@ -10,6 +10,7 @@ describe('publicCacheEntitiesFor', () => {
       'cities',
       'qmi',
       'sitesearch',
+      'sitesearch.json',
     ]);
   });
 
@@ -52,11 +53,12 @@ describe('purgePublicCache', () => {
       },
       'qmi'
     );
-    expect(apiFetch).toHaveBeenCalledTimes(2); // qmi + sitesearch
-    expect(globalFetch).toHaveBeenCalledTimes(2);
+    expect(apiFetch).toHaveBeenCalledTimes(3); // qmi + sitesearch + sitesearch.json
+    expect(globalFetch).toHaveBeenCalledTimes(3);
     const frontendUrls = globalFetch.mock.calls.map((c) => String(c[0]));
     expect(frontendUrls).toContain('https://frontend.example/api/public/qmi?purge=1');
     expect(frontendUrls).toContain('https://frontend.example/api/public/sitesearch?purge=1');
+    expect(frontendUrls).toContain('https://frontend.example/api/public/sitesearch.json?purge=1');
     vi.unstubAllGlobals();
   });
 });

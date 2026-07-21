@@ -47,7 +47,7 @@ import {
   type PromoTargetType,
 } from '@esperanza/db/promo';
 import { COMMUNITY_PLAN_PRICE_SQL } from '@esperanza/db/elevation-price';
-import { buildSiteSearchPayload } from './sitesearch.js';
+import { buildSiteSearchPayload, buildLegacySiteSearchPayload } from './sitesearch.js';
 import * as Sentry from '@sentry/cloudflare';
 
 // -----------------------------------------------------------------------------
@@ -109,6 +109,7 @@ const TTL: Record<string, number> = {
   blogs: 300,
   testimonials: 300,
   sitesearch: 300,
+  'sitesearch.json': 300,
   settings: 300,
 };
 
@@ -832,7 +833,8 @@ async function buildPayload(
   entity: string,
   session: D1DatabaseSession,
   opts: { preview?: boolean } = {}
-): Promise<Record<string, unknown>> {
+  // sitesearch.json is a top-level array (legacy O'Neil shape), not an object envelope.
+): Promise<unknown> {
   const now = new Date().toISOString().slice(0, 10);
   const ts = Date.now();
 
@@ -971,6 +973,11 @@ async function buildPayload(
       // Unified header-search index — clone of the legacy /sitesearch.json feed.
       // See sitesearch.ts + docs/sitesearch-clone-design.md.
       return await buildSiteSearchPayload(session);
+    }
+
+    case 'sitesearch.json': {
+      // Legacy O'Neil flat array for sitesearch-live.js (live D1, hierarchical QMI hrefs).
+      return await buildLegacySiteSearchPayload(session);
     }
 
     case 'settings': {
@@ -1116,7 +1123,7 @@ const apiHandler = {
       }
     }
 
-    const match = url.pathname.match(/^\/api\/public\/([a-z]+)\/?$/);
+    const match = url.pathname.match(/^\/api\/public\/([a-z.]+)\/?$/);
     if (request.method !== 'GET' || !match || !ENTITIES.includes(match[1]!)) {
       return new Response('Not found', { status: 404, headers: cors });
     }

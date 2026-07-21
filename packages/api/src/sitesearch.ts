@@ -1,28 +1,17 @@
 // =============================================================================
 // /api/public/sitesearch — the unified header-search index.
 //
-// Clone of the legacy O'Neil Interactive `/sitesearch.json` feed: a single flat
-// array fetched once by the client and filtered in-browser (no per-keystroke
-// network). Each record is { label, type, href }. The frontend's SiteSearch
-// component does case-insensitive substring matching over `label` and navigates
-// to `href` on select.
+// Two shapes, same live D1 data:
+//   1. `{ results, ts }` with `{ label, type, href }` rows — modern component shape.
+//   2. Flat O'Neil array at `/api/public/sitesearch.json` — the legacy
+//      `{ href, community, plan, "quick move-in", "lot number", blog }` records
+//      that sitesearch-live.js consumes (one searchable field populated per row).
 //
-// Source = the existing v_public_* views (which already enforce `published = 1`),
-// so this index only ever contains live pages. A QMI emits TWO records — one
-// keyed by street address ("quick move in"), one by lot number ("lot number") —
-// both pointing at the same QMI page, exactly like the legacy widget.
-//
-// This module is intentionally self-contained (no imports from index.ts) so it
-// can evolve independently of the main serializer file. index.ts wires it in
-// with a single `case 'sitesearch'` (see docs/sitesearch-clone-design.md).
-//
-// QMI hrefs MUST use the same public slug the frontend renders (dashes
-// normalized to underscores, with the viewer/seo/rich/slug precedence), so the
-// QMI slug is derived via the shared `qmiPublicSlug` rather than the raw `slug`
-// column — otherwise every QMI/lot-number result 404s.
+// QMI hrefs use qmiDetailPath() so search, qmi-links.json, and baked pages agree:
+// `/new-homes/tx/{city}/{community}/{dash-slug}/`.
 // =============================================================================
 
-import { qmiPublicSlug } from '@esperanza/db/slug';
+import { qmiDetailPath } from '@esperanza/db/slug';
 
 export type SiteSearchType =
   | 'community'
@@ -35,6 +24,16 @@ export interface SiteSearchRecord {
   label: string;
   type: SiteSearchType;
   href: string;
+}
+
+/** Legacy O'Neil / sitesearch-live.js row — exactly one text column is non-empty. */
+export interface LegacySiteSearchRecord {
+  href: string;
+  community: string;
+  plan: string;
+  'quick move-in': string;
+  'lot number': string;
+  blog: string;
 }
 
 /** Public path prefixes on the frontend (corrected 2026-06-03). */
@@ -52,32 +51,47 @@ export const DEFAULT_BASE_URLS: BaseUrls = {
   blog: '/blog',
 };
 
+const LEGACY_EMPTY: Omit<LegacySiteSearchRecord, 'href'> = {
+  community: '',
+  plan: '',
+  'quick move-in': '',
+  'lot number': '',
+  blog: '',
+};
+
 /**
- * SQL run against the public views. The views already filter `published = 1`,
- * so no gate is repeated here — we just select the label + slug columns.
+ * SQL run against the public views. The views already filter `published = 1`.
+ * QMI rows join cities/communities for hierarchical detail hrefs.
  */
 export const SITESEARCH_SQL = {
   communities: 'SELECT name, slug FROM v_public_communities',
   floorPlans: 'SELECT name, slug FROM v_public_floor_plans',
-  // id + all slug-source columns so the QMI href matches the live page
-  // slug exactly (see qmiPublicSlug). The raw `slug` alone is dash-cased and 404s.
-  qmis: 'SELECT id, address, community, lot_number, slug, seo_slug, rich_slug, viewer_slug FROM v_public_qmi',
+  qmis: `SELECT q.id, q.address, q.community, q.lot_number, q.slug, q.seo_slug, q.rich_slug,
+                q.viewer_slug, q.page_url, ci.slug AS city_slug, c.slug AS community_slug
+         FROM v_public_qmi q
+         LEFT JOIN communities c ON c.id = q.community_id
+         LEFT JOIN cities ci ON ci.id = q.city_id`,
   blogs: 'SELECT title, slug FROM v_public_blogs',
 } as const;
+
+interface RawQmiRow {
+  id?: unknown;
+  address?: unknown;
+  community?: unknown;
+  lot_number?: unknown;
+  slug?: unknown;
+  seo_slug?: unknown;
+  rich_slug?: unknown;
+  viewer_slug?: unknown;
+  page_url?: unknown;
+  city_slug?: unknown;
+  community_slug?: unknown;
+}
 
 interface RawRows {
   communities: ReadonlyArray<{ name?: unknown; slug?: unknown }>;
   floorPlans: ReadonlyArray<{ name?: unknown; slug?: unknown }>;
-  qmis: ReadonlyArray<{
-    id?: unknown;
-    address?: unknown;
-    community?: unknown;
-    lot_number?: unknown;
-    slug?: unknown;
-    seo_slug?: unknown;
-    rich_slug?: unknown;
-    viewer_slug?: unknown;
-  }>;
+  qmis: ReadonlyArray<RawQmiRow>;
   blogs: ReadonlyArray<{ title?: unknown; slug?: unknown }>;
 }
 
@@ -85,9 +99,27 @@ interface RawRows {
 const str = (v: unknown): string => (v == null ? '' : String(v).trim());
 const joinUrl = (base: string, slug: string): string => `${base.replace(/\/+$/, '')}/${slug}`;
 
+function qmiHref(q: RawQmiRow): string | null {
+  return qmiDetailPath(q);
+}
+
+async function loadRows(session: Preparable): Promise<RawRows> {
+  const [c, f, q, b] = await Promise.all([
+    session.prepare(SITESEARCH_SQL.communities).all(),
+    session.prepare(SITESEARCH_SQL.floorPlans).all(),
+    session.prepare(SITESEARCH_SQL.qmis).all(),
+    session.prepare(SITESEARCH_SQL.blogs).all(),
+  ]);
+  return {
+    communities: (c.results ?? []) as RawRows['communities'],
+    floorPlans: (f.results ?? []) as RawRows['floorPlans'],
+    qmis: (q.results ?? []) as RawRows['qmis'],
+    blogs: (b.results ?? []) as RawRows['blogs'],
+  };
+}
+
 // -----------------------------------------------------------------------------
-// buildIndex — pure serializer. Given rows shaped like the view output, returns
-// the flat search index. Rows missing a slug or a usable label are dropped.
+// buildIndex — modern `{ label, type, href }` shape
 // -----------------------------------------------------------------------------
 export function buildIndex(rows: RawRows, base: BaseUrls = DEFAULT_BASE_URLS): SiteSearchRecord[] {
   const out: SiteSearchRecord[] = [];
@@ -105,9 +137,8 @@ export function buildIndex(rows: RawRows, base: BaseUrls = DEFAULT_BASE_URLS): S
   }
 
   for (const q of rows.qmis) {
-    const slug = qmiPublicSlug(q);
-    if (!slug) continue;
-    const href = joinUrl(base.qmi, slug);
+    const href = qmiHref(q);
+    if (!href) continue;
     const community = str(q.community);
     const address = str(q.address);
     const lot = str(q.lot_number);
@@ -131,33 +162,77 @@ export function buildIndex(rows: RawRows, base: BaseUrls = DEFAULT_BASE_URLS): S
   return out;
 }
 
+// -----------------------------------------------------------------------------
+// buildLegacyIndex — O'Neil flat array for sitesearch-live.js
+// -----------------------------------------------------------------------------
+export function buildLegacyIndex(
+  rows: RawRows,
+  base: BaseUrls = DEFAULT_BASE_URLS,
+): LegacySiteSearchRecord[] {
+  const out: LegacySiteSearchRecord[] = [];
+
+  for (const c of rows.communities) {
+    const label = str(c.name);
+    const slug = str(c.slug);
+    if (label && slug) {
+      out.push({ ...LEGACY_EMPTY, href: joinUrl(base.community, slug), community: label });
+    }
+  }
+
+  for (const f of rows.floorPlans) {
+    const label = str(f.name);
+    const slug = str(f.slug);
+    if (label && slug) {
+      out.push({ ...LEGACY_EMPTY, href: joinUrl(base.floorPlan, slug), plan: label });
+    }
+  }
+
+  for (const q of rows.qmis) {
+    const href = qmiHref(q);
+    if (!href) continue;
+    const community = str(q.community);
+    const address = str(q.address);
+    const lot = str(q.lot_number);
+
+    if (address) {
+      const label = community ? `${address} at ${community}` : address;
+      out.push({ ...LEGACY_EMPTY, href, 'quick move-in': label });
+    }
+    if (lot) {
+      const label = community ? `Lot ${lot} — ${community}` : `Lot ${lot}`;
+      out.push({ ...LEGACY_EMPTY, href, 'lot number': label });
+    }
+  }
+
+  for (const b of rows.blogs) {
+    const label = str(b.title);
+    const slug = str(b.slug);
+    if (label && slug) {
+      out.push({ ...LEGACY_EMPTY, href: joinUrl(base.blog, slug), blog: label });
+    }
+  }
+
+  return out;
+}
+
 /** Minimal shape of the D1 session this module needs (matches D1DatabaseSession). */
 interface Preparable {
   prepare(sql: string): { all(): Promise<{ results?: unknown[] }> };
 }
 
-/**
- * Query the four public views and assemble the index. Used by index.ts inside
- * the standard Cache-API wrap. Returns the response payload `{ results, ts }`.
- */
 export async function buildSiteSearchPayload(
   session: Preparable,
   base: BaseUrls = DEFAULT_BASE_URLS,
 ): Promise<{ results: SiteSearchRecord[]; ts: number }> {
-  const [c, f, q, b] = await Promise.all([
-    session.prepare(SITESEARCH_SQL.communities).all(),
-    session.prepare(SITESEARCH_SQL.floorPlans).all(),
-    session.prepare(SITESEARCH_SQL.qmis).all(),
-    session.prepare(SITESEARCH_SQL.blogs).all(),
-  ]);
-  const results = buildIndex(
-    {
-      communities: (c.results ?? []) as RawRows['communities'],
-      floorPlans: (f.results ?? []) as RawRows['floorPlans'],
-      qmis: (q.results ?? []) as RawRows['qmis'],
-      blogs: (b.results ?? []) as RawRows['blogs'],
-    },
-    base,
-  );
-  return { results, ts: Date.now() };
+  const rows = await loadRows(session);
+  return { results: buildIndex(rows, base), ts: Date.now() };
+}
+
+/** Flat legacy array — drop-in replacement for the static `/sitesearch.json` asset. */
+export async function buildLegacySiteSearchPayload(
+  session: Preparable,
+  base: BaseUrls = DEFAULT_BASE_URLS,
+): Promise<LegacySiteSearchRecord[]> {
+  const rows = await loadRows(session);
+  return buildLegacyIndex(rows, base);
 }
