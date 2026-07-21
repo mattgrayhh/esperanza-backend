@@ -278,22 +278,26 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
   // Resolve community / city NAMES — prefer the joined table, fall back to the synced
   // name mirror columns on qmi (synced_community_name / synced_floor_plan_name).
   let communityName = s(r.synced_community_name);
+  let communitySlug = '';
   if (effCommunityId) {
     const cRows = (await db
-      .select({ name: communities.name })
+      .select({ name: communities.name, slug: communities.slug })
       .from(communities)
       .where(eq(communities.id, effCommunityId))
-      .limit(1)) as Array<{ name: string | null }>;
+      .limit(1)) as Array<{ name: string | null; slug: string | null }>;
     if (cRows[0]?.name) communityName = cRows[0].name;
+    communitySlug = s(cRows[0]?.slug);
   }
   let cityName = s(r.synced_city_name);
+  let citySlug = '';
   if (effCityId) {
     const cityRows = (await db
-      .select({ name: cities.cityName })
+      .select({ name: cities.cityName, slug: cities.slug })
       .from(cities)
       .where(eq(cities.id, effCityId))
-      .limit(1)) as Array<{ name: string | null }>;
+      .limit(1)) as Array<{ name: string | null; slug: string | null }>;
     if (cityRows[0]?.name) cityName = cityRows[0].name;
+    citySlug = s(cityRows[0]?.slug);
   }
   const floorPlanName = fp?.name != null && s(fp.name) !== '' ? s(fp.name) : s(r.synced_floor_plan_name);
 
@@ -556,6 +560,10 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
 
     promotions: promotionsList,
 
-    liveSite: buildLiveSitePlacement('qmi', r, { published, status }),
+    liveSite: buildLiveSitePlacement(
+      'qmi',
+      { ...r, city_slug: citySlug, community_slug: communitySlug },
+      { published, status },
+    ),
   };
 }
