@@ -385,14 +385,15 @@ export function serializeQmiRow(row: Row, resolved: ResolvedPromo | null): RawAi
     if (resolved.promoBannerText) fields['promo_text'] = resolved.promoBannerText;
   }
 
-  // Card incentive banner = the home's own D1 `incentive` (the live-site source of
-  // truth, e.g. "UNLOCK YOUR 15K FLEX DISCOUNT NOW!"). Emit it as card_badge_text so
-  // the QMI card prints the real per-home incentive instead of synthesizing a
-  // hardcoded rate. ponytail: raw column — the promotions engine doesn't populate
-  // per-home badges. Fallback (only if a resolved promo badge didn't already set it).
-  if (fields['card_badge_text'] === undefined) {
-    const inc = asStr(row['incentive']);
-    if (inc !== '') fields['card_badge_text'] = inc;
+  // Per-home incentive is the live source of truth and OVERRIDES the resolved promotion
+  // for BOTH the detail-page banner (promo_text) and the card badge (card_badge_text).
+  // Operators set it in the admin's "Incentive Banner Text" field (qmi.incentive); a
+  // blank value falls through to the promotion above. This is why setting a home's
+  // incentive in the admin now shows on the home's page — not just its list card.
+  const homeIncentive = asStr(row['incentive']);
+  if (homeIncentive !== '') {
+    fields['promo_text'] = homeIncentive;
+    fields['card_badge_text'] = homeIncentive;
   }
 
   return {
