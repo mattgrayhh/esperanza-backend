@@ -1,5 +1,9 @@
 'use client';
 
+import {
+  promoBannerStyleFromCopy,
+  PROMO_BANNER_STYLE_CLASSES,
+} from '@esperanza/db/promo-banner-style';
 import { cn } from '@/lib/utils';
 
 export type CardSurfaceSpotlight = 'badge' | 'incentive' | 'cta' | null;
@@ -24,7 +28,7 @@ function regionDimmed(
 
 /**
  * Admin preview of community/home card promo surfaces:
- * corner badge + tan incentive line (Show Card Badge), green promo line + Learn More pill (Show Card CTA).
+ * corner badge + green/gold incentive line (Show Card Badge), promo line + Learn More pill (Show Card CTA).
  */
 export function PromotionCardSurfacesPreview({
   badgeText,
@@ -38,6 +42,7 @@ export function PromotionCardSurfacesPreview({
 }: PromotionCardSurfacesPreviewProps) {
   const badge = badgeText.trim();
   const incentive = incentiveText.trim();
+  const incentiveStyle = promoBannerStyleFromCopy(incentive, badge);
   const cta = ctaLabel.trim() || 'Learn More';
   const dimRest = spotlight != null;
 
@@ -78,7 +83,8 @@ export function PromotionCardSurfacesPreview({
             {showBadge && incentive ? (
               <div
                 className={cn(
-                  'absolute top-2.5 left-0 max-w-[calc(100%-5.5rem)] bg-[#c4b59a] px-3.5 py-1.5 text-[10px] leading-tight font-light tracking-wide text-black uppercase transition-all duration-300',
+                  'absolute top-2.5 left-0 max-w-[calc(100%-5.5rem)] px-3.5 py-1.5 text-[10px] leading-tight font-light tracking-wide uppercase transition-all duration-300',
+                  PROMO_BANNER_STYLE_CLASSES[incentiveStyle],
                   regionDimmed(spotlight, 'incentive') && 'opacity-25 brightness-75',
                   spotlight === 'incentive' &&
                     'z-10 ring-2 ring-white/80 ring-offset-1 ring-offset-black/20'
@@ -106,7 +112,7 @@ export function PromotionCardSurfacesPreview({
               )}
             >
               {incentive || badge ? (
-                <p className="text-[11px] font-semibold tracking-wide text-[#2f5d4a] uppercase">
+                <p className="text-[11px] font-semibold tracking-wide text-brand uppercase">
                   {incentive || badge}
                 </p>
               ) : (

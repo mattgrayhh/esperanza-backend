@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FocusEvent } from 'react';
+import { useMemo, useState, type FocusEvent } from 'react';
 import { FieldLabel } from '@/components/fields/FieldLabel';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,9 +22,12 @@ type MarketingValues = {
 
 export function QmiMarketingSection({
   initial,
+  resolvedListingPromoText,
   card,
 }: {
   initial: MarketingValues;
+  /** Effective promo headline from linked promotions (mirrors live API promo_text). */
+  resolvedListingPromoText: string;
   card: {
     address: string;
     cityName: string;
@@ -45,6 +48,11 @@ export function QmiMarketingSection({
   const [selfTourAvailable, setSelfTourAvailable] = useState(initial.selfTourAvailable);
   const [nterNow, setNterNow] = useState(initial.nterNow);
   const [spotlight, setSpotlight] = useState<ListingCardSpotlight>(null);
+
+  const listingPromoText = useMemo(
+    () => incentive.trim() || resolvedListingPromoText.trim(),
+    [resolvedListingPromoText, incentive]
+  );
 
   function spotlightHandlers(region: Exclude<ListingCardSpotlight, null>) {
     return {
@@ -80,7 +88,7 @@ export function QmiMarketingSection({
           floorPlanName={card.floorPlanName}
           lotNumber={card.lotNumber}
           imageUrl={card.imageUrl}
-          incentive={incentive}
+          incentive={listingPromoText}
           availabilityText={availabilityText}
           availableNow={availableNow}
           selfTourAvailable={selfTourAvailable}
@@ -90,7 +98,7 @@ export function QmiMarketingSection({
         <div className="grid gap-1.5 text-sm" {...spotlightHandlers('incentive')}>
           <FieldLabel
             label="Incentive Banner Text"
-            help="Tan banner on the listing card (e.g. Unlock Your $20K Flex Discount Now!)."
+            help="Per-home promo bar on the listing card. Leave blank when a linked promotion supplies the headline (4.99% rate promos show green; flex copy shows gold). Editing this field overrides the preview only until you save."
           />
           <Textarea
             name="incentive"

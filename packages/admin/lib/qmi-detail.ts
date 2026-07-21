@@ -22,6 +22,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { getReadDb } from './db';
 import { qmi, floorPlans, communities, cities, promotions, promotionTargets } from '@esperanza/db';
 import { effectiveValue } from '@esperanza/db/override';
+import { resolveEffectivePromo, type PromoLike, type PromoTargetLike } from '@esperanza/db/promo';
 import { loadOptions, type SelectOption } from './select-options';
 import { deriveStatus } from './status';
 import { buildLiveSitePlacement, type LiveSitePlacement } from './live-site';
@@ -210,6 +211,9 @@ export interface QmiDetailView {
     /** First resolved gallery image — preview fallback for the main hero slot. */
     heroFallbackUrl: string;
   };
+
+  /** Effective listing-card promo headline from linked promotions (mirrors API promo_text). */
+  resolvedListingPromoText: string;
 
   options: {
     floorPlans: SelectOption[];
@@ -418,6 +422,66 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
     }));
   }
 
+  const promoRows = (await db
+    .select({
+      id: promotions.id,
+      published: promotions.published,
+      startDate: promotions.startDate,
+      endDate: promotions.endDate,
+      sortOrder: promotions.sortOrder,
+      bannerText: promotions.bannerText,
+      showCardBadge: promotions.showCardBadge,
+    })
+    .from(promotions)) as Array<{
+    id: string;
+    published: number | boolean | null;
+    startDate: string | null;
+    endDate: string | null;
+    sortOrder: number | null;
+    bannerText: string | null;
+    showCardBadge: number | boolean | null;
+  }>;
+  const promoTargetRowsRaw = (await db
+    .select({
+      promotionId: promotionTargets.promotionId,
+      targetType: promotionTargets.targetType,
+      targetId: promotionTargets.targetId,
+    })
+    .from(promotionTargets)) as Array<{
+    promotionId: string;
+    targetType: string;
+    targetId: string | null;
+  }>;
+  const promoTargetRows: PromoTargetLike[] = promoTargetRowsRaw.map((t) => ({
+    promotion_id: t.promotionId,
+    target_type: t.targetType as PromoTargetLike['target_type'],
+    target_id: t.targetId,
+  }));
+
+  const winner = resolveEffectivePromo(
+    'qmi',
+    {
+      qmiId: id,
+      communityId: effCommunityId || null,
+      floorPlanId: effFloorPlanId || null,
+      cityId: effCityId || null,
+    },
+    promoRows.map(
+      (p): PromoLike => ({
+        id: p.id,
+        published: p.published ?? 0,
+        start_date: p.startDate,
+        end_date: p.endDate,
+        sort_order: p.sortOrder,
+        banner_text: p.bannerText,
+        show_card_badge: p.showCardBadge,
+      })
+    ),
+    promoTargetRows
+  );
+  const showCardBadge = winner?.show_card_badge === true || winner?.show_card_badge === 1;
+  const resolvedListingPromoText = winner && showCardBadge ? s(winner['banner_text']) : '';
+
   const buildSO = (
     field: string,
     label: string,
@@ -559,6 +623,8 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
     },
 
     promotions: promotionsList,
+
+    resolvedListingPromoText,
 
     liveSite: buildLiveSitePlacement(
       'qmi',

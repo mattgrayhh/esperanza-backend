@@ -204,11 +204,15 @@ visually — no markdown syntax. Notes:
     render picker). **Model Home (`is_model_home`)** is not shown in that panel —
     Snowflake-synced only; no admin override UI (DB columns unchanged).
   - **QMI listing card preview:** Marketing opens with a live-style listing card
-    (`QmiListingCardPreview`) above Incentive Banner Text. Hover/focus Incentive Banner
-    Text, Availability Text, Available Now, or Show "Self Tour Available" Banner?
-    spotlights the matching banner (tan incentive, gray/green availability, self-tour +
-    house icon) while the rest of the image fades. Edits update the preview live; Available
-    Now forces a green **AVAILABLE NOW** banner.
+    (`QmiListingCardPreview`) above Incentive Banner Text. The promo bar shows the
+    effective headline (linked promotion when Incentive Banner Text is blank, otherwise
+    the saved incentive). **4.99% rate promos render green; flex promos render gold**
+    (same rule as the live site via `promo_banner_style` on `/api/public/qmi`). Hover/focus
+    Incentive Banner Text, Availability Text, Available Now, or Show "Self Tour Available"
+    Banner? spotlights the matching banner while the rest of the image fades. Edits update
+    the preview live; Available Now forces a green **AVAILABLE NOW** banner.
+  - **Promotion card surfaces preview:** the Headline bar on `PromotionCardSurfacesPreview`
+    uses the same green/gold rule while editing a promotion.
 - **Toolbar offers H1/H2/H3 + Body.** H1 is available because it was requested, but the
   public page already has its own page-title H1 — prefer H2/H3 for in-body section headings
   to avoid duplicate-H1 SEO.
