@@ -216,7 +216,14 @@ There's no copy to keep in sync — the public site reads D1 **live**:
    include `promo_text` (the listing/detail promo headline) and `promo_banner_style`
    (`green` for 4.99% rate promos, `gold` for flex promos) so the frontend can color
    promo bars without re-deriving rules client-side.
-3. Admin writes purge the api's edge cache (`?purge=1`) so an edit shows within moments
+3. The static frontend ships two runtime scripts that must honor `promo_banner_style`:
+   **`hydrate-live.js`** (detail-page `[data-live="promo"]` bar) and **`available-live.js`**
+   (QMI listing cards). Canonical patched copies live in
+   `packages/api/live-scripts/` in this repo. After editing them, redeploy
+   `esperanza-frontend` so those files replace the baked assets on the
+   `esperanzahomes` worker. Until then, detail pages may keep a baked `tan` class even
+   when the API returns `promo_banner_style: "green"`.
+4. Admin writes purge the api's edge cache (`?purge=1`) so an edit shows within moments
    rather than after the cache TTL.
 
 So a saved/published edit is live as soon as the cache clears — nothing to push or
