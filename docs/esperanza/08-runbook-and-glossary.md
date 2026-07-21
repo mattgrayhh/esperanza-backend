@@ -36,6 +36,20 @@ of commands. Part 3 is the glossary of every name and identifier in the system.
    the purge is best-effort and the TTL (≤5 min) is the backstop — wait it out or hit
    `GET {API_PUBLIC_URL}/api/public/<entity>?purge=1` with `X-Purge-Key`.
 
+### "A published home has a page but doesn't appear in the header search bar"
+1. **Which search data source is the page using?** `sitesearch-live.js` fetches
+   `/sitesearch.json`. The live index is now served at **`/api/public/sitesearch.json`**
+   (same O'Neil row shape, hierarchical QMI hrefs from D1). The static asset baked at
+   frontend build time is often stale and omits newly published homes.
+2. **Verify the live index:** `GET /api/public/sitesearch.json` and search for the address.
+   QMI hrefs must look like `/new-homes/tx/{city}/{community}/{dash-slug}/` — not
+   `/new-homes/available/{underscore_slug}` (those 404 on the current frontend).
+3. **Frontend wiring:** until `sitesearch-live.js` is pointed at `/api/public/sitesearch.json`
+   (or the frontend worker proxies `/sitesearch.json` there), operators must redeploy
+   `esperanza-frontend` to refresh the baked search file after publishing new homes.
+4. Admin saves purge both `sitesearch` and `sitesearch.json` automatically when `PURGE_KEY`
+   is set.
+
 ### "I added a field but it's not in the admin form"
 You deployed code but didn't **seed a `field_definitions` row**. Run
 `npx tsx packages/db/scripts/seed-field-definitions.ts --remote`. See

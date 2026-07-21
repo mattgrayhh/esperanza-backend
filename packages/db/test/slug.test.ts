@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { describe, it, expect } from 'vitest';
-import { qmiPublicSlug, toUnderscore, kebab, recSuffix } from '../lib/slug.js';
+import { qmiPublicSlug, qmiDetailPath, toUnderscore, kebab, recSuffix } from '../lib/slug.js';
 
 describe('qmiPublicSlug', () => {
   it('normalizes dashes to underscores (the live public page slug)', () => {
@@ -34,6 +34,22 @@ describe('qmiPublicSlug', () => {
   it('falls back to the id when neither slug columns nor address exist', () => {
     expect(qmiPublicSlug({ id: 'rec123' })).toBe('rec123');
     expect(qmiPublicSlug({})).toBe('');
+  });
+});
+
+describe('qmiDetailPath', () => {
+  it('builds the hierarchical tx path when city and community slugs are present', () => {
+    expect(
+      qmiDetailPath({
+        slug: '3909-westway-ave',
+        city_slug: 'mcallen',
+        community_slug: 'harvest-coves',
+      }),
+    ).toBe('/new-homes/tx/mcallen/harvest-coves/3909-westway-ave/');
+  });
+
+  it('falls back to legacy available path when location slugs are missing', () => {
+    expect(qmiDetailPath({ id: 'q1', slug: '3926-peggy-dr' })).toBe('/new-homes/available/3926_peggy_dr');
   });
 });
 

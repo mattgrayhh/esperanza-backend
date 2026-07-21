@@ -20,7 +20,7 @@ export const PUBLIC_CACHE_DEPS: Record<string, readonly string[]> = {
 };
 
 /** Purged on every write — the header search index spans all live collections. */
-export const PUBLIC_CACHE_ALWAYS = ['sitesearch'] as const;
+export const PUBLIC_CACHE_ALWAYS = ['sitesearch', 'sitesearch.json'] as const;
 
 export function publicCacheEntitiesFor(collection: string): string[] {
   const deps = PUBLIC_CACHE_DEPS[collection];

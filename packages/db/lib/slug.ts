@@ -1,17 +1,20 @@
 // =============================================================================
 // Canonical public-URL slug derivation.
 //
-// SINGLE SOURCE OF TRUTH for the slug that appears in the public QMI page path.
-// Every consumer MUST agree or links break:
-//   * the static frontend + esperanza-api render the QMI detail page at
-//     `/new-homes/available/<qmiPublicSlug>`.
-//   * the api sitesearch index builds its QMI href from the SAME function, so
-//     the header search always points at the URL that exists.
-//
-// The underscore-normalization is simply the public slug convention: the raw
-// `slug` column is dash-cased, so a reader that emitted it directly would 404.
-// Keep the derivation here; do not re-implement it.
+// SINGLE SOURCE OF TRUTH for QMI public page paths. Every consumer MUST agree
+// or links break:
+//   * esperanza-frontend bakes detail pages at
+//     `/new-homes/tx/{city}/{community}/{dash-slug}/` (see qmi-links.json).
+//   * the api sitesearch index and admin preview links use qmiDetailPath().
+//   * qmiPublicSlug (underscore) is the legacy /new-homes/available/{slug}
+//     fallback only — those URLs 404 on the current static frontend.
 // =============================================================================
+
+/** Prefix for baked QMI detail pages on esperanza-frontend. */
+export const QMI_TX_PREFIX = '/new-homes/tx';
+
+/** Legacy /new-homes/available prefix (fallback when tx path parts are unknown). */
+export const QMI_AVAILABLE_PREFIX = '/new-homes/available';
 
 /** Public slugs for QMI & Testimonials normalize dashes→underscores. */
 export function toUnderscore(s: string): string {
@@ -54,6 +57,56 @@ export interface QmiSlugRow {
   rich_slug?: unknown;
   slug?: unknown;
   address?: unknown;
+}
+
+/** Optional location slugs for hierarchical detail paths (from joined cities/communities). */
+export interface QmiDetailPathRow extends QmiSlugRow {
+  city_slug?: unknown;
+  community_slug?: unknown;
+  page_url?: unknown;
+}
+
+/**
+ * Dash slug from qmi.slug — the segment the frontend hierarchical URL and API use.
+ */
+export function qmiDashSlug(row: Pick<QmiSlugRow, 'slug'>): string {
+  return asString(row.slug) ?? '';
+}
+
+/**
+ * Build the live-site QMI detail path. Prefer the baked hierarchical route the
+ * frontend ships (/new-homes/tx/{city}/{community}/{dash-slug}/), which
+ * qmi-links.json indexes. Falls back to a short page_url tx path, then the
+ * legacy /new-homes/available/{underscore_slug} pattern.
+ */
+export function qmiDetailPath(row: QmiDetailPathRow): string | null {
+  const dashSlug = qmiDashSlug(row);
+  const citySlug = asString(row.city_slug);
+  const communitySlug = asString(row.community_slug);
+  if (dashSlug && citySlug && communitySlug) {
+    return `${QMI_TX_PREFIX}/${citySlug}/${communitySlug}/${dashSlug}/`;
+  }
+
+  const pageUrl = asString(row.page_url);
+  if (pageUrl) {
+    try {
+      const pathname = pageUrl.startsWith('http')
+        ? new URL(pageUrl).pathname
+        : pageUrl.startsWith('/')
+          ? pageUrl
+          : `/${pageUrl}`;
+      const short = pathname.match(/^(\/new-homes\/tx\/[^/]+\/[^/]+\/[^/]+)\/?$/);
+      if (short) {
+        const p = short[1]!;
+        return p.endsWith('/') ? p : `${p}/`;
+      }
+    } catch {
+      /* ignore malformed page_url */
+    }
+  }
+
+  const legacy = qmiPublicSlug(row);
+  return legacy ? `${QMI_AVAILABLE_PREFIX}/${legacy}` : null;
 }
 
 /**
