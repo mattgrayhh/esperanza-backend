@@ -212,7 +212,10 @@ There's no copy to keep in sync — the public site reads D1 **live**:
 1. The static `esperanza-frontend` site fetches `esperanza-api` (`/api/public/*`) at
    runtime for its dynamic content (Quick-Move-Ins, communities, detail pages, settings).
 2. `esperanza-api` serves the `v_public_*` views (published rows only, with the
-   `override`/`synced` resolution) from D1 at the edge, cached briefly.
+   `override`/`synced` resolution) from D1 at the edge, cached briefly. QMI records
+   include `promo_text` (the listing/detail promo headline) and `promo_banner_style`
+   (`green` for 4.99% rate promos, `gold` for flex promos) so the frontend can color
+   promo bars without re-deriving rules client-side.
 3. Admin writes purge the api's edge cache (`?purge=1`) so an edit shows within moments
    rather than after the cache TTL.
 

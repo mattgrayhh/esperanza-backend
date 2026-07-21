@@ -390,6 +390,7 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
             selfTourAvailable: view.admin.selfTourAvailable,
             nterNow: view.admin.nterNow,
           }}
+          resolvedListingPromoText={view.resolvedListingPromoText}
           card={{
             address: view.address,
             cityName: view.cityName,

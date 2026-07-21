@@ -208,7 +208,7 @@ export function PromotionSurfacesSection({ initial }: { initial: PromotionSurfac
                   <div className="grid gap-1.5 text-sm" {...cardHandlers('incentive')}>
                     <FieldLabel
                       label="Headline"
-                      help="Tan incentive line on the card image (and promo line near the CTA)."
+                      help="Promo line on the card image. 4.99% rate promos render green; flex promos render gold."
                     />
                     <Input
                       type="text"

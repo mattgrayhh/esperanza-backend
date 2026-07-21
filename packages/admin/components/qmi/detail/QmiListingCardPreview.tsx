@@ -1,6 +1,10 @@
 'use client';
 
 import { HomeIcon } from 'lucide-react';
+import {
+  classifyPromoBannerStyle,
+  PROMO_BANNER_STYLE_CLASSES,
+} from '@esperanza/db/promo-banner-style';
 import { cn } from '@/lib/utils';
 
 export type ListingCardSpotlight =
@@ -103,7 +107,8 @@ export function QmiListingCardPreview({
   spotlight,
   className,
 }: QmiListingCardPreviewProps) {
-  const incentiveText = incentive.trim();
+  const promoBannerText = incentive.trim();
+  const promoStyle = classifyPromoBannerStyle(promoBannerText);
   const availLabel = availabilityBannerLabel(availabilityText, availableNow);
   const showAvailNowStyle = availableNow || /\bnow\b/i.test(availLabel);
   const hero = imageUrl.trim();
@@ -142,15 +147,16 @@ export function QmiListingCardPreview({
 
             <div className="pointer-events-none absolute inset-0 z-[2]">
               <div className="absolute top-2.5 left-0 flex max-w-[calc(100%-5.5rem)] flex-col items-start gap-1.5">
-                {incentiveText ? (
+                {promoBannerText ? (
                   <div
                     className={cn(
-                      'bg-[#c4b59a] px-3.5 py-1.5 text-[10px] leading-tight font-light tracking-wide text-black uppercase transition-all duration-300',
+                      'px-3.5 py-1.5 text-[10px] leading-tight font-light tracking-wide uppercase transition-all duration-300',
+                      PROMO_BANNER_STYLE_CLASSES[promoStyle],
                       regionDimmed(spotlight, 'incentive') && 'opacity-25 brightness-75',
                       spotlight === 'incentive' && 'z-10 ring-2 ring-white/80 ring-offset-1 ring-offset-black/20'
                     )}
                   >
-                    {incentiveText}
+                    {promoBannerText}
                   </div>
                 ) : null}
 

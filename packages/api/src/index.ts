@@ -46,6 +46,7 @@ import {
   resolveEffectivePromo,
   type PromoTargetType,
 } from '@esperanza/db/promo';
+import { classifyPromoBannerStyle } from '@esperanza/db/promo-banner-style';
 import { COMMUNITY_PLAN_PRICE_SQL } from '@esperanza/db/elevation-price';
 import { buildSiteSearchPayload, buildLegacySiteSearchPayload } from './sitesearch.js';
 import * as Sentry from '@sentry/cloudflare';
@@ -394,6 +395,11 @@ export function serializeQmiRow(row: Row, resolved: ResolvedPromo | null): RawAi
   if (homeIncentive !== '') {
     fields['promo_text'] = homeIncentive;
     fields['card_badge_text'] = homeIncentive;
+  }
+
+  const bannerForStyle = asStr(fields['promo_text']);
+  if (bannerForStyle !== '') {
+    fields['promo_banner_style'] = classifyPromoBannerStyle(bannerForStyle);
   }
 
   return {

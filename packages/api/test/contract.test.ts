@@ -575,12 +575,29 @@ describe('/qmi — raw passthrough contract', () => {
 
   it('card_badge_text falls back to the home’s raw D1 incentive (live-site source of truth)', () => {
     const r = selectQmi(db).find((x) => x['id'] === 'rec0425zwvFWu0r5v')!;
-    // Home with its own incentive → emitted as the card badge.
+    // Home with its own incentive → emitted as the card badge and overrides promo_text.
     const withInc = serializeQmiRow({ ...r, incentive: 'UNLOCK YOUR 15K FLEX DISCOUNT NOW!' }, null);
     expect(withInc.fields['card_badge_text']).toBe('UNLOCK YOUR 15K FLEX DISCOUNT NOW!');
+    expect(withInc.fields['promo_text']).toBe('UNLOCK YOUR 15K FLEX DISCOUNT NOW!');
+    expect(withInc.fields['promo_banner_style']).toBe('gold');
     // No incentive → no badge synthesized (nothing hardcoded).
     const noInc = serializeQmiRow({ ...r, incentive: null }, null);
     expect('card_badge_text' in noInc.fields).toBe(false);
+  });
+
+  it('promo_banner_style is green for 4.99% promos and gold for flex', () => {
+    const r = selectQmi(db).find((x) => x['id'] === 'rec0425zwvFWu0r5v')!;
+    const ctx = buildPromoCtx(db);
+    const resolved = resolvedFor(ctx, 'qmi', {
+      qmiId: String(r['id']),
+      communityId: r['community_id'] as string,
+      cityId: r['city_id'] as string,
+    });
+    const rateRec = serializeQmiRow(
+      { ...r, incentive: null },
+      { ...resolved!, promoBannerText: '4.99% 30 Year Fixed Rate*' }
+    );
+    expect(rateRec.fields['promo_banner_style']).toBe('green');
   });
 
   it('self-tour: nter_now surfaces + flags self_tour_available; absent => both omitted', () => {
