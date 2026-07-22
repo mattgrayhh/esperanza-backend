@@ -7,6 +7,19 @@ of commands. Part 3 is the glossary of every name and identifier in the system.
 
 ## Part 1 — Symptom → likely cause → fix
 
+### "QMI listing cards show a floor-plan schematic instead of a real photo"
+1. **Check the hero field:** Listing cards and community-page QMI grids use
+   `qmi.image_url` as the hero. When it is blank or points at a floor-plan
+   rendering (`assets-media/…`, `floor_plans/…`), the site shows a schematic.
+2. **Check the photo gallery:** The admin **Photo Gallery** column
+   (`photo_gallery_json`) often has the correct home photo. If the first gallery
+   image is a real `/qmi/…` upload but `image_url` differs, run
+   `npx tsx packages/db/scripts/backfill-qmi-hero-from-gallery.ts --remote`
+   (add `--dry-run` first). The script copies the best gallery photo into
+   `image_url` for every affected home.
+3. **No gallery photos:** Homes like 4417 N Pear Ave with an empty gallery still
+   need real photos uploaded in the admin before a hero can be set.
+
 ### "Community page shows no Quick Move-In cards (legacy site has them)"
 1. **Confirm the API:** `GET /api/public/qmi` and filter by community name. Only
    **published** homes appear — if D1 has `published = 0`, the card will not render.
