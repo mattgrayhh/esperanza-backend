@@ -19,6 +19,14 @@ of commands. Part 3 is the glossary of every name and identifier in the system.
    `image_url` for every affected home.
 3. **No gallery photos:** Homes like 4417 N Pear Ave with an empty gallery still
    need real photos uploaded in the admin before a hero can be set.
+4. **Stale runtime override:** Even when D1/API `image_url` is correct, community
+   and available listing cards can still show old floor-plan URLs if production
+   `community-homes-live.js` / `available-live.js` prefer `qmi-images.json` over
+   the live API. Patch those scripts so API `image_url` wins (see
+   `packages/api/live-scripts/`), redeploy `esperanzahomes-frontend`, or run
+   `node scripts/deploy-frontend-live-scripts.mjs` to patch worker assets directly.
+   Regenerating `qmi-images.json` from `/api/public/qmi` is a belt-and-suspenders
+   fallback but does not replace the JS fix long-term.
 
 ### "Community page shows no Quick Move-In cards (legacy site has them)"
 1. **Confirm the API:** `GET /api/public/qmi` and filter by community name. Only

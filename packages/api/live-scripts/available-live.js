@@ -33,17 +33,30 @@
   var money = function (n) { return '$' + Number(n || 0).toLocaleString('en-US'); };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
   var slugify = function (s) { return String(s || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); };
+  // API promo_banner_style: "green" | "gold" → theme classes overlay-promo green | tan.
+  function promoBannerClass(style, text) {
+    if (style === 'green') return 'green';
+    if (style === 'gold') return 'tan';
+    return /flex/i.test(text || '') ? 'tan' : 'green';
+  }
 
   // qmi-links.json (built from the shipped pages) maps a home to its detail page.
   // Card -> the home-for-sale page (detail), where the "Download PDF" button lives.
   // Homes newer than the scrape have no static page -> the runtime shell renders
   // their detail from the live API at /new-homes/available/home/?slug=<slug>.
   var LINKS = { qmi: {}, community: {} };
+  var QMI_IMAGES = {};
   function homeUrl(h) {
     var cs = slugify(h.community);
     return LINKS.qmi[cs + '/' + (h.slug || '')] ||
       (h.slug ? '/new-homes/available/home/?slug=' + encodeURIComponent(h.slug) : '') ||
       h.pdfUrl || '#';
+  }
+
+  function applyResolvedImage(h) {
+    if (h.image) return h;
+    if (h.slug && QMI_IMAGES[h.slug]) h.image = QMI_IMAGES[h.slug];
+    return h;
   }
 
   function normalizeHome(h) {
@@ -74,7 +87,7 @@
       availableNow: f['Available Now'],
       moveInDate: f['Move-In Date'],
       promo: f.promo_text,
-      promoBannerStyle: f.promo_banner_style,
+      promoStyle: f.promo_banner_style,
       pdfUrl: f['Dynamic PDF'],
       lat: lat != null ? Number(lat) : null,
       lng: lng != null ? Number(lng) : null,
@@ -123,9 +136,9 @@
     var fact = factOf(h);
     var badge = fact.badge || FACTS.badges[slugify(h.address)];
     // Live, not baked: prefer the API incentive (h.promo = per-home incentive, else
-    // resolved promotion) over the frozen June-harvest badge; badge kept for color only.
+    // resolved promotion) over the frozen June-harvest badge. Color from API style.
     var promoText = h.promo || (badge ? badge.text : '');
-    var promoColor = (function (t, s) { if (s === 'gold') return 'tan'; if (s === 'green') return 'green'; t = t || ''; if (/4\.99\s*%?/i.test(t)) return 'green'; if (/flex/i.test(t)) return 'tan'; return 'green'; })(promoText, h.promoBannerStyle);
+    var promoColor = promoBannerClass(h.promoStyle, promoText);
     var banners = '';
     if (promoText) banners += '<div class="banner overlay-promo ' + promoColor + '">' + esc(promoText) + '</div>';
     var availText = (fact.avail && fact.avail.text) || h.availability;
@@ -158,13 +171,13 @@
     var est = '';
     if (h.price) {
       var tax = FACTS.taxMult[slugify(h.community)] || 2.2;
-      var m = fact.mStd != null ? fact.mStd : monthlyPayment(h.price, RATE, tax);
+      var m = monthlyPayment(h.price, RATE, tax);
       var promoRate = promoText && (promoText.match(/([\d.]+)\s*%/) || [])[1];
       var inner;
       if (promoRate && Number(promoRate) < RATE) {
         // original promo-rate card: promo monthly + struck standard + 30-yr savings
         // (these two spans render WITHOUT thousands separators on the original)
-        var pm = fact.mPromo != null ? fact.mPromo : monthlyPayment(h.price, Number(promoRate), tax);
+        var pm = monthlyPayment(h.price, Number(promoRate), tax);
         var savings = (m - pm) * 360;
         inner = '<span class="fs-9 overpass bold text-green">$' + pm.toFixed(2) + '/mo*</span>' +
           '<span class="text-strikethrough estimated-price fs-9 overpass bold text-green" data-price="' + m.toFixed(2) + '">$' + m.toFixed(2) + '/mo*</span>' +
@@ -381,20 +394,24 @@
       fetchT(API + '/qmi').then(function (r) { return r.json(); }),
       fetchT(API + '/communities').then(function (r) { return r.json(); }).catch(function () { return { communities: [] }; }),
       fetch('/qmi-links.json').then(function (r) { return r.json(); }).catch(function () { return { qmi: {}, community: {} }; }),
+      fetch('/qmi-images.json').then(function (r) { return r.json(); }).catch(function () { return { images: {} }; }),
       fetchT(API + '/settings').then(function (r) { return r.json(); }).catch(function () { return {}; }),
       fetch('/live-facts.json').then(function (r) { return r.json(); }).catch(function () { return {}; }),
       fetchT(API + '/floorplans').then(function (r) { return r.json(); }).catch(function () { return { floorplans: [] }; }),
     ]).then(function (res) {
       if (res[2]) LINKS = res[2];
-      var lf = res[4] || {};
+      if (res[3] && res[3].images) QMI_IMAGES = res[3].images;
+      var settings = (res[4] && res[4].settings) || {};
+      var lf = res[5] || {};
       FACTS = { rate: lf.rate, taxMult: lf.taxMult || {}, badges: lf.badges || {}, lotFormat: lf.lotFormat || {}, cardFacts: lf.cardFacts || {} };
-      var settings = (res[3] && res[3].settings) || {};
-      RATE = FACTS.rate || settings.mortgage_rate || 6.15;
+      // Live, not baked: the company-wide Mortgage Rate from Settings drives payments;
+      // the June-harvest FACTS.rate is only a last-ditch fallback.
+      RATE = settings.mortgage_rate || FACTS.rate || 6.15;
       var planStories = {};
-      ((res[5] && res[5].floorplans) || []).forEach(function (fp) {
+      ((res[6] && res[6].floorplans) || []).forEach(function (fp) {
         if (fp.storiesCount != null) { planStories[String(fp.name || '').toLowerCase()] = fp.storiesCount; planStories[fp.slug] = fp.storiesCount; }
       });
-      var homes = (res[0].homes || []).map(normalizeHome);
+      var homes = (res[0].homes || []).map(normalizeHome).map(applyResolvedImage);
       homes.forEach(function (h) {
         var ps = planStories[String(h.floorPlan || '').toLowerCase()];
         if (ps != null) h.stories = ps; // plan-first: D1 per-home stories_count is unreliable
