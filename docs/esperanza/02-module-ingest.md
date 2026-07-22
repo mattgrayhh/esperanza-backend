@@ -4,7 +4,10 @@
 
 This worker is the bridge from **Snowflake → D1**. It runs on a timer, figures out what
 changed, and writes *only* pricing/availability columns into D1. It is deliberately
-"low-privilege": it can never touch marketing content or the publish flag.
+"low-privilege": it can never touch marketing content. The one flag it owns is `published`
+— and only as a mechanical mirror of Snowflake availability: force `0` when a home leaves
+the available set (sold/removed), set `1` when an imaged home re-enters it (both guarded
+against truncated runs). It never edits copy, images, overrides, or slugs.
 
 ---
 
@@ -92,8 +95,9 @@ The allowlists (abridged):
   `close_out_elevation` price (see [doc 01](./01-data-flow.md)). Rows that don't resolve are
   dropped and counted in the sync_log note.
 
-**Notably absent and intentional:** every `override_*` column, `published`, `slug`,
-`description`, `image_url`, galleries.
+**Notably absent and intentional:** every `override_*` column, `slug`, `description`,
+`image_url`, galleries. (`published` is the sole exception — ingest mirrors Snowflake
+availability onto it in both directions; see the publish/unpublish bullets below.)
 
 ---
 
@@ -114,8 +118,17 @@ The allowlists (abridged):
 - **Price divergence:** ingest owns `synced_price` and `last_synced_price` (used to detect
   drift) but **never** touches `override_price`.
 - **Unpublish on sale:** if a published QMI's `eci_key` disappears from Snowflake (sold /
-  removed), ingest enqueues an "unpublish" that forces `published = 0`. It can never set
-  `published = 1`.
+  removed), ingest enqueues an "unpublish" that forces `published = 0`.
+- **Publish on re-availability (★, 2026-07-21):** the mirror direction. If an EXISTING row
+  whose `eci_key` IS in the current available Snowflake set is `published = 0` **and already
+  has an `image_url`**, ingest enqueues a "publish" that sets `published = 1` (guarded
+  `WHERE published = 0`). This closes the gap where a new build or a relisted
+  "Sales Canceled" home stayed invisible until a manual admin flip — the standing task
+  behind the recurring "missing homes" parity findings. **Imaged-only** so no un-curated
+  draft card ever surfaces; un-imaged available homes are left hidden (and should show up in
+  the parity WARN for a human). Publishing is **suppressed on a truncated run** (same
+  `< 50%` Snowflake-shrink signal as the unpublish guard), so a partial result can never
+  mass-flip visibility. See `packages/ingest/test/republish.test.ts`.
 - **Availability text** (e.g. "Available JUN 2026" / "Available Now") is auto-derived from
   the move-in date (`src/availability.ts`) — but only if marketing hasn't written custom
   copy. Hand-authored availability text survives.

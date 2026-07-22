@@ -73,6 +73,7 @@ function existingRow(i: number, published = 1): ExistingQmi {
     housenumber: String(i),
     synced_community_name: 'anaqua at tres lagos',
     published,
+    image_url: 'https://img.hazardhouse.ai/x.jpg',
     synced_address: `${i} Anaqua Way`,
     synced_postal_code: 78504,
     synced_bedroom_count: 3,

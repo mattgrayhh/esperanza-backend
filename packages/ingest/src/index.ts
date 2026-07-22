@@ -67,7 +67,7 @@ async function loadExistingQmis(db: D1Like): Promise<ExistingQmi[]> {
               synced_construction_stage_index, synced_estimated_settlement_date,
               synced_city_id, synced_city_name, synced_community_id,
               synced_floor_plan_id, synced_floor_plan_name,
-              synced_price, last_synced_price, mark_job_number
+              synced_price, last_synced_price, mark_job_number, image_url
        FROM qmi`
     )
     .bind()
@@ -355,8 +355,8 @@ export async function runIngest(
       floorPlansUpdated: stats.floorPlansUpdated,
       unresolvedLinks: stats.unresolvedLinks,
       notes: unpublishGuard.tripped
-        ? `producer enqueued ${messages.length} message(s); wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated; ${unpublishGuard.reason}`
-        : `producer enqueued ${messages.length} message(s); wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated`,
+        ? `producer enqueued ${messages.length} message(s); published ${stats.qmisPublished} re-available home(s)${stats.qmisPublishHeld ? ` (${stats.qmisPublishHeld} HELD for review — run ?force=1 to release)` : ''}; wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated; ${unpublishGuard.reason}`
+        : `producer enqueued ${messages.length} message(s); published ${stats.qmisPublished} re-available home(s)${stats.qmisPublishHeld ? ` (${stats.qmisPublishHeld} HELD for review — run ?force=1 to release)` : ''}; wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated`,
     });
   } catch (err) {
     await writeSyncLog(env, {

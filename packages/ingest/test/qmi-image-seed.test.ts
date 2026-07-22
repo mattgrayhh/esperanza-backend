@@ -14,7 +14,9 @@
 //   * INSERT: a new spec whose floor plan has an image → image_url seeded.
 //   * INSERT: prefers floor_plans.image_url, falls back to synced_image_url.
 //   * INSERT: floor plan with no image, or no floor plan → image_url stays null.
-//   * UPDATE: ingest NEVER writes image_url (admin owns it post-create).
+//   * UPDATE: ingest never OVERRIDES an admin-set image_url.
+//   * UPDATE: an imageless (NULL) home SELF-HEALS image_url from its plan — the seed is
+//     durable (fill-only), not insert-only, so legacy/late-linked homes stop staying blank.
 // Uses the REAL schema + views via better-sqlite3 (same harness as siblings).
 // =============================================================================
 
@@ -127,7 +129,10 @@ describe('consumer qmi.image_url auto-seed from floor plan', () => {
     expect(readImage(db, 'recU1')).toBe('https://admin.example/custom.jpg');
   });
 
-  it('UPDATE: an imageless existing home is NOT backfilled by ingest (admin-owned)', async () => {
+  it('UPDATE: an imageless existing home SELF-HEALS image_url from its plan (fill-only)', async () => {
+    // A home that landed before its plan had a rendering was seeded NULL and used to
+    // stay NULL forever (insert-only seed) — the class behind the "missing homes" gap.
+    // On update it now fills from the plan (still NULL-only; admin override untouched).
     seedFloorPlan(db, 'fp8', { image_url: 'https://r2.example/fp/fp8/hero.jpg' });
     db.prepare(
       `INSERT INTO qmi (id, eci_key, synced_floor_plan_id, image_url)
@@ -137,7 +142,19 @@ describe('consumer qmi.image_url auto-seed from floor plan', () => {
       env,
       upsertMsg({ qmiId: 'recU2', isNew: false, values: { eciKey: 'E8', floorPlanId: 'fp8' } })
     );
-    // Stays null on update — a one-time backfill (not ingest) heals legacy rows.
-    expect(readImage(db, 'recU2')).toBeNull();
+    expect(readImage(db, 'recU2')).toBe('https://r2.example/fp/fp8/hero.jpg');
+  });
+
+  it('UPDATE: an imageless home whose plan ALSO has no image stays null', async () => {
+    seedFloorPlan(db, 'fp9', { image_url: null, synced_image_url: null });
+    db.prepare(
+      `INSERT INTO qmi (id, eci_key, synced_floor_plan_id, image_url)
+       VALUES ('recU3', 'E9', 'fp9', NULL)`
+    ).run();
+    await applyMessage(
+      env,
+      upsertMsg({ qmiId: 'recU3', isNew: false, values: { eciKey: 'E9', floorPlanId: 'fp9' } })
+    );
+    expect(readImage(db, 'recU3')).toBeNull();
   });
 });

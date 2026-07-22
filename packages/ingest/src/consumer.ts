@@ -41,6 +41,7 @@ import type {
   SyncMessage,
   QmiUpsertMessage,
   QmiUnpublishMessage,
+  QmiPublishMessage,
   CommunityUpsertMessage,
   FloorPlanUpsertMessage,
 } from './diff.js';
@@ -96,6 +97,7 @@ export interface ApplyResult {
   created: number;
   updated: number;
   unpublished: number;
+  published: number;
   communities: number;
   floorPlans: number;
   priceUpdated: number;
@@ -142,6 +144,7 @@ const emptyResult = (): ApplyResult => ({
   created: 0,
   updated: 0,
   unpublished: 0,
+  published: 0,
   communities: 0,
   floorPlans: 0,
   priceUpdated: 0,
@@ -160,6 +163,8 @@ export async function applyMessage(
       return applyQmiUpsert(env, msg);
     case 'qmi.unpublish':
       return applyQmiUnpublish(env, msg);
+    case 'qmi.publish':
+      return applyQmiPublish(env, msg);
     case 'community.upsert':
       return applyCommunityUpsert(env, msg);
     case 'floorplan.upsert':
@@ -302,6 +307,26 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
     }
   }
 
+  // Header image self-heal: fill image_url from the linked plan when it is still NULL.
+  // The insert-seed only runs at CREATE, so a home that landed before its plan had a
+  // rendering (or before the plan link resolved) stayed imageless forever — that is why a
+  // whole class of available homes never surfaced (imaged-only publish gate). Fill ONLY
+  // over NULL — an admin-set image is never overridden (same ownership rule as
+  // availability_text). This makes the seed durable instead of a one-shot backfill.
+  const curImg = await env.DB.prepare(
+    `SELECT image_url, COALESCE(override_floor_plan_id, synced_floor_plan_id) AS fp_id
+       FROM qmi WHERE id = ?`
+  )
+    .bind(msg.qmiId)
+    .first<{ image_url: string | null; fp_id: string | null }>();
+  if (curImg && curImg.image_url == null && curImg.fp_id) {
+    const seed = await floorPlanImageUrl(env, curImg.fp_id);
+    if (seed !== null) {
+      setExtra.push('image_url = ?');
+      valsExtra.push(seed);
+    }
+  }
+
   const setClause = [...Object.keys(patch).map((c) => `${c} = ?`), ...setExtra].join(', ');
   const vals = [...Object.values(patch), ...valsExtra, nowIso(), msg.qmiId];
   await env.DB.prepare(
@@ -339,6 +364,22 @@ async function applyQmiUnpublish(env: ConsumerEnv, msg: QmiUnpublishMessage): Pr
     .bind(nowIso(), msg.qmiId)
     .run();
   result.unpublished = 1;
+  return result;
+}
+
+async function applyQmiPublish(env: ConsumerEnv, msg: QmiPublishMessage): Promise<ApplyResult> {
+  const result = emptyResult();
+  // RE-AVAILABLE + imaged: set published = 1. The query guards published = 0 so it only
+  // flips a currently-hidden row (never touches a live one, and re-running is a no-op).
+  // The diff only emits this for homes in the current available Snowflake set that carry
+  // an image — the sale-gate + image precondition are enforced upstream. Mirror of
+  // applyQmiUnpublish in the opposite direction (the direction ingest previously lacked).
+  await env.DB.prepare(
+    `UPDATE qmi SET published = 1, updated_at = ? WHERE id = ? AND published = 0`
+  )
+    .bind(nowIso(), msg.qmiId)
+    .run();
+  result.published = 1;
   return result;
 }
 
@@ -475,6 +516,7 @@ export interface MessageBatchLike<Body> {
 const PURGE_DEPS: Record<SyncMessage['kind'], string[]> = {
   'qmi.upsert': ['qmi'],
   'qmi.unpublish': ['qmi'],
+  'qmi.publish': ['qmi'],
   'community.upsert': ['communities', 'cities', 'qmi'],
   'floorplan.upsert': ['floorplans', 'qmi'],
 };
@@ -497,7 +539,7 @@ export async function handleQueueBatch(
 ): Promise<void> {
   const startedAt = nowIso();
   const start = Date.now();
-  const agg = { created: 0, updated: 0, unpublished: 0, communities: 0, floorPlans: 0, priceUpdated: 0 };
+  const agg = { created: 0, updated: 0, unpublished: 0, published: 0, communities: 0, floorPlans: 0, priceUpdated: 0 };
   const touchedKinds = new Set<SyncMessage['kind']>();
   let errors = 0;
   let lastError: string | null = null;
@@ -508,6 +550,7 @@ export async function handleQueueBatch(
       agg.created += r.created;
       agg.updated += r.updated;
       agg.unpublished += r.unpublished;
+      agg.published += r.published;
       agg.communities += r.communities;
       agg.floorPlans += r.floorPlans;
       agg.priceUpdated += r.priceUpdated;
@@ -537,7 +580,7 @@ export async function handleQueueBatch(
     communitiesUpdated: agg.communities,
     floorPlansUpdated: agg.floorPlans,
     pricesUpdated: agg.priceUpdated,
-    notes: `consumer batch of ${batch.messages.length} message(s)`,
+    notes: `consumer batch of ${batch.messages.length} message(s); ${agg.published} re-published`,
     errorMessage: lastError,
   });
 }
