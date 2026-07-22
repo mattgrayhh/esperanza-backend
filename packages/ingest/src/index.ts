@@ -355,8 +355,8 @@ export async function runIngest(
       floorPlansUpdated: stats.floorPlansUpdated,
       unresolvedLinks: stats.unresolvedLinks,
       notes: unpublishGuard.tripped
-        ? `producer enqueued ${messages.length} message(s); published ${stats.qmisPublished} re-available home(s); wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated; ${unpublishGuard.reason}`
-        : `producer enqueued ${messages.length} message(s); published ${stats.qmisPublished} re-available home(s); wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated`,
+        ? `producer enqueued ${messages.length} message(s); published ${stats.qmisPublished} re-available home(s)${stats.qmisPublishHeld ? ` (${stats.qmisPublishHeld} HELD for review — run ?force=1 to release)` : ''}; wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated; ${unpublishGuard.reason}`
+        : `producer enqueued ${messages.length} message(s); published ${stats.qmisPublished} re-available home(s)${stats.qmisPublishHeld ? ` (${stats.qmisPublishHeld} HELD for review — run ?force=1 to release)` : ''}; wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated`,
     });
   } catch (err) {
     await writeSyncLog(env, {

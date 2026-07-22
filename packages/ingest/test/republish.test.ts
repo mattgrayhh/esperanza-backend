@@ -126,6 +126,24 @@ describe('ingest publish direction', () => {
     expect(stats.qmisPublished).toBe(0);
   });
 
+  it('stages a large batch: publishes up to the per-run cap, holds + counts the rest', () => {
+    // 20 hidden+imaged available homes → publish the first 15, hold 5 for review.
+    const existingRows = Array.from({ length: 20 }, (_, k) => existing(k + 1, { published: 0 }));
+    const snowflake = Array.from({ length: 20 }, (_, k) => sfRow(k + 1));
+    const { messages, stats } = diff(snowflake, [], existingRows, emptyLookups());
+    expect(stats.qmisPublished).toBe(15);
+    expect(stats.qmisPublishHeld).toBe(5);
+    expect(messages.filter((m) => m.kind === 'qmi.publish')).toHaveLength(15);
+  });
+
+  it('operator force releases the whole batch past the cap', () => {
+    const existingRows = Array.from({ length: 20 }, (_, k) => existing(k + 1, { published: 0 }));
+    const snowflake = Array.from({ length: 20 }, (_, k) => sfRow(k + 1));
+    const { stats } = diff(snowflake, [], existingRows, emptyLookups(), [], [], [], new Map(), true);
+    expect(stats.qmisPublished).toBe(20);
+    expect(stats.qmisPublishHeld).toBe(0);
+  });
+
   it('publishes NOTHING on a truncated Snowflake run (never mass-act on a partial result)', () => {
     // 10 hidden+imaged eci-keyed rows, but the run returned only 3 (<50%): a truncated
     // result (the 2026-06-11 incident shape). Publishing is suppressed just like unpublish.

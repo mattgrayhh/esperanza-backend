@@ -158,6 +158,7 @@ export interface DiffResult {
     qmisUpdated: number;
     qmisUnpublished: number;
     qmisPublished: number;
+    qmisPublishHeld: number;
     qmisInSnowflake: number;
     communitiesUpdated: number;
     floorPlansUpdated: number;
@@ -203,6 +204,16 @@ export const UNPUBLISH_GUARD_MAX_PUBLISHED_FRACTION = 0.2;
  * a truncated/partial result, not 270 simultaneous sales).
  */
 export const UNPUBLISH_GUARD_MIN_SNOWFLAKE_RATIO = 0.5;
+
+/**
+ * Publish leg: max auto-publishes per run. Normal steady-state is a handful of
+ * newly-available homes, which flow automatically. A large batch (e.g. the initial
+ * backlog after the image self-heal images a class of previously-blank homes) is
+ * STAGED — only this many publish per run and the remainder is held + WARN-listed, so
+ * a big first wave is reviewable before it all goes live. Operator force (`?force=1`)
+ * releases the whole batch at once.
+ */
+export const PUBLISH_GUARD_MAX_PER_RUN = 15;
 
 export interface UnpublishGuardResult {
   tripped: boolean;
@@ -414,6 +425,7 @@ export function diff(
     qmisUpdated: 0,
     qmisUnpublished: 0,
     qmisPublished: 0,
+    qmisPublishHeld: 0,
     qmisInSnowflake: snowflakeQmis.length,
     communitiesUpdated: 0,
     floorPlansUpdated: 0,
@@ -530,8 +542,14 @@ export function diff(
   const snowflakeShrunk =
     eciKeyedCount > 0 && snowflakeQmis.length < UNPUBLISH_GUARD_MIN_SNOWFLAKE_RATIO * eciKeyedCount;
   if (!snowflakeShrunk) {
-    messages.push(...publishCandidates);
-    stats.qmisPublished = publishCandidates.length;
+    // Stage large batches: publish up to the per-run cap, hold + WARN the rest so a big
+    // first wave is reviewable before it all goes live. Operator force releases everything.
+    const release = forceUnpublish
+      ? publishCandidates
+      : publishCandidates.slice(0, PUBLISH_GUARD_MAX_PER_RUN);
+    messages.push(...release);
+    stats.qmisPublished = release.length;
+    stats.qmisPublishHeld = publishCandidates.length - release.length;
   }
 
   // Communities: sqft range + bed/bath ranges + price_from (0007), with change
