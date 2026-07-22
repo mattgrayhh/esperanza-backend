@@ -49,6 +49,17 @@ export interface QmiUnpublishMessage {
   qmiId: string;
 }
 
+/** Re-publish: a home that IS in the current available Snowflake set, is currently
+ *  published=0, and already carries a renderable image. Consumer sets published=1
+ *  (guarded WHERE published=0). This is the PUBLISH direction ingest never had — a
+ *  new/relisted available home used to stay invisible until a manual admin flip, which
+ *  is why each parity audit re-found a different missing home (audit 2026-07-21). */
+export interface QmiPublishMessage {
+  kind: 'qmi.publish';
+  snowflakeKey: string;
+  qmiId: string;
+}
+
 export interface CommunityUpsertMessage {
   kind: 'community.upsert';
   /** Community D1 row id (resolved by name). */
@@ -66,6 +77,7 @@ export interface FloorPlanUpsertMessage {
 export type SyncMessage =
   | QmiUpsertMessage
   | QmiUnpublishMessage
+  | QmiPublishMessage
   | CommunityUpsertMessage
   | FloorPlanUpsertMessage;
 
@@ -78,6 +90,7 @@ export interface ExistingQmi {
   housenumber: string | null;
   synced_community_name: string | null;
   published: number; // 0 | 1
+  image_url: string | null; // publish precondition: only auto-publish homes with a real image
   // current synced values (to detect a real change and avoid no-op churn)
   synced_address: string | null;
   synced_postal_code: number | null;
@@ -144,6 +157,7 @@ export interface DiffResult {
     qmisCreated: number;
     qmisUpdated: number;
     qmisUnpublished: number;
+    qmisPublished: number;
     qmisInSnowflake: number;
     communitiesUpdated: number;
     floorPlansUpdated: number;
@@ -399,6 +413,7 @@ export function diff(
     qmisCreated: 0,
     qmisUpdated: 0,
     qmisUnpublished: 0,
+    qmisPublished: 0,
     qmisInSnowflake: snowflakeQmis.length,
     communitiesUpdated: 0,
     floorPlansUpdated: 0,
@@ -492,6 +507,31 @@ export function diff(
   if (!unpublishGuard.tripped) {
     messages.push(...unpublishCandidates);
     stats.qmisUnpublished = unpublishCandidates.length;
+  }
+
+  // RE-PUBLISH (the direction ingest never had): existing rows whose eci IS in the
+  // current available Snowflake set (so they passed the sale-gate upstream), are
+  // currently published=0, and already carry a real image → publish (set =1). Without
+  // this, a new build or a relisted "Sales Canceled" home stays invisible until a human
+  // flips it — the standing manual task behind the recurring "missing homes" audits.
+  // Imaged-only avoids surfacing un-curated draft cards. Truncation can only SHRINK this
+  // set (publish requires the eci to be present in the run), so a partial run can never
+  // mass-publish; we still refuse to act on a shrunk run, matching the unpublish guard's
+  // truncation signal. No batch cap — a large legit backlog SHOULD publish (that is the
+  // fix), and a human still reviews via the parity WARN for any left un-imaged.
+  const publishCandidates: QmiPublishMessage[] = [];
+  for (const e of existingQmis) {
+    const k = snowflakeKey(e.eci_key);
+    if (!k) continue;
+    if (snowflakeEcis.has(k) && e.published === 0 && (e.image_url ?? '').trim() !== '') {
+      publishCandidates.push({ kind: 'qmi.publish', snowflakeKey: k, qmiId: e.id });
+    }
+  }
+  const snowflakeShrunk =
+    eciKeyedCount > 0 && snowflakeQmis.length < UNPUBLISH_GUARD_MIN_SNOWFLAKE_RATIO * eciKeyedCount;
+  if (!snowflakeShrunk) {
+    messages.push(...publishCandidates);
+    stats.qmisPublished = publishCandidates.length;
   }
 
   // Communities: sqft range + bed/bath ranges + price_from (0007), with change
