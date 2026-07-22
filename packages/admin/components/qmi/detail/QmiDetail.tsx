@@ -11,6 +11,7 @@ import { useId, useMemo, useState } from 'react';
 import { saveEntity } from '@/lib/actions';
 import type { QmiDetailView } from '@/lib/qmi-detail';
 import { parseGalleryUrls } from '@/lib/gallery-urls';
+import { pickListingHero } from '@esperanza/db/listing-hero';
 import {
   deriveElevationType,
   splitElevationLabel,
@@ -83,6 +84,14 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
   // nudge the public path by accident; unlock → edit → Save writes `slug`.
   const [slug, setSlug] = useState(view.slug);
   const [slugUnlocked, setSlugUnlocked] = useState(false);
+  const listingCardHero = useMemo(
+    () =>
+      imageUrl.trim() ||
+      pickListingHero({ galleryUrls, ogImageUrl: view.admin.ogImageUrl }) ||
+      view.admin.listingHeroUrl ||
+      view.admin.heroFallbackUrl,
+    [imageUrl, galleryUrls, view.admin.ogImageUrl, view.admin.listingHeroUrl, view.admin.heroFallbackUrl]
+  );
   const {
     pending,
     startTransition,
@@ -404,7 +413,7 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
             lotNumber:
               view.syncedOverride.lotNumber.overrideValue.trim() ||
               view.syncedOverride.lotNumber.syncedDisplay,
-            imageUrl: imageUrl || view.admin.heroFallbackUrl,
+            imageUrl: listingCardHero,
           }}
         />
 

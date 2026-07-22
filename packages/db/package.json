@@ -16,7 +16,8 @@
     "./pdf-invalidate": "./lib/pdf-invalidate.ts",
     "./pdf-ensure": "./lib/pdf-ensure.ts",
     "./public-cache-purge": "./lib/public-cache-purge.ts",
-    "./site-rebuild": "./lib/site-rebuild.ts"
+    "./site-rebuild": "./lib/site-rebuild.ts",
+    "./listing-hero": "./lib/listing-hero.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",
