@@ -619,7 +619,7 @@ describe('/qmi — raw passthrough contract', () => {
 
 // =============================================================================
 describe('/communities — mapped dense contract', () => {
-  it('has exactly the 24 contract keys, all present', () => {
+  it('has exactly the 25 contract keys, all present', () => {
     // v_public_communities now bakes the published gate (draft column dropped in 0005).
     const rows = db.prepare('SELECT * FROM v_public_communities').all() as Row[];
     const ctx = buildPromoCtx(db);
@@ -650,6 +650,25 @@ describe('/communities — mapped dense contract', () => {
     const ids = rows.map((r) => r['id']);
     expect(ids).toContain('recX6JFH2NKKWSVpE');
     expect(ids).not.toContain('recDRAFT000000000');
+  });
+
+  it('photoGallery surfaces the full community gallery from photo_gallery_json', () => {
+    // Regression guard for the "galleries near-empty on our site" bug (audit 2026-07-21):
+    // the view omitted photo_gallery_json so the renderer only ever had featured+secondary.
+    // parseGallery accepts both {url,alt} objects and the legacy bare-URL-string form.
+    const objForm = serializeCommunityRow(
+      { id: 'recG', photo_gallery_json: '[{"url":"/g1.jpg","alt":"a"},{"url":"/g2.jpg","alt":"b"},{"url":"/g3.jpg"}]' } as unknown as Row,
+      null
+    );
+    expect(objForm.photoGallery.length).toBe(3);
+    expect(objForm.photoGallery[0]).toEqual({ url: '/g1.jpg', alt: 'a' });
+    const strForm = serializeCommunityRow(
+      { id: 'recG2', photo_gallery_json: '["/s1.jpg","/s2.jpg"]' } as unknown as Row,
+      null
+    );
+    expect(strForm.photoGallery.map((g) => g.url)).toEqual(['/s1.jpg', '/s2.jpg']);
+    // empty/absent → [] so the renderer falls back to featured+secondary
+    expect(serializeCommunityRow({ id: 'recG3' } as unknown as Row, null).photoGallery).toEqual([]);
   });
 
   it('coordinates normalize a Google-Maps URL to bare "lat,lng"', () => {

@@ -259,6 +259,8 @@ SELECT
   c.featured_image_url, c.featured_image_alt,
   c.secondary_image_url, c.secondary_image_alt,
   c.photo_gallery_image_url, c.photo_gallery_image_alt,
+  c.photo_gallery_json,    -- full community gallery (JSON array of {url,alt}); the
+                           -- renderer showed only [featured, secondary] without this
   c.description_image_url,
   c.community_logo_url, c.community_logo_alt,
   c.features_download_url, c.resources_download_url, c.featured_video,

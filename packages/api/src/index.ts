@@ -451,6 +451,9 @@ export interface CommunityPublic {
   /** HOA documents (CCRs, amendments) — {title, link} where link is an R2 PDF url.
    *  Parsed from communities.hoa_links_json; empty array when none. */
   hoaLinks: Array<{ title: string; link: string }>;
+  /** Full community photo gallery — {url, alt} parsed from communities.photo_gallery_json;
+   *  empty array when none (renderer then falls back to featured + secondary). */
+  photoGallery: Array<{ url: string; alt: string }>;
 }
 
 /** Parse the hoa_links_json column (JSON array of {title, link}) into a typed list,
@@ -490,6 +493,7 @@ export function serializeCommunityRow(row: Row, resolved: ResolvedPromo | null):
     address: asStr(row['address']),
     image: asStr(row['featured_image_url']),
     secondaryImage: asStr(row['secondary_image_url']),
+    photoGallery: parseGallery(row['photo_gallery_json']),
     priceFrom: asNumOrNull(row['price_from']),
     sqft: asStr(row['square_footage_range']),
     beds: asStr(row['bed_count']),
