@@ -163,6 +163,11 @@ export interface DiffResult {
     communitiesUpdated: number;
     floorPlansUpdated: number;
     unresolvedLinks: number;
+    /** Snowflake plan MODEL names with no matching published D1 floor plan. Ingest can
+     *  neither create nor rename a floor_plan, so these are silently NOT synced — a new
+     *  or renamed model (e.g. Peppoli→Lunelli) needs an admin to create the row. Surfaced
+     *  so it's an ops signal, not a silent gap (parity audit 2026-07-21). */
+    unmatchedModels: string[];
   };
   /** Mass-unpublish safety guard outcome (see evaluateUnpublishGuard). */
   unpublishGuard: UnpublishGuardResult;
@@ -430,6 +435,7 @@ export function diff(
     communitiesUpdated: 0,
     floorPlansUpdated: 0,
     unresolvedLinks: 0,
+    unmatchedModels: [] as string[],
   };
   const existingCommById = new Map(existingCommunities.map((c) => [c.id, c]));
   const existingFpByName = new Map(
@@ -576,11 +582,16 @@ export function diff(
   }
 
   // Floor Plans (0007): DM_FLOOR_PLAN aggregates matched to D1 rows by name.
-  // Unmatched models are counted as unresolved links (visible in sync_log).
+  // Unmatched models are counted as unresolved links AND named in unmatchedModels —
+  // ingest can't create/rename a floor_plan, so a new/renamed model (Peppoli→Lunelli)
+  // is silently un-synced until an admin creates the row; surface it as an ops signal.
   for (const f of snowflakeFloorPlans) {
     const existing = existingFpByName.get(f.modelName.toLowerCase());
     if (!existing) {
       stats.unresolvedLinks++;
+      if (f.modelName && !stats.unmatchedModels.includes(f.modelName)) {
+        stats.unmatchedModels.push(f.modelName);
+      }
       continue;
     }
     const values: SyncedFloorPlanValues = {};
