@@ -56,13 +56,16 @@ function parseCsv(csv: string | null | undefined): string[] {
 const byLower = (a: string, b: string): number => a.toLowerCase().localeCompare(b.toLowerCase());
 
 /**
- * Pure core: given every floor plan's current membership CSVs, the cep pairs, and
- * the community id↔name table, return the rows whose derived membership differs
- * from what's stored (so only changed rows are written + pushed).
+ * Pure core: normalize each floor plan's CURATED membership CSVs (self-heal names↔ids,
+ * drop ids that no longer resolve) and return the rows whose derived membership differs
+ * from what's stored. The admin picker is the sole lineup source — cep is NOT folded in
+ * (see the block below), so an admin prune sticks instead of being re-added each run.
  */
 export function deriveMembershipUpdates(
   plans: MembershipRow[],
-  cepPairs: ReadonlyArray<{ floorPlanId: string; communityId: string }>,
+  // Retained for signature/caller stability; membership no longer derives from cep — the
+  // admin picker is the sole lineup source (see the block below). Prefixed to mark unused.
+  _cepPairs: ReadonlyArray<{ floorPlanId: string; communityId: string }>,
   communities: ReadonlyArray<{ id: string; name: string | null }>
 ): MembershipUpdate[] {
   const idByName = new Map<string, string>();
@@ -75,16 +78,18 @@ export function deriveMembershipUpdates(
     }
   }
 
-  const cepByPlan = new Map<string, Set<string>>();
-  for (const { floorPlanId, communityId } of cepPairs) {
-    if (!floorPlanId || !communityId) continue;
-    (cepByPlan.get(floorPlanId) ?? cepByPlan.set(floorPlanId, new Set()).get(floorPlanId)!).add(communityId);
-  }
-
+  // NOTE: cep pairs are NO LONGER folded into membership. The admin "Floor Plans
+  // Offered" picker (communities / community_ids) is the SOLE source of a community's
+  // plan lineup — matching how the authoritative site curates it editorially. Ingest
+  // used to auto-add every Snowflake-priced (plan, community) pair here, which meant an
+  // admin's prune of an unwanted card was silently re-added on the next 4h run. Removing
+  // that makes prunes stick. A genuinely new priced-but-unpicked plan is surfaced by the
+  // unmatched-model WARN in diff.ts instead of auto-appearing. (cepPairs param retained
+  // for caller/signature stability; a new priced plan community is an admin pick now.)
   const updates: MembershipUpdate[] = [];
   for (const p of plans) {
-    // UNION of existing-names→ids, existing-ids, and cep ids. Only keep ids that
-    // resolve to a real community (nameById) so a stale/renamed name self-corrects.
+    // Self-heal names↔ids from the CURATED CSVs only (drop ids that no longer resolve to
+    // a real community so a rename/delete self-corrects). No cep injection.
     const ids: string[] = [];
     const seen = new Set<string>();
     const add = (id: string): void => {
@@ -98,7 +103,6 @@ export function deriveMembershipUpdates(
       if (id) add(id);
     }
     for (const id of parseCsv(p.community_ids)) add(id);
-    for (const id of cepByPlan.get(p.id) ?? []) add(id);
 
     ids.sort(byLower);
     const communityIds = ids.join(', ');
