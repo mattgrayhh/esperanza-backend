@@ -307,6 +307,26 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
     }
   }
 
+  // Header image self-heal: fill image_url from the linked plan when it is still NULL.
+  // The insert-seed only runs at CREATE, so a home that landed before its plan had a
+  // rendering (or before the plan link resolved) stayed imageless forever — that is why a
+  // whole class of available homes never surfaced (imaged-only publish gate). Fill ONLY
+  // over NULL — an admin-set image is never overridden (same ownership rule as
+  // availability_text). This makes the seed durable instead of a one-shot backfill.
+  const curImg = await env.DB.prepare(
+    `SELECT image_url, COALESCE(override_floor_plan_id, synced_floor_plan_id) AS fp_id
+       FROM qmi WHERE id = ?`
+  )
+    .bind(msg.qmiId)
+    .first<{ image_url: string | null; fp_id: string | null }>();
+  if (curImg && curImg.image_url == null && curImg.fp_id) {
+    const seed = await floorPlanImageUrl(env, curImg.fp_id);
+    if (seed !== null) {
+      setExtra.push('image_url = ?');
+      valsExtra.push(seed);
+    }
+  }
+
   const setClause = [...Object.keys(patch).map((c) => `${c} = ?`), ...setExtra].join(', ');
   const vals = [...Object.values(patch), ...valsExtra, nowIso(), msg.qmiId];
   await env.DB.prepare(
