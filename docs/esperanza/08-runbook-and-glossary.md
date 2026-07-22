@@ -22,11 +22,24 @@ of commands. Part 3 is the glossary of every name and identifier in the system.
 4. **Stale runtime override:** Even when D1/API `image_url` is correct, community
    and available listing cards can still show old floor-plan URLs if production
    `community-homes-live.js` / `available-live.js` prefer `qmi-images.json` over
-   the live API. Patch those scripts so API `image_url` wins (see
-   `packages/api/live-scripts/`), redeploy `esperanzahomes-frontend`, or run
-   `node scripts/deploy-frontend-live-scripts.mjs` to patch worker assets directly.
-   Regenerating `qmi-images.json` from `/api/public/qmi` is a belt-and-suspenders
-   fallback but does not replace the JS fix long-term.
+   the live API. Patch those scripts in `esperanza-frontend`, then redeploy via
+   the normal frontend CI — **never** patch only a few worker assets via the
+   Cloudflare direct-upload API (that replaces the entire static manifest and
+   404s the site). See PR #171 for the JS fix; ship it through a full frontend
+   deploy.
+
+### "Every page shows Page not found on esperanzahomes.hazardhouse.ai"
+1. **Likely cause:** A partial Workers asset upload replaced the frontend Worker's
+   static manifest with only a handful of files (e.g. live scripts). Version metadata
+   may show `assets.serve_directly: true` instead of the normal `raw_run_worker_first`
+   routing. This is an infrastructure mis-deploy, not a Sentry/application bug.
+2. **Fix:** Roll production back to the last good deployment in Cloudflare
+   Workers → `esperanzahomes` → Deployments (version before the bad upload), or:
+   `POST /accounts/{account}/workers/scripts/esperanzahomes/deployments` with the
+   previous good `version_id` at 100%. Staging (`esperanzahomes-staging.*.workers.dev`)
+   is a separate Worker and is unaffected unless it was deployed separately.
+3. **Sentry:** No reset needed — errors are missing static HTML, not thrown exceptions
+   in admin/api Workers. Check Cloudflare Worker deployments, not Sentry issue queues.
 
 ### "Community page shows no Quick Move-In cards (legacy site has them)"
 1. **Confirm the API:** `GET /api/public/qmi` and filter by community name. Only

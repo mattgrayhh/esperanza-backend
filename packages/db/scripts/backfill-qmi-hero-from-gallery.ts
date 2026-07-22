@@ -14,6 +14,7 @@ import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseGalleryUrls } from '../../admin/lib/gallery-urls.js';
+import { pickListingHero } from '../lib/listing-hero.js';
 import { parseArgs, getMode } from './lib/cli.js';
 import { D1Sink, type Stmt } from './lib/d1.js';
 
@@ -25,6 +26,7 @@ interface QmiRow {
   slug: string;
   address: string;
   image_url: string | null;
+  og_image_url: string | null;
   photo_gallery_json: string | null;
 }
 
@@ -35,7 +37,7 @@ function loadQmIs(mode: 'local' | 'remote', slugFilter?: string): QmiRow[] {
   const sql = `
     SELECT q.id, q.slug,
            COALESCE(q.override_address, q.synced_address) AS address,
-           q.image_url, q.photo_gallery_json
+           q.image_url, q.og_image_url, q.photo_gallery_json
     FROM qmi q
     ${where}
   `.trim();
@@ -49,15 +51,6 @@ function loadQmIs(mode: 'local' | 'remote', slugFilter?: string): QmiRow[] {
   const parsed = JSON.parse(out.slice(jsonStart));
   const rows = Array.isArray(parsed) ? parsed[0]?.results : parsed?.results;
   return (rows ?? []) as QmiRow[];
-}
-
-/** Prefer a home-specific /qmi/ upload; else first non-floor-plan url; else first. */
-export function pickHeroFromGallery(urls: string[]): string | null {
-  if (!urls.length) return null;
-  const qmi = urls.find((u) => /\/qmi\//i.test(u));
-  if (qmi) return qmi;
-  const nonPlan = urls.find((u) => !/\/floor_plans\//i.test(u));
-  return nonPlan ?? urls[0] ?? null;
 }
 
 function main() {
@@ -74,7 +67,7 @@ function main() {
 
   for (const row of rows) {
     const gallery = parseGalleryUrls(row.photo_gallery_json ?? '');
-    const hero = pickHeroFromGallery(gallery);
+    const hero = pickListingHero({ galleryUrls: gallery, ogImageUrl: row.og_image_url });
     if (!hero) {
       skipped++;
       continue;

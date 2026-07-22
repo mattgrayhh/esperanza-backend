@@ -23,6 +23,8 @@ import { getReadDb } from './db';
 import { qmi, floorPlans, communities, cities, promotions, promotionTargets } from '@esperanza/db';
 import { effectiveValue } from '@esperanza/db/override';
 import { resolveEffectivePromo, type PromoLike, type PromoTargetLike } from '@esperanza/db/promo';
+import { pickListingHero } from '@esperanza/db/listing-hero';
+import { parseGalleryUrls } from './gallery-urls';
 import { loadOptions, type SelectOption } from './select-options';
 import { deriveStatus } from './status';
 import { buildLiveSitePlacement, type LiveSitePlacement } from './live-site';
@@ -208,6 +210,10 @@ export interface QmiDetailView {
     floorPlanImageDefault: string;
     /** Home-level hero (`image_url`); blank → floor-plan rendering on the live site. */
     imageUrl: string;
+    /** Social/OG image — often the job elevation rendering; used to derive listing hero. */
+    ogImageUrl: string;
+    /** Resolved listing-card hero from gallery + og_image (preview helper). */
+    listingHeroUrl: string;
     /** First resolved gallery image — preview fallback for the main hero slot. */
     heroFallbackUrl: string;
   };
@@ -613,6 +619,14 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
       floorPlanImage: s(r.floor_plan_image),
       floorPlanImageDefault: s(fp?.floor_plan_image),
       imageUrl: s(r.image_url),
+      ogImageUrl: s(r.og_image_url),
+      listingHeroUrl:
+        pickListingHero({
+          galleryUrls: parseGalleryUrls(s(r.photo_gallery_json)),
+          ogImageUrl: s(r.og_image_url),
+        }) ??
+        dedupedGallery[0]?.url ??
+        '',
       heroFallbackUrl: dedupedGallery[0]?.url ?? '',
     },
 

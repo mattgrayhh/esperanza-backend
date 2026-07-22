@@ -259,7 +259,7 @@ const qmi: EntityFieldConfig = {
     { field: 'available_now', label: 'Available Now', widget: 'boolean', bucket: 'admin' },
     { field: 'self_tour_available', label: 'Self Tour Available', widget: 'boolean', bucket: 'admin' },
     { field: 'include_in_xml_feed', label: 'Include in XML Feed', widget: 'boolean', bucket: 'admin' },
-    { field: 'image_url', label: 'Main Image', widget: 'image', bucket: 'admin' },
+    { field: 'image_url', label: 'Main Image', widget: 'image', bucket: 'admin', help: 'Hero on community listing cards and the home detail header. Prefer the job elevation rendering (SD0xx) until a construction photo replaces it.' },
     { field: 'og_image_url', label: 'OG Image', widget: 'image', bucket: 'admin' },
     {
       field: 'floor_plan_image',
