@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 /**
  * Patch esperanzahomes worker static assets (live scripts + qmi-images.json).
- * Uses Cloudflare Workers direct asset upload API.
+ *
+ * ⚠️  DO NOT USE for partial deploys without the full asset manifest. Uploading
+ * only a few paths REPLACES the worker's entire static asset set and will 404
+ * every page ("Page not found"). To ship live-script fixes, mirror the files in
+ * esperanza-frontend and run a normal frontend deploy instead.
+ *
+ * This script is retained for emergency ops only and exits unless
+ * ALLOW_PARTIAL_FRONTEND_ASSET_PATCH=1 is set explicitly.
  */
 import crypto from 'crypto';
 import fs from 'fs';
@@ -156,6 +163,15 @@ async function deployWorker(completionJwt) {
 }
 
 async function main() {
+  if (process.env.ALLOW_PARTIAL_FRONTEND_ASSET_PATCH !== '1') {
+    console.error(
+      'Refusing to run: partial asset patches wipe the worker static site.\n' +
+        'Set ALLOW_PARTIAL_FRONTEND_ASSET_PATCH=1 only if you know what you are doing,\n' +
+        'or deploy via esperanza-frontend (recommended).'
+    );
+    process.exit(1);
+  }
+
   const files = [
     manifestEntry(path.join(ROOT, 'packages/api/live-scripts/community-homes-live.js')),
     manifestEntry(path.join(ROOT, 'packages/api/live-scripts/available-live.js')),
