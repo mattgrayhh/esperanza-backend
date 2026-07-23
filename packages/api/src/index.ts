@@ -284,6 +284,9 @@ const QMI_PLAIN: FieldSpec[] = [
   ['collection', 'Collection', (v) => asStr(v)],
   ['description', 'Description', (v) => asStr(v)],
   ['image_url', 'image_url', (v) => asStr(v)],
+  // Home-specific floor-plan drawing override (admin upload). The PDF worker already
+  // prefers it over the plan-level FP: Image; exposing it lets the public site do the same.
+  ['floor_plan_image', 'floor_plan_image', (v) => asStr(v)],
   ['move_in_date', 'Move-In Date', (v) => asStr(v)],
   ['longitude', 'longitude', (v) => asNumOrNull(v) as Json],
   ['latitude', 'latitude', (v) => asNumOrNull(v) as Json],
