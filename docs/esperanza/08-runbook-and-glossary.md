@@ -114,6 +114,19 @@ of commands. Part 3 is the glossary of every name and identifier in the system.
 4. Admin saves purge both `sitesearch` and `sitesearch.json` automatically when `PURGE_KEY`
    is set.
 
+### "Community QMI card image doesn't match www.esperanzahomes.com"
+1. **Run the audit:** `node scripts/audit-community-qmi-heroes.mjs /tmp/qmi-hero-audit.json`
+   compares every community-page QMI card on the preview site to the live site's
+   detail-page `og:image`.
+2. **Auto-fix when admin already has the image:** `npx tsx packages/db/scripts/apply-qmi-hero-live-parity.ts --remote --audit=/tmp/qmi-hero-audit.json`
+   sets `image_url` from `og_image_url` when the og file matches live.
+3. **Needs review list:** homes with no matching gallery/og photo are listed in
+   `docs/esperanza/qmi-community-hero-review-list.md` — upload the live-site photo
+   in admin, then re-run the audit.
+4. **Cards still stale after D1 fix:** baked HTML and `qmi-images.json` can override
+   the API hero until `community-homes-live.js` (PR #171) ships via a full frontend
+   deploy. Hard-refresh after deploy.
+
 ### "I added a field but it's not in the admin form"
 You deployed code but didn't **seed a `field_definitions` row**. Run
 `npx tsx packages/db/scripts/seed-field-definitions.ts --remote`. See
