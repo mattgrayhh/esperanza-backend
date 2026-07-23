@@ -359,3 +359,20 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 })();
+
+/* Schedule tour → HubSpot embed (schedule-tour-hubspot-live.js) */
+(function () {
+  'use strict';
+  var SRC = '/schedule-tour-hubspot-live.js';
+  var IDS = ['detailpagescheduletourform', 'generalscheduletourform'];
+  function needs() { return IDS.some(function (id) { return document.getElementById(id); }); }
+  function load() {
+    if (!needs() || document.querySelector('script[src="' + SRC + '"]')) return;
+    var s = document.createElement('script');
+    s.src = SRC;
+    s.async = true;
+    document.head.appendChild(s);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load);
+  else load();
+})();
