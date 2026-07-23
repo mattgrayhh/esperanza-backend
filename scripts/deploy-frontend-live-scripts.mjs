@@ -175,6 +175,7 @@ async function main() {
   const files = [
     manifestEntry(path.join(ROOT, 'packages/api/live-scripts/community-homes-live.js')),
     manifestEntry(path.join(ROOT, 'packages/api/live-scripts/available-live.js')),
+    manifestEntry(path.join(ROOT, 'packages/api/live-scripts/schedule-tour-hubspot-live.js')),
     await buildQmiImagesJson(),
   ];
 

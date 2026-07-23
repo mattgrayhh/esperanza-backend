@@ -114,6 +114,21 @@ of commands. Part 3 is the glossary of every name and identifier in the system.
 4. Admin saves purge both `sitesearch` and `sitesearch.json` automatically when `PURGE_KEY`
    is set.
 
+### "Schedule An Exploratory Visit still shows the old native form"
+1. **Which form IDs:** Community pages use `#detailpagescheduletourform` (POST
+   `/xhr/tour/`). `/new-homes/available/` uses `#generalscheduletourform` (POST
+   `/xhr/general-tour/`). Both should be replaced at runtime by HubSpot embed portal
+   `8139268`, form `97ec81f8-e976-448d-aa61-dc4853b8ac10`.
+2. **Canonical script:** `packages/api/live-scripts/schedule-tour-hubspot-live.js` (mirror
+   to `esperanza-frontend`). `community-homes-live.js` and `available-live.js` load it
+   when a schedule-tour form is on the page.
+3. **Seven community pages** (Tres Lagos master plan, Bentsen Palm master plan, Aquero,
+   Vista Verde, Wright Ranch, Villas Las Lagunas, Silos at La Sienna) do **not** ship
+   `community-homes-live.js`. Add `<script src="/schedule-tour-hubspot-live.js"></script>`
+   to the global footer in `esperanza-frontend` so those pages get the HubSpot form.
+4. **Deploy:** mirror all three live scripts and redeploy via normal frontend CI — never
+   partial asset upload (see "Every page shows Page not found" above).
+
 ### "I added a field but it's not in the admin form"
 You deployed code but didn't **seed a `field_definitions` row**. Run
 `npx tsx packages/db/scripts/seed-field-definitions.ts --remote`. See

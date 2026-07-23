@@ -216,13 +216,21 @@ There's no copy to keep in sync — the public site reads D1 **live**:
    include `promo_text` (the listing/detail promo headline) and `promo_banner_style`
    (`green` for 4.99% rate promos, `gold` for flex promos) so the frontend can color
    promo bars without re-deriving rules client-side.
-3. The static frontend ships two runtime scripts that must honor `promo_banner_style`:
-   **`hydrate-live.js`** (detail-page `[data-live="promo"]` bar) and **`available-live.js`**
-   (QMI listing cards). Canonical patched copies live in
-   `packages/api/live-scripts/` in this repo. After editing them, redeploy
-   `esperanza-frontend` so those files replace the baked assets on the
-   `esperanzahomes` worker. Until then, detail pages may keep a baked `tan` class even
-   when the API returns `promo_banner_style: "green"`.
+3. The static frontend ships runtime scripts that patch baked pages at load time. Canonical
+   copies live in `packages/api/live-scripts/` in this repo. After editing them, redeploy
+   `esperanza-frontend` so those files replace the baked assets on the `esperanzahomes`
+   worker. Key scripts:
+   - **`hydrate-live.js`** — detail-page `[data-live="promo"]` bar; must honor
+     `promo_banner_style`.
+   - **`available-live.js`** — QMI listing cards on `/new-homes/available/`.
+   - **`community-homes-live.js`** — QMI cards on community detail pages.
+   - **`schedule-tour-hubspot-live.js`** — replaces native "Schedule An Exploratory Visit"
+     forms (`detailpagescheduletourform`, `generalscheduletourform`) with HubSpot embed
+     portal `8139268`, form `97ec81f8-e976-448d-aa61-dc4853b8ac10`. Loaded automatically
+     from `community-homes-live.js` and `available-live.js` when those forms exist; also
+     add `<script src="/schedule-tour-hubspot-live.js"></script>` to the global footer in
+     `esperanza-frontend` so community pages without `community-homes-live.js` (e.g. Tres
+     Lagos master plan) get the HubSpot form too.
 4. Admin writes purge the api's edge cache (`?purge=1`) so an edit shows within moments
    rather than after the cache TTL.
 
