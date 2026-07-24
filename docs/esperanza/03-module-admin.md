@@ -275,6 +275,24 @@ cutover — admin edits never appear there.
 
 ---
 
+## Quick Move-Ins list (`/qmi`)
+
+The bespoke table reads the **base** `qmi` table (not `v_public_qmi`) so **Draft** rows
+from Snowflake ingest stay visible. The **Address** column shows the effective street
+(`COALESCE(override_address, synced_address)`). When marketing has pinned an address
+override, a muted **MarkSystems:** sub-line shows the synced Snowflake street so operators
+can reconcile with MarkSystems (e.g. draft `4400 N Pear Ave` synced while the site uses
+`1601 E Marquise St` via override).
+
+The client search box matches effective address, **synced address**, house ID, community,
+floor plan, and lot (including bare lot numbers like `146`). Help: *How a new home appears*.
+
+If a spec is missing entirely, it is usually **not in the Snowflake available set** (spec
+flag, city whitelist, completed settlement, or latest sale transaction Pending/Sold) — see
+[02 — Ingest](./02-module-ingest.md) and `sync_log` on `/activity`, not a broken admin read.
+
+---
+
 ## Dashboard (`/`)
 
 Operator worklist, not a scoreboard. Layout (top → bottom):

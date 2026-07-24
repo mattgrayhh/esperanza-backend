@@ -27,6 +27,12 @@ The search box at the top matches lot numbers too: type the full code
 (`RC146`) or just the number part (`146`) — along with address, community,
 and floor plan, in any capitalization.
 
+When marketing has set an **address override**, the row shows the override as
+the main line but still lists the MarkSystems street underneath (`MarkSystems:
+…`) and the search box matches **either** address. Example: a draft still
+synced as `4400 N Pear Ave` but overridden to `1601 E Marquise St` for the
+site slug — search `Pear` or `Marquise` to find it.
+
 ## Publishing checklist
 
 1. Open `Quick Move-Ins` and filter the list to `Draft` to see new arrivals.

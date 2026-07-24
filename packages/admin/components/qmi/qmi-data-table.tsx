@@ -83,6 +83,8 @@ import {
 export interface QmiRow {
   id: string
   address: string
+  /** MarkSystems street from Snowflake; shown/searchable when it differs from `address`. */
+  syncedAddress: string
   housenumber: string
   /** effective lot number ("" when none), e.g. "RC146". */
   lotNumber: string
@@ -167,6 +169,9 @@ function AddressCell({ row }: { row: QmiRow }) {
   // lot number first; House ID as the legacy fallback.
   const subLabel = row.lotNumber ? "Lot" : "House ID"
   const subValue = row.lotNumber || row.housenumber
+  const synced = row.syncedAddress?.trim() ?? ""
+  const showSyncedLine =
+    synced !== "" && synced.toLowerCase() !== (row.address?.trim() ?? "").toLowerCase()
   const copy = React.useCallback(
     (e: React.MouseEvent) => {
       // don't trigger the row-click navigation / selection.
@@ -212,6 +217,11 @@ function AddressCell({ row }: { row: QmiRow }) {
       ) : (
         <span className="mt-0.5 block text-xs text-muted-foreground">—</span>
       )}
+      {showSyncedLine ? (
+        <span className="mt-0.5 block truncate text-xs text-muted-foreground" title="Address from MarkSystems (Snowflake)">
+          MarkSystems: {synced}
+        </span>
+      ) : null}
     </div>
   )
 }
@@ -575,7 +585,7 @@ export function QmiDataTable({ rows, truncated }: QmiDataTableProps) {
           <Input
             value={globalFilter}
             onChange={(e) => setGlobalFilter(e.target.value)}
-            placeholder="Search address, lot, community…"
+            placeholder="Search address, MarkSystems address, lot…"
             className="pl-8"
             aria-label="Search quick move-ins"
           />
