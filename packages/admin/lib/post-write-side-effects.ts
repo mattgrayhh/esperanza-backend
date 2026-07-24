@@ -1,13 +1,13 @@
 // =============================================================================
 // packages/admin — post-write fan-out (purge, rebuild, PDF queue).
 //
-// Runs AFTER the D1 commit + audit_log insert. Scheduled via ctx.waitUntil() from
-// postWrite() so Save / upload actions return immediately to the browser.
+// Runs AFTER the D1 commit + audit_log insert and a synchronous public-cache purge.
+// Scheduled via ctx.waitUntil() from postWrite() so Save / upload actions return
+// before the slower rebuild + PDF fan-out finishes.
 // =============================================================================
 
 import { affectedRenderKeys } from '@esperanza/db/pdf-invalidate';
 import { ensurePdfRender } from '@esperanza/db/pdf-ensure';
-import { purgePublicCache } from '@esperanza/db/public-cache-purge';
 import {
   triggerFrontendRebuild,
   triggerFrontendRebuildDebounced,
@@ -17,7 +17,7 @@ import type { EntityKey } from './entities';
 
 export type RebuildMode = 'immediate' | 'debounced' | 'skip';
 
-/** Purge api (+ frontend proxy) cache, optionally rebuild static HTML, enqueue PDF work. */
+/** Rebuild static HTML + enqueue PDF work (cache purge runs in postWrite before this). */
 export async function runPostWriteSideEffects(
   env: SiteRebuildEnv & {
     DB?: D1Database;
@@ -29,12 +29,6 @@ export async function runPostWriteSideEffects(
   id: string,
   rebuild: RebuildMode
 ): Promise<void> {
-  try {
-    await purgePublicCache(env as Parameters<typeof purgePublicCache>[0], collection);
-  } catch {
-    /* TTL backstop */
-  }
-
   if (rebuild === 'immediate') {
     try {
       await triggerFrontendRebuild(env);

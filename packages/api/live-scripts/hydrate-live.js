@@ -8,7 +8,11 @@
   var CFG = window.__ESPERANZA || {};
   var API = CFG.API_BASE || '/api/public';
   // API fetch with a timeout so a hung API rejects (into the .catch, baked price stays).
-  var fetchT = function (u, ms) { return fetch(u, AbortSignal.timeout ? { signal: AbortSignal.timeout(ms || 10000) } : {}); };
+  var fetchT = function (u, ms) {
+    var opts = { cache: 'no-store' };
+    if (AbortSignal.timeout) opts.signal = AbortSignal.timeout(ms || 10000);
+    return fetch(u, opts);
+  };
   var money = function (n) { return '$' + Number(n || 0).toLocaleString('en-US'); };
   function set(sel, val) {
     document.querySelectorAll('[data-live="' + sel + '"]').forEach(function (el) {

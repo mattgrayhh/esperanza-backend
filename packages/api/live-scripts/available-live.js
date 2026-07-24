@@ -8,7 +8,11 @@
   var API = CFG.API_BASE, TOKEN = CFG.MAPBOX_TOKEN, STYLE = CFG.MAPBOX_STYLE;
   // API fetch with a timeout so a hung API rejects (into the .catch) instead of
   // leaving the page on its loading state forever.
-  var fetchT = function (u, ms) { return fetch(u, AbortSignal.timeout ? { signal: AbortSignal.timeout(ms || 10000) } : {}); };
+  var fetchT = function (u, ms) {
+    var opts = { cache: 'no-store' };
+    if (AbortSignal.timeout) opts.signal = AbortSignal.timeout(ms || 10000);
+    return fetch(u, opts);
+  };
   var STAT = '/static/esperanza_homes/images/stats/';
   var ICON = {
     bed: STAT + 'bedroom%EF%B9%96v=7516482.svg',
