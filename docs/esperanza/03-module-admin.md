@@ -270,6 +270,11 @@ moments via purge; baked HTML catches up on the next debounced or publish rebuil
 (the new frontend). `www.esperanzahomes.com` is still the legacy O'Neil site until DNS
 cutover — admin edits never appear there.
 
+The **Dashboard** shows an amber banner when automatic publish hooks (`PURGE_KEY`,
+`GITHUB_DISPATCH_TOKEN` or `FRONTEND_DEPLOY_HOOK_URL`, `INGEST_TRIGGER_TOKEN`) are not
+set on the deployed admin Worker — editors should not need manual frontend redeploys once
+those secrets are configured (see Help → *How changes reach the live site*).
+
 **Exception:** unpublished draft creates (`createEntity` / `createCommunityDraft`) pass
 `{ sync: false }` — audit only, no background fan-out until a real save or publish.
 

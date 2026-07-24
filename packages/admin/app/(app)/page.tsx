@@ -65,6 +65,9 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { SyncNowButton } from '@/components/SyncNowButton';
+import { SitePipelineBanner } from '@/components/SitePipelineBanner';
+import { getSitePipelineStatus, type SitePipelineStatus } from '@/lib/site-pipeline-status';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import { cn } from '@/lib/utils';
 
@@ -138,6 +141,7 @@ interface DashboardData {
   promotionsTotal: number;
   promotionsActive: number;
   site: SiteHealth;
+  pipeline: SitePipelineStatus;
   recent: AuditRow[];
 }
 
@@ -208,6 +212,7 @@ async function loadDashboard(): Promise<DashboardData> {
   // Live reachability ping of the Caddy site (see checkSite). Runs on every
   // dashboard load alongside the D1 reads.
   const site = await checkSite();
+  const pipeline = getSitePipelineStatus(getCloudflareContext().env as Parameters<typeof getSitePipelineStatus>[0]);
 
   // Pull a wider window than we render so adjacent same-actor edits group well.
   const recent = await db.all<AuditRow>(
@@ -233,6 +238,7 @@ async function loadDashboard(): Promise<DashboardData> {
     promotionsTotal: Number(promotions?.total ?? 0),
     promotionsActive: Number(promotions?.active ?? 0),
     site,
+    pipeline,
     recent: recent ?? [],
   };
 }
@@ -276,6 +282,8 @@ export default async function DashboardPage() {
           </Button>
         </div>
       </header>
+
+      <SitePipelineBanner pipeline={d.pipeline} />
 
       {/* ── Needs attention (signature: operator worklist) ─────────────── */}
       <section className="flex flex-col gap-2" aria-labelledby="dash-attention-heading">

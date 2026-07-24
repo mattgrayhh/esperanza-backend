@@ -41,7 +41,12 @@ export interface IngestRunResponse {
  * public URL. Throws on transport error / non-JSON so the caller can surface it.
  */
 export async function postIngestRun(env: IngestEnv): Promise<IngestRunResponse> {
-  const token = env.INGEST_TRIGGER_TOKEN ?? '';
+  const token = (env.INGEST_TRIGGER_TOKEN ?? '').trim();
+  if (!token) {
+    throw new Error(
+      'INGEST_TRIGGER_TOKEN is not set on the admin worker. A Full Admin must run wrangler secret put INGEST_TRIGGER_TOKEN on packages/admin (same value as on esperanza-ingest).'
+    );
+  }
   const headers = { Authorization: `Bearer ${token}` };
 
   let res: Response;
@@ -52,19 +57,26 @@ export async function postIngestRun(env: IngestEnv): Promise<IngestRunResponse> 
   } else {
     const base = (env.INGEST_URL ?? '').replace(/\/+$/, '');
     if (!base) {
-      throw new Error('ingest is unreachable: no INGEST binding and no INGEST_URL');
+      throw new Error(
+        'Ingest worker is unreachable: no INGEST service binding and no INGEST_URL on the admin worker.'
+      );
     }
     res = await fetch(`${base}/run`, { method: 'POST', headers });
   }
 
-  let parsed: IngestRunResponse;
+  let parsed: IngestRunResponse & { error?: string };
   try {
-    parsed = (await res.json()) as IngestRunResponse;
+    parsed = (await res.json()) as IngestRunResponse & { error?: string };
   } catch {
-    throw new Error(`ingest /run returned a non-JSON response (HTTP ${res.status})`);
+    throw new Error(`Ingest /run returned a non-JSON response (HTTP ${res.status}).`);
+  }
+  if (res.status === 403) {
+    throw new Error(
+      'Sync unauthorized: INGEST_TRIGGER_TOKEN on esperanza-admin must exactly match esperanza-ingest. Ask a Full Admin to set the same secret on both workers.'
+    );
   }
   if (!res.ok) {
-    throw new Error(parsed.error || `ingest /run failed (HTTP ${res.status})`);
+    throw new Error(parsed.error || `Ingest /run failed (HTTP ${res.status}).`);
   }
   return parsed;
 }
