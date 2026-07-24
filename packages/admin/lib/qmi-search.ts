@@ -15,7 +15,10 @@
 
 /** The subset of a QMI list row the search predicate inspects. */
 export interface QmiSearchableRow {
+  /** Effective list address — COALESCE(override_address, synced_address). */
   address: string
+  /** Raw MarkSystems street from Snowflake (when set); searched even when overridden. */
+  syncedAddress?: string
   housenumber: string
   communityName: string
   floorPlanName: string
@@ -37,7 +40,13 @@ export function qmiRowMatchesQuery(row: QmiSearchableRow, query: string): boolea
     .trim()
   if (!q) return true
 
-  const textHit = [row.address, row.housenumber, row.communityName, row.floorPlanName]
+  const textHit = [
+    row.address,
+    row.syncedAddress,
+    row.housenumber,
+    row.communityName,
+    row.floorPlanName,
+  ]
     .filter(Boolean)
     .some((s) => s.toLowerCase().includes(q))
   if (textHit) return true

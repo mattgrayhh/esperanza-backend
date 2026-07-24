@@ -37,6 +37,21 @@ describe('qmiRowMatchesQuery — existing fields', () => {
   it('rejects non-matching queries', () => {
     expect(qmiRowMatchesQuery(row(), 'sequoia')).toBe(false);
   });
+
+  it('matches the Snowflake synced address when the list address is overridden', () => {
+    expect(
+      qmiRowMatchesQuery(
+        row({ address: '1601 E Marquise St', syncedAddress: '4400 N Pear Ave' }),
+        'pear ave',
+      ),
+    ).toBe(true);
+    expect(
+      qmiRowMatchesQuery(
+        row({ address: '1601 E Marquise St', syncedAddress: '4400 N Pear Ave' }),
+        'marquise',
+      ),
+    ).toBe(true);
+  });
 });
 
 describe('qmiRowMatchesQuery — lot number', () => {
