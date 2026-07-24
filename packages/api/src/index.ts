@@ -43,6 +43,7 @@
 // =============================================================================
 
 import {
+  communitiesByPromoFromPublishedQmi,
   resolveEffectivePromo,
   type PromoTargetType,
 } from '@esperanza/db/promo';
@@ -554,21 +555,23 @@ export interface PromoResolveMaps {
 export function serializePromotionRow(
   promo: PromoRow,
   targets: TargetRow[],
-  maps: PromoResolveMaps
+  maps: PromoResolveMaps,
+  /** Communities with ≥1 published QMI where this promo wins (from communitiesByPromoFromPublishedQmi). */
+  availableCommunityIds: string[] = []
 ): PromotionPublic {
-  const communityIds: string[] = [];
   const floorPlanIds: string[] = [];
   const collectionIds: string[] = [];
   for (const t of targets) {
     if (t.target_id == null) continue;
-    if (t.target_type === 'community') communityIds.push(t.target_id);
-    else if (t.target_type === 'qmi') {
-      /* qmi targets don't surface in the legacy promotions name lists */
-    }
-    // 'city' / 'global' don't map to community/floorplan/collection lists here.
+    if (t.target_type === 'floor_plan') floorPlanIds.push(t.target_id);
+    // community/qmi/city/global names are derived from live QMIs, not raw targets.
   }
-  // collectionIds carried raw if the schema ever stores them as a target_type;
-  // current model has no 'collection' target_type, so this stays [].
+
+  const communityIds = [...availableCommunityIds].sort((a, b) => {
+    const na = maps.communities.get(a)?.name ?? '';
+    const nb = maps.communities.get(b)?.name ?? '';
+    return na.localeCompare(nb);
+  });
 
   const communityNames: string[] = [];
   for (const cid of communityIds) {
@@ -912,6 +915,22 @@ async function buildPayload(
 
     case 'promotions': {
       const ctx = await loadPromoContext(session);
+      const qmiRes = await session
+        .prepare('SELECT id, community_id, floor_plan_id, city_id FROM v_public_qmi')
+        .all();
+      const qmiRows = (qmiRes.results ?? []) as unknown as Row[];
+      const qmiCtx = qmiRows.map((row) => ({
+        id: String(row['id']),
+        communityId: asStrOrNull(row['community_id']),
+        floorPlanId: asStrOrNull(row['floor_plan_id']),
+        cityId: asStrOrNull(row['city_id']),
+      }));
+      const communitiesByPromo = communitiesByPromoFromPublishedQmi(
+        ctx.promos,
+        ctx.targets,
+        qmiCtx,
+        now
+      );
       // group targets by promotion
       const byPromo = new Map<string, TargetRow[]>();
       for (const t of ctx.targets) {
@@ -921,7 +940,14 @@ async function buildPayload(
       }
       const promotions = ctx.promos
         .filter((p) => asBool(p.published))
-        .map((p) => serializePromotionRow(p, byPromo.get(p.id) ?? [], ctx.maps))
+        .map((p) =>
+          serializePromotionRow(
+            p,
+            byPromo.get(p.id) ?? [],
+            ctx.maps,
+            communitiesByPromo.get(p.id) ?? []
+          )
+        )
         .sort((a, b) => a.sortOrder - b.sortOrder);
       return { promotions, ts };
     }

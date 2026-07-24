@@ -224,6 +224,9 @@ There's no copy to keep in sync — the public site reads D1 **live**:
      `promo_banner_style`.
    - **`available-live.js`** — QMI listing cards on `/new-homes/available/`.
    - **`community-homes-live.js`** — QMI cards on community detail pages.
+   - **`incentive-live.js`** — trims `/incentives/{slug}/` "Available Homes" sections to
+     communities that have published QMIs carrying the promotion (uses `/api/public/promotions`
+     `communityNames`). Load on incentive detail pages in `esperanza-frontend`.
    - **`schedule-tour-hubspot-live.js`** — replaces native "Schedule An Exploratory Visit"
      forms (`detailpagescheduletourform`, `generalscheduletourform`) with HubSpot embed
      portal `8139268`, form `97ec81f8-e976-448d-aa61-dc4853b8ac10`. Loaded automatically

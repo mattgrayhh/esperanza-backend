@@ -28,7 +28,17 @@ of commands. Part 3 is the glossary of every name and identifier in the system.
    404s the site). See PR #171 for the JS fix; ship it through a full frontend
    deploy.
 
-### "Every page shows Page not found on esperanzahomes.hazardhouse.ai"
+### "Promo landing page lists communities with no available homes"
+1. **Confirm the API:** `GET /api/public/promotions` and find the promo by title. `communityNames`
+   must only include communities with at least one **published** QMI where that promotion wins
+   (not every checkbox under Associated Locations).
+2. **Baked HTML lag:** Incentive detail pages are static until the frontend rebuilds. Ship
+   `packages/api/live-scripts/incentive-live.js` on `/incentives/*` detail pages (mirror in
+   `esperanza-frontend`) so `#available` hides empty community blocks and communities outside
+   the API list without waiting for rebuild.
+3. **Set CTA URL:** Put the incentive path in the promotion's **CTA URL** (e.g.
+   `/incentives/your-slug/`) so `incentive-live.js` can match the page to the correct promo.
+
 1. **Likely cause:** A partial Workers asset upload replaced the frontend Worker's
    static manifest with only a handful of files (e.g. live scripts). Version metadata
    may show `assets.serve_directly: true` instead of the normal `raw_run_worker_first`
