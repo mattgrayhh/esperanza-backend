@@ -23,15 +23,39 @@ of commands. Part 3 is the glossary of every name and identifier in the system.
    `npx tsx packages/db/scripts/backfill-qmi-main-image.ts --remote --weak-only`
    (add `--dry-run` first). It fills `image_url` (and `og_image_url` when empty)
    from gallery/`og`, then scrapes the matching card on www.esperanzahomes.com.
-   Use `--skip-live` for gallery-only fixes without HTTP.
-4. **Stale runtime override:** Even when D1/API `image_url` is correct, community
-   and available listing cards can still show old floor-plan URLs if production
-   `community-homes-live.js` / `available-live.js` prefer `qmi-images.json` over
-   the live API. Patch those scripts in `esperanza-frontend`, then redeploy via
-   the normal frontend CI — **never** patch only a few worker assets via the
+   Use `--skip-live` for gallery-only fixes without HTTP. After `--remote` writes, scripts
+   purge `/api/public/qmi` when `PURGE_KEY` and `API_PUBLIC_URL` are set; otherwise run
+   `npx tsx packages/db/scripts/purge-public-cache.ts --entity=qmi` manually.
+4. **Stale runtime override:** Shipped `community-homes-live.js` / `available-live.js`
+   prefer live `/api/public/qmi` over baked `qmi-images.json` (API wins when
+   `image_url` is present). Redeploy the frontend after JS changes in
+   `packages/api/live-scripts/` — **never** patch only a few worker assets via the
    Cloudflare direct-upload API (that replaces the entire static manifest and
-   404s the site). See PR #171 for the JS fix; ship it through a full frontend
-   deploy.
+   404s the site). See PR #171 for the precedence fix.
+
+### "One person sees the correct QMI hero, another still sees the old image (looks random)"
+This is almost never random D1 data — it is **independent cache layers** expiring at
+different times:
+
+1. **Edge cache on `/api/public/qmi` (~60s per Cloudflare PoP):** Admin saves purge
+   this automatically (`PURGE_KEY` + `API_PUBLIC_URL` on `esperanza-admin`). **Bulk D1
+   scripts** (wrangler backfills) do **not** — they must call
+   `npx tsx packages/db/scripts/purge-public-cache.ts --entity=qmi` with the same env,
+   or rely on the backfill scripts that invoke purge when `--remote` updates rows.
+2. **Frontend worker proxy cache (~60s):** When `FRONTEND_PUBLIC_URL` is set, admin
+   (and `purge-public-cache.ts`) purge both the api worker and the frontend proxy.
+3. **Browser HTTP cache on `fetch('/api/public/qmi')`:** Live scripts use
+   `cache: 'no-store'` on API fetches so a hard refresh is not required after purge.
+4. **Baked `qmi-images.json`:** Fallback only when the API omits `image_url`; a full
+   frontend rebuild refreshes it. Until then, live JS should not prefer JSON over API.
+5. **Two public sites:** `esperanzahomes.hazardhouse.ai` reads D1 via `esperanza-api`;
+   **`www.esperanzahomes.com`** is still legacy O'Neil — compare the same hostname when
+   debugging.
+
+**Verify:** `GET /api/public/qmi` (filter by slug) — if `image_url` is correct there
+but a card is wrong, purge edge cache and confirm the user is on the hazardhouse frontend.
+Texas vs another office "catching up" is usually **TTL expiry on their nearest PoP**, not
+the database healing itself.
 
 ### "Every page shows Page not found on esperanzahomes.hazardhouse.ai"
 1. **Likely cause:** A partial Workers asset upload replaced the frontend Worker's
@@ -197,6 +221,10 @@ npm run -w @esperanza/admin seed-admin -- --email a@b.com --name "A" --role admi
 
 # ── Trigger ingest (Snowflake → D1) on demand ──────────────────────
 curl -X POST "https://<ingest-url>/run" -H "Authorization: Bearer $INGEST_TRIGGER_TOKEN"
+
+# ── Public API edge cache (after backfills or ops edits) ───────────
+# export $(grep -E '^(PURGE_KEY|API_PUBLIC_URL|FRONTEND_PUBLIC_URL)=' packages/admin/.dev.vars | xargs)
+npx tsx packages/db/scripts/purge-public-cache.ts --entity=qmi
 
 # ── R2 (images / PDFs) ─────────────────────────────────────────────
 npx wrangler r2 object put esperanza-cms/floor_plans/recXXXX/plan.jpg --file=./plan.jpg

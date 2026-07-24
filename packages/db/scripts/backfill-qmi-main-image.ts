@@ -25,6 +25,7 @@ import {
 } from '../lib/listing-hero.js';
 import { parseArgs, getMode } from './lib/cli.js';
 import { D1Sink } from './lib/d1.js';
+import { purgeAfterRemoteD1Write } from './lib/purge-public-cache-cli.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_DB_DIR = join(__dirname, '..');
@@ -137,7 +138,7 @@ function loadRows(mode: 'local' | 'remote', publishedOnly: boolean): QmiRow[] {
   return d1Query(mode, sql) as QmiRow[];
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   const mode = getMode(args);
   const dryRun = args.flags.has('dry-run');
@@ -201,8 +202,14 @@ function main() {
   console.log(
     `\nDone. Updated ${updated}, skipped ${skipped}, live fetches ${liveFetched} (${mode}${dryRun ? ', dry-run' : ''}).`,
   );
+  if (mode === 'remote' && !dryRun && updated > 0) {
+    await purgeAfterRemoteD1Write('qmi', { reason: 'backfill-qmi-main-image' });
+  }
 }
 
 if (process.argv[1]?.includes('backfill-qmi-main-image')) {
-  main();
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
 }

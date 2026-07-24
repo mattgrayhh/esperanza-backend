@@ -13,7 +13,11 @@
   var CFG = window.__ESPERANZA || {};
   var PAGE = window.__ESPERANZA_PAGE || {};
   var API = CFG.API_BASE || '/api/public';
-  var fetchT = function (u, ms) { return fetch(u, AbortSignal.timeout ? { signal: AbortSignal.timeout(ms || 10000) } : {}); };
+  var fetchT = function (u, ms) {
+    var opts = { cache: 'no-store' };
+    if (AbortSignal.timeout) opts.signal = AbortSignal.timeout(ms || 10000);
+    return fetch(u, opts);
+  };
 
   var STAT = '/static/esperanza_homes/images/stats/';
   var ICON = {

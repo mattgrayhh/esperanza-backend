@@ -53,7 +53,7 @@ function loadQmIs(mode: 'local' | 'remote', slugFilter?: string): QmiRow[] {
   return (rows ?? []) as QmiRow[];
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   const mode = getMode(args);
   const dryRun = args.flags.has('dry-run');
@@ -89,8 +89,15 @@ function main() {
 
   sink.flush();
   console.log(`\nDone. Updated ${updated}, skipped ${skipped} (${mode}${dryRun ? ', dry-run' : ''}).`);
+  if (mode === 'remote' && !dryRun && updated > 0) {
+    const { purgeAfterRemoteD1Write } = await import('./lib/purge-public-cache-cli.js');
+    await purgeAfterRemoteD1Write('qmi', { reason: 'backfill-qmi-hero-from-gallery' });
+  }
 }
 
 if (process.argv[1]?.includes('backfill-qmi-hero-from-gallery')) {
-  main();
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
 }
