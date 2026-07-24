@@ -48,8 +48,6 @@ import {
   buildOverrideAudit,
 } from '@esperanza/db/override';
 import type { PromoTargetType } from '@esperanza/db/promo';
-import { affectedRenderKeys } from '@esperanza/db/pdf-invalidate';
-import { ensurePdfRender } from '@esperanza/db/pdf-ensure';
 import { getDb, idColumn, type Db } from './db';
 import { getCurrentUser, isAdmin } from './auth';
 import { getEntity, isOverrideField, asOverridableEntity, type EntityKey } from './entities';
@@ -66,8 +64,7 @@ import {
   reservedKeysForEntity,
 } from './field-builder';
 import { chunk, AUDIT_ROWS_PER_INSERT } from './audit-chunk';
-import { purgePublicCache } from '@esperanza/db/public-cache-purge';
-import { triggerFrontendRebuild } from '@esperanza/db/site-rebuild';
+import { runPostWriteSideEffects, type RebuildMode } from './post-write-side-effects';
 
 // =============================================================================
 // Shared post-write step: audit_log rows + public-cache purge + PDF refresh.
@@ -85,20 +82,23 @@ interface AuditInput {
 
 // Public api (esperanza-api) edge-cache purge. See @esperanza/db/public-cache-purge.
 
+interface PostWriteOpts {
+  /** When false, skip cache purge / rebuild / PDF (draft create). */
+  sync?: boolean;
+  /** immediate = publish; debounced = routine edit (default); skip = purge/PDF only, no rebuild. */
+  rebuild?: RebuildMode;
+}
+
 /**
- * Insert audit rows and (optionally) fan out site side effects. Call AFTER the
- * D1 write committed. `collection` is the EntityKey for cache/PDF fan-out.
- *
- * Pass `{ sync: false }` for unpublished draft creates — audit only. Public-cache
- * purge and PDF register/re-render are skipped until a real save or publish (those
- * paths leave sync at the default true).
+ * Insert audit rows, then schedule purge/rebuild/PDF in the background (waitUntil) so
+ * Save and upload actions return quickly. Call AFTER the D1 write committed.
  */
 async function postWrite(
   db: Db,
   collection: EntityKey,
   id: string,
   audits: AuditInput[],
-  opts?: { sync?: boolean }
+  opts?: PostWriteOpts
 ): Promise<void> {
   if (audits.length > 0) {
     const rows: NewAuditLogRow[] = audits.map((a) => ({
@@ -110,9 +110,6 @@ async function postWrite(
       newValue: a.newValue,
       actor: a.actor,
     }));
-    // D1 caps bound params at 100/query; each audit row binds 7. A big multi-field
-    // save (e.g. 19 community fields = 133 params) would exceed it and throw, so insert
-    // in chunks. See lib/audit-chunk.ts.
     for (const batch of chunk(rows, AUDIT_ROWS_PER_INSERT)) {
       await db.insert(auditLog).values(batch);
     }
@@ -120,60 +117,18 @@ async function postWrite(
 
   if (opts?.sync === false) return;
 
+  const rebuild = opts?.rebuild ?? 'debounced';
   const env = getCloudflareContext().env;
-  // Purge the public api edge cache for this entity (+ promo-coupled dependents)
-  // so live islands pick up the change before the TTL. Also purge the frontend
-  // worker's /api/public proxy cache when FRONTEND_PUBLIC_URL is set. Best-effort.
+  const sideEffects = runPostWriteSideEffects(
+    env as Parameters<typeof runPostWriteSideEffects>[0],
+    collection,
+    id,
+    rebuild
+  );
   try {
-    await purgePublicCache(
-      env as unknown as Parameters<typeof purgePublicCache>[0],
-      collection
-    );
+    getCloudflareContext().ctx.waitUntil(sideEffects);
   } catch {
-    /* TTL backstop */
-  }
-
-  // Most page HTML is baked at frontend build time — queue a redeploy so copy,
-  // galleries, and list grids reflect the edit (live islands update via purge above).
-  try {
-    await triggerFrontendRebuild(env as unknown as Parameters<typeof triggerFrontendRebuild>[0]);
-  } catch {
-    /* operator can redeploy manually */
-  }
-
-  // Mark affected PDF brochures stale + enqueue re-renders (best-effort, event-driven freshness).
-  try {
-    const d1 = env.DB as unknown as D1Database | undefined;
-    if (!d1) return; // no D1 binding (e.g. unit-test mock) — nothing to invalidate
-    const q = async (sql: string, binds: unknown[]) => ((await d1.prepare(sql).bind(...(binds as any[])).all()).results ?? []) as any[];
-    const r = async (sql: string, binds: unknown[]) => { await d1.prepare(sql).bind(...(binds as any[])).run(); };
-    const keys = await affectedRenderKeys(q, collection, id);
-    // Mark stale via RETURNING so we can collect the rows to enqueue without an extra SELECT.
-    const toEnqueue: { type: string; slug: string }[] = [];
-    for (const k of keys) {
-      const res = k.type === 'list'
-        ? await d1.prepare(`UPDATE pdf_renders SET status='stale' WHERE type='list' AND city_slug=? AND status<>'rendering' RETURNING type, slug`).bind(k.citySlug).all()
-      : await d1.prepare(`UPDATE pdf_renders SET status='stale' WHERE type=? AND entity_id=? AND status<>'rendering' RETURNING type, slug`).bind(k.type, k.entityId).all();
-      for (const row of (res.results ?? []) as any[]) toEnqueue.push({ type: row.type, slug: row.slug });
-    }
-    // Idempotently register a pdf_renders row + backfill the URL for newly-created /
-    // synced entities so new records self-register without a manual seed run.
-    const baseUrl = (env as any).PDF_PUBLIC_BASE_URL || (env as any).IMAGES_PUBLIC_BASE_URL || '';
-    if (baseUrl) {
-      await ensurePdfRender(q, r, collection, id, baseUrl);
-    }
-    // Also pick up the entity's own row (covers a brand-new entity just inserted by ensurePdfRender).
-    const own = await d1.prepare(`SELECT type, slug FROM pdf_renders WHERE entity_id=? AND status<>'rendering'`).bind(id).all();
-    for (const row of (own.results ?? []) as any[]) toEnqueue.push({ type: row.type, slug: row.slug });
-    // Dedupe and enqueue.
-    const seen = new Set<string>();
-    for (const j of toEnqueue) {
-      const key = `${j.type}/${j.slug}`;
-      if (seen.has(key)) continue; seen.add(key);
-      try { await (env as any).RENDER_Q?.send({ type: j.type, slug: j.slug, reason: 'edit' }); } catch {}
-    }
-  } catch (e) {
-    console.error('[pdf-invalidate]', e);
+    void sideEffects;
   }
 }
 
@@ -493,8 +448,8 @@ export async function saveEntity(
 
   await postWrite(db, def.key, id, audits);
 
-  revalidatePath(`/admin/${def.segment}/${id}`);
-  revalidatePath(`/admin/${def.segment}`);
+  revalidatePath(`/${def.segment}/${id}`);
+  revalidatePath(`/${def.segment}`);
   return { ok: true };
 }
 
@@ -703,10 +658,10 @@ export async function togglePublished(
       newValue: value ? '1' : '0',
       actor,
     },
-  ]);
+  ], { rebuild: 'immediate' });
 
-  revalidatePath(`/admin/${def.segment}/${id}`);
-  revalidatePath(`/admin/${def.segment}`);
+  revalidatePath(`/${def.segment}/${id}`);
+  revalidatePath(`/${def.segment}`);
   return { ok: true };
 }
 
@@ -748,10 +703,10 @@ export async function toggleActive(
       newValue: value ? '1' : '0',
       actor,
     },
-  ]);
+  ], { rebuild: 'immediate' });
 
-  revalidatePath(`/admin/promotions/${id}`);
-  revalidatePath(`/admin/promotions`);
+  revalidatePath(`/promotions/${id}`);
+  revalidatePath(`/promotions`);
   return { ok: true };
 }
 
@@ -812,10 +767,10 @@ export async function setStatus(
       newValue: status,
       actor,
     },
-  ]);
+  ], { rebuild: status === 'Draft' ? 'debounced' : 'immediate' });
 
-  revalidatePath(`/admin/${def.segment}/${id}`);
-  revalidatePath(`/admin/${def.segment}`);
+  revalidatePath(`/${def.segment}/${id}`);
+  revalidatePath(`/${def.segment}`);
   return { ok: true };
 }
 
@@ -859,8 +814,8 @@ export async function setTestimonialStatus(
     },
   ]);
 
-  revalidatePath(`/admin/testimonials/${id}`);
-  revalidatePath(`/admin/testimonials`);
+  revalidatePath(`/testimonials/${id}`);
+  revalidatePath(`/testimonials`);
   return { ok: true };
 }
 
@@ -957,8 +912,8 @@ export async function savePromotionTargets(
     },
   ]);
 
-  revalidatePath(`/admin/promotions/${promoId}`);
-  revalidatePath(`/admin/promotions`);
+  revalidatePath(`/promotions/${promoId}`);
+  revalidatePath(`/promotions`);
   return { ok: true };
 }
 
@@ -1040,9 +995,9 @@ export async function saveCommunityFloorPlans(
     changed++;
   }
 
-  revalidatePath(`/admin/communities/${communityId}`);
-  revalidatePath(`/admin/communities`);
-  revalidatePath(`/admin/floor_plans`);
+  revalidatePath(`/communities/${communityId}`);
+  revalidatePath(`/communities`);
+  revalidatePath(`/floor-plans`);
   return { ok: true, changed };
 }
 
@@ -1127,7 +1082,7 @@ export async function uploadImage(
     console.error('uploadImage postWrite failed (image already saved):', e);
   }
 
-  revalidatePath(`/admin/${def.segment}/${id}`);
+  revalidatePath(`/${def.segment}/${id}`);
   return { ok: true, url };
 }
 
@@ -1285,7 +1240,7 @@ export async function saveCityBlocks(
     },
   ]);
 
-  revalidatePath(`/admin/cities/${id}`);
+  revalidatePath(`/cities/${id}`);
   return { ok: true };
 }
 
@@ -1314,6 +1269,9 @@ export async function saveCommunityHoaLinks(
   if (current.length === 0) return { ok: false, error: `Community ${id} not found` };
   const prev = current[0]! as Record<string, unknown>;
 
+  const prevJson = toStr(prev['hoa_links_json']) ?? '[]';
+  if (prevJson === json) return { ok: true };
+
   await db.update(communities).set({ hoaLinksJson: json, updatedAt: at }).where(eq(communities.id, id));
 
   await postWrite(db, 'communities', id, [
@@ -1328,7 +1286,7 @@ export async function saveCommunityHoaLinks(
     },
   ]);
 
-  revalidatePath(`/admin/communities/${id}`);
+  revalidatePath(`/communities/${id}`);
   return { ok: true };
 }
 
