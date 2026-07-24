@@ -64,6 +64,7 @@ import {
   reservedKeysForEntity,
 } from './field-builder';
 import { chunk, AUDIT_ROWS_PER_INSERT } from './audit-chunk';
+import { purgePublicCache } from '@esperanza/db/public-cache-purge';
 import { runPostWriteSideEffects, type RebuildMode } from './post-write-side-effects';
 
 // =============================================================================
@@ -119,6 +120,18 @@ async function postWrite(
 
   const rebuild = opts?.rebuild ?? 'debounced';
   const env = getCloudflareContext().env;
+
+  // Purge before returning: live API islands (promos, QMI cards, settings) must not
+  // depend on waitUntil — a background purge can be cut off when the isolate ends.
+  try {
+    await purgePublicCache(
+      env as Parameters<typeof purgePublicCache>[0],
+      collection
+    );
+  } catch {
+    /* TTL backstop (≤5 min on esperanza-api) */
+  }
+
   const sideEffects = runPostWriteSideEffects(
     env as Parameters<typeof runPostWriteSideEffects>[0],
     collection,
@@ -492,9 +505,13 @@ export async function deleteEntity(
 
   await db.delete(def.table).where(eq(idColumn(def.table), id));
 
-  await postWrite(db, def.key, id, [
-    { entity: def.key, entityId: id, field: null, action: 'delete', oldValue: null, newValue: null, actor },
-  ]);
+  await postWrite(
+    db,
+    def.key,
+    id,
+    [{ entity: def.key, entityId: id, field: null, action: 'delete', oldValue: null, newValue: null, actor }],
+    { rebuild: 'immediate' }
+  );
 
   revalidatePath(`/${def.segment}`);
   revalidatePath(`/${def.segment}/${id}`);
@@ -1417,17 +1434,23 @@ export async function deleteImageAsset(
 
   await db.delete(images).where(eq(images.id, id));
 
-  await postWrite(db, 'images', id, [
-    {
-      entity: 'images',
-      entityId: id,
-      field: null,
-      action: 'delete',
-      oldValue: oldUrl,
-      newValue: null,
-      actor,
-    },
-  ]);
+  await postWrite(
+    db,
+    'images',
+    id,
+    [
+      {
+        entity: 'images',
+        entityId: id,
+        field: null,
+        action: 'delete',
+        oldValue: oldUrl,
+        newValue: null,
+        actor,
+      },
+    ],
+    { rebuild: 'immediate' }
+  );
 
   revalidatePath('/images');
   return { ok: true };
@@ -1936,7 +1959,7 @@ export async function saveSiteSettings(
   // next page load instead of after the 5-minute TTL. Best-effort: a purge failure
   // must not fail the save (the TTL is the backstop).
   try {
-    const env = getCloudflareContext().env as unknown as { API_PUBLIC_URL?: string; PURGE_KEY?: string };
+    const env = getCloudflareContext().env as Parameters<typeof purgePublicCache>[0];
     await purgePublicCache(env, 'settings');
   } catch {
     /* TTL backstop */

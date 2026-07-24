@@ -77,6 +77,16 @@ vi.mock('../lib/auth', () => ({
 // next/cache: revalidatePath is a no-op in tests.
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 
+const purgePublicCache = vi.hoisted(() => vi.fn(async () => {}));
+const runPostWriteSideEffects = vi.hoisted(() => vi.fn(async () => {}));
+
+vi.mock('@esperanza/db/public-cache-purge', () => ({
+  purgePublicCache,
+}));
+vi.mock('../lib/post-write-side-effects', () => ({
+  runPostWriteSideEffects,
+}));
+
 vi.mock('@opennextjs/cloudflare', () => ({
   getCloudflareContext: () => ({
     env: {},
@@ -95,6 +105,8 @@ import {
 
 beforeEach(() => {
   H = freshHarness();
+  purgePublicCache.mockClear();
+  runPostWriteSideEffects.mockClear();
 });
 afterEach(() => {
   H.sqlite.close();
@@ -422,6 +434,13 @@ describe('deleteEntity', () => {
       H.sqlite.prepare('SELECT * FROM promotion_targets WHERE promotion_id = ?').all('p1')
     ).toHaveLength(0);
     expect(auditRows('promotions', 'p1').some((a) => a['action'] === 'delete')).toBe(true);
+    expect(purgePublicCache).toHaveBeenCalledWith(expect.anything(), 'promotions');
+    expect(runPostWriteSideEffects).toHaveBeenCalledWith(
+      expect.anything(),
+      'promotions',
+      'p1',
+      'immediate'
+    );
   });
 
   it('errors (no throw) when the record does not exist', async () => {

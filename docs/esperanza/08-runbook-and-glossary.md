@@ -80,7 +80,8 @@ of commands. Part 3 is the glossary of every name and identifier in the system.
    hook configured, operators must redeploy the frontend manually to see baked-content
    changes. The admin **Preview live page** link targets `esperanzahomes.hazardhouse.ai`.
 4. Check admin Worker logs for **`[purge]`** and **`[site-rebuild]`** after saving. A
-   successful cache bust returns `X-Purge-Applied: 1` from `esperanza-api`. Common failures:
+   successful cache bust returns `X-Purge-Applied: 1` from `esperanza-api`. The purge runs
+   **before** the Save response returns (not only in the background). Common failures:
    - `PURGE_KEY unset` — set the same secret on `esperanza-admin` and `esperanza-api`
    - `purge not applied` — key mismatch or the api worker wasn't redeployed after the
      authenticated-purge change (PR #150, 2026-07-19)

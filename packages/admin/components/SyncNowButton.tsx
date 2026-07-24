@@ -40,12 +40,11 @@ export function SyncNowButton() {
         </span>
       )}
       {result != null && result !== 'ok' && !pending && (
-        <span
-          className="inline-flex items-center gap-1.5 text-xs text-destructive"
-          title={result}
-        >
-          <TriangleAlertIcon className="size-3.5" />
-          Sync failed
+        <span className="max-w-md text-xs text-destructive text-pretty" title={result}>
+          <span className="inline-flex items-start gap-1.5">
+            <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
+            <span>{result}</span>
+          </span>
         </span>
       )}
       <Button size="sm" variant="outline" onClick={run} disabled={pending}>

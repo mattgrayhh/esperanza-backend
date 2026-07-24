@@ -244,21 +244,23 @@ To add a brand-new field **type** (not just a field), touch `lib/field-builder.t
 ## On every write: audit log + cache purge + site rebuild
 
 All writes go through Server Actions in **`lib/actions.ts`**, which call `postWrite()`
-after the D1 commit. **`postWrite()` returns to the browser as soon as audit rows are
-inserted**; purge, optional frontend rebuild, and PDF queue work run in the background via
-`ctx.waitUntil()` (`lib/post-write-side-effects.ts`).
+after the D1 commit. **`postWrite()` returns to the browser **after** audit rows are inserted **and** the public
+API (+ frontend proxy) cache purge has finished; optional frontend rebuild and PDF queue
+work still run in the background via `ctx.waitUntil()` (`lib/post-write-side-effects.ts`).
 
 `postWrite()`:
 - inserts `audit_log` rows — `{entity, entityId, field, action, oldValue, newValue, actor,
   created_at}` — chunked at **≤14 rows per INSERT** (D1 bind-parameter limit;
   `lib/audit-chunk.ts`);
-- **background:** purges the affected `esperanza-api` public-cache entities via the **API
-  service binding** (falls back to `API_PUBLIC_URL`) with an authenticated `?purge=1`
-  request — including `sitesearch` on every write — and, when `FRONTEND_PUBLIC_URL`
-  is set, repeats the purge against the frontend worker's `/api/public/*` proxy cache;
+- **await (same request):** purges the affected `esperanza-api` public-cache entities via
+  the **API service binding** (falls back to `API_PUBLIC_URL`) with an authenticated
+  `?purge=1` request — including `sitesearch` on every write — and, when
+  `FRONTEND_PUBLIC_URL` is set, repeats the purge against the frontend worker's
+  `/api/public/*` proxy cache. The edge TTL (≤5 min) is only a backstop if purge fails;
 - **background:** triggers a static frontend rebuild — **immediately** on publish /
-  status→Live (and similar), otherwise **debounced** (~2 minutes between GitHub/hook
-  dispatches so rapid saves and multi-image uploads do not stack full redeploys);
+  delete / status→Live (and similar), otherwise **debounced** (~2 minutes between
+  GitHub/hook dispatches so rapid saves and multi-image uploads do not stack full
+  redeploys);
 - **background:** marks PDFs stale via the render queue.
 
 Routine copy/image saves therefore feel instant in the admin; live API islands update within
@@ -267,6 +269,11 @@ moments via purge; baked HTML catches up on the next debounced or publish rebuil
 **Preview links** in the admin placement rail target **`esperanzahomes.hazardhouse.ai`**
 (the new frontend). `www.esperanzahomes.com` is still the legacy O'Neil site until DNS
 cutover — admin edits never appear there.
+
+The **Dashboard** shows an amber banner when automatic publish hooks (`PURGE_KEY`,
+`GITHUB_DISPATCH_TOKEN` or `FRONTEND_DEPLOY_HOOK_URL`, `INGEST_TRIGGER_TOKEN`) are not
+set on the deployed admin Worker — editors should not need manual frontend redeploys once
+those secrets are configured (see Help → *How changes reach the live site*).
 
 **Exception:** unpublished draft creates (`createEntity` / `createCommunityDraft`) pass
 `{ sync: false }` — audit only, no background fan-out until a real save or publish.
