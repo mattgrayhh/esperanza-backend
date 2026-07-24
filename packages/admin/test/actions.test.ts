@@ -78,7 +78,10 @@ vi.mock('../lib/auth', () => ({
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 
 vi.mock('@opennextjs/cloudflare', () => ({
-  getCloudflareContext: () => ({ env: {} }),
+  getCloudflareContext: () => ({
+    env: {},
+    ctx: { waitUntil: (p: Promise<unknown>) => void p },
+  }),
 }));
 
 // Import AFTER the mocks are registered (vi.mock is hoisted, so this is safe).

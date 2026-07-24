@@ -296,6 +296,7 @@ export function RichTextEditor({
   const [err, setErr] = useState<string | null>(null);
   const imgIndex = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const htmlDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const canUpload = Boolean(entity && id);
 
   const editor = useEditor({
@@ -317,10 +318,22 @@ export function RichTextEditor({
         'aria-label': displayLabel(label),
       },
     },
-    onUpdate: ({ editor }) => {
-      setHtml(editor.isEmpty ? '' : editor.getHTML());
+    onUpdate: ({ editor: ed }) => {
+      const next = ed.isEmpty ? '' : ed.getHTML();
+      if (htmlDebounceRef.current) clearTimeout(htmlDebounceRef.current);
+      htmlDebounceRef.current = setTimeout(() => setHtml(next), 280);
+    },
+    onBlur: ({ editor: ed }) => {
+      if (htmlDebounceRef.current) clearTimeout(htmlDebounceRef.current);
+      setHtml(ed.isEmpty ? '' : ed.getHTML());
     },
   });
+
+  useEffect(() => {
+    return () => {
+      if (htmlDebounceRef.current) clearTimeout(htmlDebounceRef.current);
+    };
+  }, []);
 
   const setLink = useCallback((ed: Editor) => {
     const prev = ed.getAttributes('link').href as string | undefined;

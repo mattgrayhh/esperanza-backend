@@ -32,7 +32,6 @@ export interface SiteRebuildEnv {
 
 /** Best-effort: a failed hook must never fail the admin save. */
 export async function triggerFrontendRebuild(env: SiteRebuildEnv): Promise<void> {
-  // Transport 1: plain deploy-hook URL (self-authenticating).
   const hookUrl = (env.FRONTEND_DEPLOY_HOOK_URL ?? '').trim();
   if (hookUrl) {
     try {
@@ -83,4 +82,46 @@ export async function triggerFrontendRebuild(env: SiteRebuildEnv): Promise<void>
       }
     })
   );
+}
+
+/** Site-settings key — timestamp (ms) of the last frontend rebuild dispatch. */
+export const FRONTEND_REBUILD_DEBOUNCE_KEY = '_admin_frontend_rebuild_at';
+
+/** Skip duplicate GitHub/hook dispatches within this window (rapid saves / multi-upload). */
+export const FRONTEND_REBUILD_DEBOUNCE_MS = 120_000;
+
+/**
+ * Leading-edge debounce: first save in a quiet period dispatches; further saves within
+ * the window still purge cache (caller) but skip another full static rebuild.
+ */
+export async function triggerFrontendRebuildDebounced(
+  env: SiteRebuildEnv,
+  d1?: D1Database
+): Promise<void> {
+  if (!d1) {
+    await triggerFrontendRebuild(env);
+    return;
+  }
+  const now = Date.now();
+  try {
+    const row = await d1
+      .prepare('SELECT value FROM site_settings WHERE key = ?')
+      .bind(FRONTEND_REBUILD_DEBOUNCE_KEY)
+      .first<{ value: string }>();
+    const last = row?.value ? Number(row.value) : 0;
+    if (Number.isFinite(last) && now - last < FRONTEND_REBUILD_DEBOUNCE_MS) {
+      return;
+    }
+    const at = new Date().toISOString();
+    await d1
+      .prepare(
+        `INSERT INTO site_settings (key, value, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+      )
+      .bind(FRONTEND_REBUILD_DEBOUNCE_KEY, String(now), at)
+      .run();
+  } catch (err) {
+    console.error('[site-rebuild] debounce read/write failed — dispatching anyway', err);
+  }
+  await triggerFrontendRebuild(env);
 }
