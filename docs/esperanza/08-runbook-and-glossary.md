@@ -18,7 +18,12 @@ of commands. Part 3 is the glossary of every name and identifier in the system.
    (add `--dry-run` first). The script copies the best gallery photo into
    `image_url` for every affected home.
 3. **No gallery photos:** Homes like 4417 N Pear Ave with an empty gallery still
-   need real photos uploaded in the admin before a hero can be set.
+   need real photos uploaded in the admin before a hero can be set. When the live
+   O'Neil site already shows a card photo, run
+   `npx tsx packages/db/scripts/backfill-qmi-main-image.ts --remote --weak-only`
+   (add `--dry-run` first). It fills `image_url` (and `og_image_url` when empty)
+   from gallery/`og`, then scrapes the matching card on www.esperanzahomes.com.
+   Use `--skip-live` for gallery-only fixes without HTTP.
 4. **Stale runtime override:** Even when D1/API `image_url` is correct, community
    and available listing cards can still show old floor-plan URLs if production
    `community-homes-live.js` / `available-live.js` prefer `qmi-images.json` over
