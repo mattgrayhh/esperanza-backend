@@ -415,7 +415,10 @@ shows a derived **Shows On** column (`build-list-view.ts`).
   `badge_text`, `banner_text`, `cta_label`, `cta_url` (single FormData source).
 - **Incentives page** (`PromotionIncentiveSection`) — master `show_incentive_page`;
   live card preview; Image / Title / Description section toggles reveal editors and
-  spotlight the matching region (`image_url`, `title`, `copy`).
+  spotlight the matching region (`image_url`, `title`, `copy`). The **Available Homes**
+  block on `/incentives/{slug}/` should list only communities with a published Quick Move-In
+  where this promo wins. `GET /api/public/promotions` derives `communityNames` that way;
+  `incentive-live.js` trims baked `#available` sections at runtime from that list.
 
 Jump nav is hidden on the promo editor. Ungrouped fields render as **Promotion Details**
 (Start/End dates first). The old text **"Where will this show"** box in

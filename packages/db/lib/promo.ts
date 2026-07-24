@@ -167,3 +167,52 @@ export function resolveEffectivePromo<P extends PromoLike>(
 
   return candidates[0]!.promo;
 }
+
+/** Published QMI row shape for promo→community indexing (api Worker / tests). */
+export interface QmiPromoContext {
+  id: string;
+  communityId: string | null;
+  floorPlanId: string | null;
+  cityId: string | null;
+}
+
+/**
+ * Communities that have at least one published QMI whose effective promotion is
+ * `promoId` (same resolution as listing cards). Used for incentive landing pages
+ * so empty or wrong-scope communities are not advertised.
+ */
+export function communitiesByPromoFromPublishedQmi<P extends PromoLike>(
+  promos: readonly P[],
+  targets: readonly PromoTargetLike[],
+  qmis: readonly QmiPromoContext[],
+  now: string = new Date().toISOString().slice(0, 10)
+): Map<string, string[]> {
+  const byPromo = new Map<string, Set<string>>();
+  for (const q of qmis) {
+    if (!q.communityId) continue;
+    const winner = resolveEffectivePromo(
+      'qmi',
+      {
+        qmiId: q.id,
+        communityId: q.communityId,
+        floorPlanId: q.floorPlanId,
+        cityId: q.cityId,
+      },
+      promos,
+      targets,
+      now
+    );
+    if (!winner) continue;
+    let set = byPromo.get(winner.id);
+    if (!set) {
+      set = new Set();
+      byPromo.set(winner.id, set);
+    }
+    set.add(q.communityId);
+  }
+  const out = new Map<string, string[]>();
+  for (const [promoId, set] of byPromo) {
+    out.set(promoId, [...set]);
+  }
+  return out;
+}

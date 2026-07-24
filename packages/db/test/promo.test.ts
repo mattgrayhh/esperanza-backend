@@ -7,6 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  communitiesByPromoFromPublishedQmi,
   resolveEffectivePromo,
   type PromoLike,
   type PromoTargetLike,
@@ -176,6 +177,27 @@ describe('resolveEffectivePromo — tie-break by lowest sort_order', () => {
       { promotion_id: 'pQmi', target_type: 'qmi', target_id: 'recQMI1' },
     ];
     expect(resolveEffectivePromo('qmi', ctx, promos, targets, NOW)?.id).toBe('pQmi');
+  });
+});
+
+describe('communitiesByPromoFromPublishedQmi', () => {
+  it('indexes only communities where this promo wins on at least one QMI', () => {
+    const promos = [promo('pWinner', { sort_order: 1 }), promo('pLoser', { sort_order: 5 })];
+    const targets: PromoTargetLike[] = [
+      { promotion_id: 'pWinner', target_type: 'community', target_id: 'recComm1' },
+      { promotion_id: 'pLoser', target_type: 'community', target_id: 'recComm1' },
+    ];
+    const qmis = [
+      {
+        id: 'recQMI1',
+        communityId: 'recComm1',
+        floorPlanId: null,
+        cityId: 'recCity1',
+      },
+    ];
+    const map = communitiesByPromoFromPublishedQmi(promos, targets, qmis, NOW);
+    expect(map.get('pWinner')).toEqual(['recComm1']);
+    expect(map.get('pLoser')).toBeUndefined();
   });
 });
 

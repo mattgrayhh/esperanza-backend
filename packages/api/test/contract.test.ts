@@ -32,7 +32,11 @@ import {
   type PromoResolveMaps,
   type TargetRow,
 } from '../src/index.js';
-import { resolveEffectivePromo, type PromoLike } from '@esperanza/db/promo';
+import {
+  communitiesByPromoFromPublishedQmi,
+  resolveEffectivePromo,
+  type PromoLike,
+} from '@esperanza/db/promo';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_DIR = join(__dirname, '..', '..', 'db');
@@ -377,6 +381,17 @@ function buildPromoCtx(db: Database.Database) {
     });
   }
   return { promos, targets, maps };
+}
+
+function communitiesByPromoForTest(db: Database.Database, ctx: ReturnType<typeof buildPromoCtx>) {
+  const qmis = db.prepare('SELECT id, community_id, floor_plan_id, city_id FROM v_public_qmi').all() as Row[];
+  const qmiCtx = qmis.map((row) => ({
+    id: String(row['id']),
+    communityId: row['community_id'] != null ? String(row['community_id']) : null,
+    floorPlanId: row['floor_plan_id'] != null ? String(row['floor_plan_id']) : null,
+    cityId: row['city_id'] != null ? String(row['city_id']) : null,
+  }));
+  return communitiesByPromoFromPublishedQmi(ctx.promos, ctx.targets, qmiCtx, '2026-06-01');
 }
 
 const NOW = '2026-05-30';
@@ -743,6 +758,7 @@ describe('/communities — mapped dense contract', () => {
 describe('/promotions — mapped dense + derived names + image fallback', () => {
   it('top-level wrapper { promotions: [], ts } and dense keys match golden', () => {
     const ctx = buildPromoCtx(db);
+    const byPromoComm = communitiesByPromoForTest(db, ctx);
     const byPromo = new Map<string, TargetRow[]>();
     for (const t of ctx.targets) {
       const arr = byPromo.get(t.promotion_id);
@@ -752,7 +768,14 @@ describe('/promotions — mapped dense + derived names + image fallback', () => 
     const promotions = ctx.promos
       // gate column renamed active→published in 0005 (view exposes `published`).
       .filter((p) => (p as Row)['published'] === 1)
-      .map((p) => serializePromotionRow(p as never, byPromo.get((p as Row)['id'] as string) ?? [], ctx.maps))
+      .map((p) =>
+        serializePromotionRow(
+          p as never,
+          byPromo.get((p as Row)['id'] as string) ?? [],
+          ctx.maps,
+          byPromoComm.get((p as Row)['id'] as string) ?? []
+        )
+      )
       .sort((a, b) => a.sortOrder - b.sortOrder);
     const payload = { promotions, ts: 0 };
     expect(Object.keys(payload).sort()).toEqual(['promotions', 'ts']);
@@ -773,29 +796,52 @@ describe('/promotions — mapped dense + derived names + image fallback', () => 
 
   it('sorted by sortOrder ASC', () => {
     const ctx = buildPromoCtx(db);
+    const byPromoComm = communitiesByPromoForTest(db, ctx);
     const byPromo = new Map<string, TargetRow[]>();
     for (const t of ctx.targets) (byPromo.get(t.promotion_id) ?? byPromo.set(t.promotion_id, []).get(t.promotion_id)!).push(t);
     const promotions = ctx.promos
-      .map((p) => serializePromotionRow(p as never, byPromo.get((p as Row)['id'] as string) ?? [], ctx.maps))
+      .map((p) =>
+        serializePromotionRow(
+          p as never,
+          byPromo.get((p as Row)['id'] as string) ?? [],
+          ctx.maps,
+          byPromoComm.get((p as Row)['id'] as string) ?? []
+        )
+      )
       .sort((a, b) => a.sortOrder - b.sortOrder);
     const orders = promotions.map((p) => p.sortOrder);
     expect(orders).toEqual([...orders].sort((a, b) => a - b));
   });
 
-  it('communityNames DERIVED from community targets; image falls back to community', () => {
+  it('communityNames list only communities with a published QMI where this promo wins', () => {
     const ctx = buildPromoCtx(db);
+    const byPromoComm = communitiesByPromoForTest(db, ctx);
+    const p1 = ctx.promos.find((p) => (p as Row)['id'] === 'recPROMOcomm1')! as never;
     const p2 = ctx.promos.find((p) => (p as Row)['id'] === 'recPROMOcomm2')! as never;
-    const targets = ctx.targets.filter((t) => t.promotion_id === 'recPROMOcomm2');
-    const out = serializePromotionRow(p2, targets, ctx.maps);
-    expect(out.communityIds).toEqual(['recX6JFH2NKKWSVpE']);
-    expect(out.communityNames).toEqual(['Rogers Coves']);
-    expect(out.floorPlanNames).toEqual([]);
-    // promo has no own image -> fell back to the community's featured image
-    expect(out.image).toBe('https://media.esperanzahomes.com/comm/rogers-coves.jpg');
+    const targets1 = ctx.targets.filter((t) => t.promotion_id === 'recPROMOcomm1');
+    const targets2 = ctx.targets.filter((t) => t.promotion_id === 'recPROMOcomm2');
+    const winner = serializePromotionRow(
+      p1,
+      targets1,
+      ctx.maps,
+      byPromoComm.get('recPROMOcomm1') ?? []
+    );
+    const loser = serializePromotionRow(
+      p2,
+      targets2,
+      ctx.maps,
+      byPromoComm.get('recPROMOcomm2') ?? []
+    );
+    expect(winner.communityIds).toEqual(['recX6JFH2NKKWSVpE']);
+    expect(winner.communityNames).toEqual(['Rogers Coves']);
+    expect(loser.communityIds).toEqual([]);
+    expect(loser.communityNames).toEqual([]);
+    expect(winner.image).toBe('https://media.esperanzahomes.com/promo/p1.jpg');
   });
 
   it('no served image URL is from airtableusercontent.com', () => {
     const ctx = buildPromoCtx(db);
+    const byPromoComm = communitiesByPromoForTest(db, ctx);
     const byPromo = new Map<string, TargetRow[]>();
     for (const t of ctx.targets) {
       const arr = byPromo.get(t.promotion_id);
@@ -803,7 +849,12 @@ describe('/promotions — mapped dense + derived names + image fallback', () => 
       else byPromo.set(t.promotion_id, [t]);
     }
     for (const p of ctx.promos) {
-      const out = serializePromotionRow(p as never, byPromo.get((p as Row)['id'] as string) ?? [], ctx.maps);
+      const out = serializePromotionRow(
+        p as never,
+        byPromo.get((p as Row)['id'] as string) ?? [],
+        ctx.maps,
+        byPromoComm.get((p as Row)['id'] as string) ?? []
+      );
       expect(out.image).not.toContain('airtableusercontent.com');
     }
   });
