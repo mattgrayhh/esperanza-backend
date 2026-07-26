@@ -4,11 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { StatusIndicator } from "@/components/indicator";
-import {
-	getStatusSnapshot,
-	healthIndicatorColor,
-	type ComponentHealth,
-} from "@/lib/status-page";
+import { healthIndicatorColor, type ComponentHealth } from "@/lib/status-page";
 import { cn } from "@/lib/utils";
 
 const pillTone: Record<ComponentHealth, string> = {
@@ -21,12 +17,14 @@ const pillTone: Record<ComponentHealth, string> = {
 };
 
 /**
- * Header pill linking to /status. Uses the same placeholder overall health as
- * the Status page until Sentry feeds are wired.
+ * Header pill linking to /status. Deliberately NOT live: the Status page's
+ * checks are server-side fetches, too heavy to run on every page load for a
+ * header pill. It renders as a neutral "operational" link; the page itself
+ * shows real health.
  */
 export function StatusHeaderPill() {
 	const pathname = usePathname();
-	const { overall } = getStatusSnapshot();
+	const overall: ComponentHealth = "operational";
 	const active = pathname === "/status" || pathname.startsWith("/status/");
 
 	return (

@@ -346,19 +346,23 @@ Infra / site-service health for the stack marketing and ops rely on. Entry point
 - **Header pill** (top-right of `AppHeader`) — colored status indicator + “Status”;
   overall health drives the pill tone (green / amber / rose / sky). Not in the sidebar.
 
-Page layout mirrors a public status page: overall banner (“All Systems Operational”),
-then grouped components with a 90-day uptime bar each.
+Page layout mirrors a public status page: overall banner, then LIVE sections (all data
+fetched server-side on every page load; every loader degrades to a readable
+"not configured / unreachable" message instead of erroring):
 
-| Group | Components (placeholders today) |
+| Section | Source |
 |---|---|
-| Snowflake / MarkSystems | Snowflake, MarkSystems |
-| Cloudflare | `esperanza-admin`, `esperanza-ingest`, `esperanza-api`, `esperanza-pdf`, `esperanza-ops`, `esperanza-xml-feed`, `rhodes-availability`, D1 `esperanza`, R2 `esperanza-cms` |
-| Website | `esperanzahomes.com` (future: ping every few minutes) |
-| Site services | Lotvue, HubSpot, Mapbox |
+| Live checks — MarkSystems sync, Public API, Website | `esperanza-ops` `/health/sync`, `esperanza-api` `/api/public/settings`, HEAD on the public site (`lib/status-live.ts::loadLiveChecks`) |
+| Latest deployments — `esperanza-backend` + `esperanza-frontend` | GitHub Actions runs API. Token: `GITHUB_STATUS_TOKEN` secret on `esperanza-admin` (falls back to `GITHUB_DISPATCH_TOKEN`) |
+| Sentry — unresolved issues | `rhodes-enterprises/esperanza-homes`, last 14 days. Token: `SENTRY_STATUS_TOKEN` secret (create in Sentry → Settings → Auth Tokens) |
 
-**Data:** `lib/status-page.ts` → `getStatusSnapshot()`. All rows are **placeholders** until
-Sentry (and a website ping checker) are wired; keep the snapshot shape stable when swapping
-the feed. UI: `components/status-page-view.tsx`, header pill: `components/status-header-pill.tsx`.
+No uptime history is stored yet, so the 90-day bars are hidden (the view skips the bar when
+`uptimeDays` is empty). The header pill is deliberately NOT live (the checks are too heavy to
+run on every admin page load) — it's a neutral link; the page shows real health.
+
+**Data:** `lib/status-page.ts` → `getStatusSnapshot()` (live checks) + `lib/status-live.ts`
+(deployments, Sentry). UI: `components/status-page-view.tsx` +
+`components/status-integrations.tsx`, header pill: `components/status-header-pill.tsx`.
 
 ---
 
