@@ -26,6 +26,7 @@ export default async function QmiListPage() {
   const rows: QmiRow[] = view.rows.map((r) => ({
     id: r.id,
     address: r.address,
+    syncedAddress: r.syncedAddress,
     housenumber: r.housenumber,
     lotNumber: r.lotNumber,
     communityName: r.communityName,

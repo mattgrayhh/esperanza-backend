@@ -47,7 +47,7 @@ export function qmiRowMatchesQuery(row: QmiSearchableRow, query: string): boolea
     row.communityName,
     row.floorPlanName,
   ]
-    .filter(Boolean)
+    .filter((s): s is string => Boolean(s))
     .some((s) => s.toLowerCase().includes(q))
   if (textHit) return true
 
