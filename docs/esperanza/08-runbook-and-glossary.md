@@ -151,6 +151,27 @@ can look like a flood of "sold" homes; the guard skips unpublishes but check whe
 earlier run slipped through. Recovery is to republish the legacy-live set. See
 [doc 02](./02-module-ingest.md).
 
+### "Prices/availability on the site are wrong, but the admin says the sync succeeded"
+**The green badge is the last run that worked, not the last run that happened.** If the
+ingest dies before it can write a row, `sync_log` doesn't go red — it just stops, and the
+Activity page keeps showing the old `success` at the top of the list.
+
+This is exactly what happened 2026-07-19 → 07-26: `0029_sync_lock.sql` shipped to code but
+not to remote D1, so every cron threw `no such table: sync_lock` for six days while the
+admin showed green.
+
+Diagnose by **age**, not status:
+```bash
+curl -s https://esperanza-ops.round-base-ed8c.workers.dev/health/sync   # 503 = stale
+npx wrangler d1 execute esperanza --remote --command \
+  "SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1;"           # behind the repo?
+```
+If a migration is missing, `npm run db:migrate:remote`. The dashboard and Activity page
+now both show a red "sync is behind" banner past 12 h (three missed cron slots), and
+`/health/sync` returns 503 so an external monitor can page someone. **Point the uptime
+monitor at `/health/sync`, not `/health`** — `/health` is a hard-coded `{ ok: true }` and
+was green throughout the outage.
+
 ### "My remote migration failed but local passed"
 You likely hit the **D1 100-column limit** (or another remote-only limit) that local SQLite
 doesn't enforce. Split the table / move columns into a view. Always `--local` first. See
@@ -191,10 +212,14 @@ npx wrangler d1 execute esperanza --remote --command "SELECT count(*) FROM qmi W
 npx wrangler d1 execute esperanza --remote --command \
   "SELECT started_at,status,notes,error_message FROM sync_log ORDER BY started_at DESC LIMIT 15;"
 
+# ── Is the sync actually alive? ────────────────────────────────────
+curl -s https://esperanza-ops.round-base-ed8c.workers.dev/health/sync   # 200 fresh · 503 stale
+
 # ── D1: migrations & views ─────────────────────────────────────────
 npm run db:generate                       # create migration from schema.ts changes
 npm run db:migrate:local                  # apply to local D1 (ALWAYS first)
-npm run db:migrate:remote                 # apply to production D1
+npm run db:migrate:remote                 # apply to production D1 (CI also does this on merge)
+npm run check:migrations                  # reject duplicate NNNN_ prefixes before they ship
 npx wrangler d1 execute esperanza --remote --file=packages/db/views.sql --yes   # refresh views
 
 # ── Seed admin field definitions / users ───────────────────────────
@@ -241,7 +266,7 @@ Judge by:
 | **`synced_*` / `override_*`** | Paired columns: Snowflake writes `synced_`, marketing writes `override_`; views resolve `COALESCE(override, synced)` so overrides win. |
 | **`v_public_*`** | D1 views that apply override-resolution + `published=1` filtering + joins; downstream readers use these. |
 | **`field_definitions`** | D1 table that drives the admin forms; a new editable field needs a row here. |
-| **`sync_log`** | D1 table; one row per ingest run. Primary observability. |
+| **`sync_log`** | D1 table; one row per ingest run. Primary observability — but read the **age** of the newest good row, not its status (see "Is the sync actually alive?"). |
 | **`audit_log`** | D1 table; every admin write records who changed what. |
 | **`eci_key`** | A QMI's natural key from Snowflake (CompanyCode+DevCode+HouseNumber, e.g. `006LP00000051`). |
 | **BDX** | Builder Data Exchange — the XML listing format the feed emits for Zillow/Realtor/etc. |

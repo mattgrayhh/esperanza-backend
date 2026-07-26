@@ -34,6 +34,8 @@ export interface IngestRunResponse {
   ok: boolean;
   ran?: string;
   error?: string;
+  /** Set when the run declined because another run holds the sync_lock. HTTP is still 200. */
+  skipped?: string;
 }
 
 /**

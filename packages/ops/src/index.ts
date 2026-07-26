@@ -1,5 +1,6 @@
 import { authenticate } from './auth';
 import { handleRest } from './rest';
+import { syncHealthResponse } from './health';
 import { OpsMcpAgent, type OpsProps } from './mcp';
 
 export interface Env {
@@ -17,7 +18,16 @@ export { OpsMcpAgent };
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    // Liveness: is this Worker running. Deliberately dependency-free.
     if (request.method === 'GET' && url.pathname === '/health') return Response.json({ ok: true });
+
+    // Freshness: is the Snowflake→D1 pipeline actually current. 503 when the last
+    // successful run is older than the threshold, so an EXTERNAL uptime monitor can
+    // page someone. Point the monitor here, not at /health — /health was green
+    // through the entire six-day 2026-07-19 outage. Unauthenticated (see health.ts).
+    if (request.method === 'GET' && url.pathname === '/health/sync') {
+      return syncHealthResponse(env.DB);
+    }
 
     const token = await authenticate(request, env.DB);
     if (!token) return new Response('Unauthorized', { status: 401 });

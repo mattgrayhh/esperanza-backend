@@ -1856,7 +1856,7 @@ export async function reorderFieldDefinitions(
 // =============================================================================
 
 export async function triggerIngestSync(): Promise<
-  { ok: true } | { ok: false; error: string }
+  { ok: true; skipped?: string } | { ok: false; error: string }
 > {
   try {
     await getCurrentUser();
@@ -1865,12 +1865,18 @@ export async function triggerIngestSync(): Promise<
   }
 
   const env = getCloudflareContext().env as unknown as import('./ingest-client').IngestEnv;
+  let run: import('./ingest-client').IngestRunResponse;
   try {
     const { postIngestRun } = await import('./ingest-client');
-    await postIngestRun(env);
+    run = await postIngestRun(env);
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Sync failed' };
   }
+
+  // A run that declined because another one holds the sync_lock returns HTTP 200
+  // with { skipped }. This used to be discarded, so the button reported "Synced
+  // from Mark Systems" for a run that did no work. Pass it through.
+  if (run.skipped) return { ok: true, skipped: run.skipped };
 
   // The reconciliation may have touched any entity; refresh the worklist + lists.
   revalidatePath('/');

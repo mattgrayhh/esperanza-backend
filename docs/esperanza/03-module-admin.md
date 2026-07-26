@@ -275,6 +275,18 @@ The **Dashboard** shows an amber banner when automatic publish hooks (`PURGE_KEY
 set on the deployed admin Worker — editors should not need manual frontend redeploys once
 those secrets are configured (see Help → *How changes reach the live site*).
 
+Above it sits a **red "Mark Systems sync is behind" banner** (`SyncStaleBanner`) when the
+last successful Snowflake→D1 run is more than 12 h old — three missed cron slots. It reads
+the *age* of the newest good `sync_log` row (`lib/sync-freshness.ts`), not its status,
+because a pipeline that dies before it can log leaves an old `success` sitting at the top
+of the table forever. That is exactly how the 2026-07-19 outage stayed green for six days.
+The same banner repeats above the Activity page's Sync runs table. It tells editors **not**
+to hand-patch prices while the sync is down — the next good run overwrites `synced_*`.
+
+**Sync now** distinguishes three outcomes, not two: synced, *skipped* (another run holds
+the `sync_lock` — amber, nothing was done), and failed (red, with the worker's message).
+"Skipped" used to render as the green "Synced from Mark Systems".
+
 **Exception:** unpublished draft creates (`createEntity` / `createCommunityDraft`) pass
 `{ sync: false }` — audit only, no background fan-out until a real save or publish.
 

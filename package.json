@@ -12,8 +12,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
-    "db:migrate:local": "wrangler d1 migrations apply esperanza --local",
-    "db:migrate:remote": "wrangler d1 migrations apply esperanza --remote"
+    "db:migrate:local": "wrangler d1 migrations apply esperanza --local --config packages/db/wrangler.toml",
+    "db:migrate:remote": "wrangler d1 migrations apply esperanza --remote --config packages/db/wrangler.toml",
+    "check:migrations": "node scripts/check-migrations.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250520.0",

@@ -67,6 +67,8 @@ import { Button } from '@/components/ui/button';
 import { SyncNowButton } from '@/components/SyncNowButton';
 import { SitePipelineBanner } from '@/components/SitePipelineBanner';
 import { getSitePipelineStatus, type SitePipelineStatus } from '@/lib/site-pipeline-status';
+import { SyncStaleBanner } from '@/components/SyncStaleBanner';
+import { getSyncFreshness, type SyncFreshness } from '@/lib/sync-freshness';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import { cn } from '@/lib/utils';
@@ -142,6 +144,7 @@ interface DashboardData {
   promotionsActive: number;
   site: SiteHealth;
   pipeline: SitePipelineStatus;
+  syncFreshness: SyncFreshness;
   recent: AuditRow[];
 }
 
@@ -214,6 +217,9 @@ async function loadDashboard(): Promise<DashboardData> {
   const site = await checkSite();
   const pipeline = getSitePipelineStatus(getCloudflareContext().env as Parameters<typeof getSitePipelineStatus>[0]);
 
+  // Age of the last good Snowflake→D1 run. Age, not status — see lib/sync-freshness.ts.
+  const syncFreshness = await getSyncFreshness();
+
   // Pull a wider window than we render so adjacent same-actor edits group well.
   const recent = await db.all<AuditRow>(
     sql.raw(
@@ -239,6 +245,7 @@ async function loadDashboard(): Promise<DashboardData> {
     promotionsActive: Number(promotions?.active ?? 0),
     site,
     pipeline,
+    syncFreshness,
     recent: recent ?? [],
   };
 }
@@ -282,6 +289,10 @@ export default async function DashboardPage() {
           </Button>
         </div>
       </header>
+
+      {/* Stale sync outranks a missing publish hook: it means the live site is
+          showing wrong prices right now. */}
+      <SyncStaleBanner freshness={d.syncFreshness} />
 
       <SitePipelineBanner pipeline={d.pipeline} />
 
