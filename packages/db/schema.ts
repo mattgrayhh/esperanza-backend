@@ -151,6 +151,9 @@ export const qmi = sqliteTable(
     ogImageUrl: text('og_image_url'),
     // 0026: optional home-specific top-down layout override; blank → linked plan's floor_plan_image.
     floorPlanImage: text('floor_plan_image'),
+    // 0030: operator tie-break — when several promotions target this home, this one wins
+    // (only if it still applies + is live; otherwise resolution falls back to specificity).
+    preferredPromotionId: text('preferred_promotion_id'),
     pageUrl: text('page_url'),
     dynamicPdf: text('dynamic_pdf'),
 
@@ -290,6 +293,8 @@ export const communities = sqliteTable(
     nterNow: text('nter_now'), // admin-owned "Enter Now" NterNow self-tour link (0009)
     communityMapEmbed: text('community_map_embed'),
     incentive: text('incentive'),
+    // 0030: operator tie-break when several promotions target this community.
+    preferredPromotionId: text('preferred_promotion_id'),
     floorPlanPlaintext: text('floor_plan_plaintext'),
 
     hoaLinksJson: text('hoa_links_json'),
@@ -336,6 +341,8 @@ export const cities = sqliteTable(
     heroDescription: text('hero_description'),
     nationalRecognition: text('national_recognition'),
     incentive: text('incentive'),
+    // 0030: operator tie-break when several promotions target this city.
+    preferredPromotionId: text('preferred_promotion_id'),
     // admin-owned single image, surfaced to the public site as `where_we_build_image` (0017).
     whereWeBuildImageUrl: text('where_we_build_image_url'),
 

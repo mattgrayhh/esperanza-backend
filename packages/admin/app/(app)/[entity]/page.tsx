@@ -13,6 +13,8 @@ import {
   type DataTableColumn,
   type DataTableRow,
 } from '@/components/data-table';
+import { PromoHealthBanner } from '@/components/PromoHealthBanner';
+import { buildPromoHealth } from '@/lib/promo-health';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,8 +48,13 @@ export default async function EntityListPage({
     status: r.status,
   }));
 
+  // Promotions page: surface overlap/coverage warnings where scopes are managed.
+  const promoHealth = def.key === 'promotions' ? await buildPromoHealth() : null;
+
   return (
-    <DataTable
+    <div className="flex flex-col gap-4">
+      {promoHealth && <PromoHealthBanner health={promoHealth} />}
+      <DataTable
       segment={def.segment}
       label={def.label}
       helpHref={HELP_LINKS_BY_ENTITY[def.key] ? `/help/${HELP_LINKS_BY_ENTITY[def.key]!.slug}` : null}
@@ -59,6 +66,7 @@ export default async function EntityListPage({
       groupByField={def.segment === 'communities' ? 'town' : undefined}
       groupByLabel={def.segment === 'communities' ? 'Town' : undefined}
       createAction={def.segment === 'communities' ? createCommunityDraft : undefined}
-    />
+      />
+    </div>
   );
 }

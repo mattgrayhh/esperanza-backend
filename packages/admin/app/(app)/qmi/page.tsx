@@ -39,6 +39,7 @@ export default async function QmiListPage() {
     moveInDate: r.moveInDate,
     availableNow: r.availableNow,
     published: r.published,
+    effectiveBadge: r.effectiveBadge,
   }))
 
   return <QmiDataTable rows={rows} truncated={view.truncated} />
