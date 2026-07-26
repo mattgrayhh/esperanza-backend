@@ -44,11 +44,15 @@ export interface LiveCheck {
   detail: string;
 }
 
-export async function loadLiveChecks(): Promise<LiveCheck[]> {
+export async function loadLiveChecks(env?: { OPS?: Fetcher }): Promise<LiveCheck[]> {
   const [sync, api, site] = await Promise.all([
     (async (): Promise<LiveCheck> => {
       try {
-        const r = await timedFetch(OPS_HEALTH_URL);
+        // Same-account workers.dev fetches are blocked from inside a Worker —
+        // use the OPS service binding when present (public URL = local dev only).
+        const r = env?.OPS
+          ? await env.OPS.fetch(OPS_HEALTH_URL, { signal: AbortSignal.timeout(TIMEOUT_MS) })
+          : await timedFetch(OPS_HEALTH_URL);
         const body = (await r.json().catch(() => null)) as {
           ok?: boolean;
           ageHours?: number;

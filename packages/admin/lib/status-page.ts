@@ -96,9 +96,9 @@ export function healthIndicatorColor(
  * LIVE snapshot — one component per real check (lib/status-live.ts). No uptime
  * history is stored yet, so uptimeDays stays empty and the view hides the bar.
  */
-export async function getStatusSnapshot(): Promise<StatusSnapshot> {
+export async function getStatusSnapshot(env?: { OPS?: Fetcher }): Promise<StatusSnapshot> {
 	const { loadLiveChecks } = await import('./status-live');
-	const checks = await loadLiveChecks();
+	const checks = await loadLiveChecks(env);
 	const groups: StatusGroup[] = [
 		{
 			id: 'live',
