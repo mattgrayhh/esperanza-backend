@@ -116,7 +116,12 @@ function ComponentRow({
 					{healthLabel(component.status)}
 				</Badge>
 			</div>
-			<UptimeBar component={component} lookbackDays={lookbackDays} />
+			{component.detail ? (
+				<p className="text-xs text-muted-foreground">{component.detail}</p>
+			) : null}
+			{component.uptimeDays.length > 0 ? (
+				<UptimeBar component={component} lookbackDays={lookbackDays} />
+			) : null}
 		</div>
 	);
 }
@@ -145,7 +150,13 @@ export function StatusGroupSection({
 	);
 }
 
-export function StatusPageView({ snapshot }: { snapshot: StatusSnapshot }) {
+export function StatusPageView({
+	snapshot,
+	children,
+}: {
+	snapshot: StatusSnapshot;
+	children?: React.ReactNode;
+}) {
 	const updated = new Date(snapshot.updatedAt);
 
 	return (
@@ -168,9 +179,11 @@ export function StatusPageView({ snapshot }: { snapshot: StatusSnapshot }) {
 
 			<StatusOverallBanner status={snapshot.overall} />
 
-			<p className="rounded-lg border border-dashed border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-				{snapshot.sourceNote} {snapshot.websitePingNote}
-			</p>
+			{snapshot.sourceNote || snapshot.websitePingNote ? (
+				<p className="rounded-lg border border-dashed border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+					{snapshot.sourceNote} {snapshot.websitePingNote}
+				</p>
+			) : null}
 
 			<div className="flex flex-col gap-4">
 				{snapshot.groups.map((group) => (
@@ -180,6 +193,7 @@ export function StatusPageView({ snapshot }: { snapshot: StatusSnapshot }) {
 						lookbackDays={snapshot.lookbackDays}
 					/>
 				))}
+				{children}
 			</div>
 		</div>
 	);
