@@ -410,3 +410,70 @@ describe('promotions: per-surface visibility toggles (migration 0021)', () => {
     expect(row).toBeUndefined();
   });
 });
+
+describe('resolveEffectivePromo — preferredPromoId (0030 operator tie-break)', () => {
+  const promos = [promo('pA', { sort_order: 0 }), promo('pB', { sort_order: 5 })];
+  const targets: PromoTargetLike[] = [
+    { promotion_id: 'pA', target_type: 'community', target_id: 'recComm1' },
+    { promotion_id: 'pB', target_type: 'community', target_id: 'recComm1' },
+  ];
+
+  it('preferred promo wins over sort_order among equal-specificity candidates', () => {
+    expect(resolveEffectivePromo('qmi', ctx, promos, targets, NOW)?.id).toBe('pA'); // baseline
+    expect(
+      resolveEffectivePromo('qmi', { ...ctx, preferredPromoId: 'pB' }, promos, targets, NOW)?.id
+    ).toBe('pB');
+  });
+
+  it('preferred promo beats a MORE specific candidate (explicit operator intent)', () => {
+    const t2: PromoTargetLike[] = [...targets, { promotion_id: 'pQ', target_type: 'qmi', target_id: 'recQMI1' }];
+    const p2 = [...promos, promo('pQ')];
+    expect(resolveEffectivePromo('qmi', ctx, p2, t2, NOW)?.id).toBe('pQ'); // baseline
+    expect(
+      resolveEffectivePromo('qmi', { ...ctx, preferredPromoId: 'pB' }, p2, t2, NOW)?.id
+    ).toBe('pB');
+  });
+
+  it('a stale preference (unpublished / out-of-window / non-matching) is ignored', () => {
+    // not a candidate at all
+    expect(
+      resolveEffectivePromo('qmi', { ...ctx, preferredPromoId: 'pNope' }, promos, targets, NOW)?.id
+    ).toBe('pA');
+    // unpublished
+    const withDead = [...promos, promo('pDead', { published: 0 })];
+    const tDead: PromoTargetLike[] = [...targets, { promotion_id: 'pDead', target_type: 'community', target_id: 'recComm1' }];
+    expect(
+      resolveEffectivePromo('qmi', { ...ctx, preferredPromoId: 'pDead' }, withDead, tDead, NOW)?.id
+    ).toBe('pA');
+    // expired
+    const withExpired = [...promos, promo('pOld', { end_date: '2026-01-01' })];
+    const tOld: PromoTargetLike[] = [...targets, { promotion_id: 'pOld', target_type: 'community', target_id: 'recComm1' }];
+    expect(
+      resolveEffectivePromo('qmi', { ...ctx, preferredPromoId: 'pOld' }, withExpired, tOld, NOW)?.id
+    ).toBe('pA');
+  });
+
+  it('a preference can never invent a promo when nothing applies', () => {
+    expect(
+      resolveEffectivePromo('qmi', { ...ctx, preferredPromoId: 'pA' }, promos, [], NOW)
+    ).toBeNull();
+  });
+});
+
+describe('applicablePromos', () => {
+  it('returns every eligible candidate in resolution order', async () => {
+    const { applicablePromos } = await import('../lib/promo.js');
+    const promos = [promo('pGlobal'), promo('pComm2', { sort_order: 9 }), promo('pComm1', { sort_order: 1 }), promo('pDead', { published: 0 })];
+    const targets: PromoTargetLike[] = [
+      { promotion_id: 'pGlobal', target_type: 'global', target_id: null },
+      { promotion_id: 'pComm1', target_type: 'community', target_id: 'recComm1' },
+      { promotion_id: 'pComm2', target_type: 'community', target_id: 'recComm1' },
+      { promotion_id: 'pDead', target_type: 'community', target_id: 'recComm1' },
+    ];
+    expect(applicablePromos(ctx, promos, targets, NOW).map((p) => p.id)).toEqual([
+      'pComm1',
+      'pComm2',
+      'pGlobal',
+    ]);
+  });
+});

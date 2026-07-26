@@ -68,6 +68,8 @@ import { SyncNowButton } from '@/components/SyncNowButton';
 import { SitePipelineBanner } from '@/components/SitePipelineBanner';
 import { getSitePipelineStatus, type SitePipelineStatus } from '@/lib/site-pipeline-status';
 import { SyncStaleBanner } from '@/components/SyncStaleBanner';
+import { PromoHealthBanner } from '@/components/PromoHealthBanner';
+import { buildPromoHealth } from '@/lib/promo-health';
 import { getSyncFreshness, type SyncFreshness } from '@/lib/sync-freshness';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
@@ -254,7 +256,7 @@ async function loadDashboard(): Promise<DashboardData> {
 // Page
 // =============================================================================
 export default async function DashboardPage() {
-  const d = await loadDashboard();
+  const [d, promoHealth] = await Promise.all([loadDashboard(), buildPromoHealth()]);
   const groups = groupActivity(d.recent).slice(0, 7);
   const drafts = d.qmi.unmatched + d.qmi.planGaps + d.qmi.pdfPending;
 
@@ -295,6 +297,9 @@ export default async function DashboardPage() {
       <SyncStaleBanner freshness={d.syncFreshness} />
 
       <SitePipelineBanner pipeline={d.pipeline} />
+
+      {/* Overlapping / missing incentive coverage (0030 visibility). */}
+      <PromoHealthBanner health={promoHealth} />
 
       {/* ── Needs attention (signature: operator worklist) ─────────────── */}
       <section className="flex flex-col gap-2" aria-labelledby="dash-attention-heading">

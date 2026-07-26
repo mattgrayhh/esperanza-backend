@@ -400,6 +400,8 @@ export function QmiDetail({ view }: { view: QmiDetailView }) {
             nterNow: view.admin.nterNow,
           }}
           resolvedListingPromoText={view.resolvedListingPromoText}
+          preferredPromotionId={view.preferredPromotionId}
+          applicablePromos={view.applicablePromos}
           card={{
             address: view.address,
             cityName: view.cityName,

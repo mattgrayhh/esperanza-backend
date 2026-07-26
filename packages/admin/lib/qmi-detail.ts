@@ -22,7 +22,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { getReadDb } from './db';
 import { qmi, floorPlans, communities, cities, promotions, promotionTargets } from '@esperanza/db';
 import { effectiveValue } from '@esperanza/db/override';
-import { resolveEffectivePromo, type PromoLike, type PromoTargetLike } from '@esperanza/db/promo';
+import { resolveEffectivePromo, applicablePromos, type PromoLike, type PromoTargetLike } from '@esperanza/db/promo';
 import { pickListingHero } from '@esperanza/db/listing-hero';
 import { parseGalleryUrls } from './gallery-urls';
 import { loadOptions, type SelectOption } from './select-options';
@@ -236,6 +236,11 @@ export interface QmiDetailView {
    */
   promotions: Array<{ id: string; title: string; global: boolean }>;
 
+  /** 0030: qmi.preferred_promotion_id ('' when unset). */
+  preferredPromotionId: string;
+  /** Promotions that currently apply to this home, resolution order (default winner first). */
+  applicablePromos: Array<{ id: string; title: string; isDefault: boolean }>;
+
   liveSite: LiveSitePlacement;
 }
 
@@ -431,6 +436,7 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
   const promoRows = (await db
     .select({
       id: promotions.id,
+      title: promotions.title,
       published: promotions.published,
       startDate: promotions.startDate,
       endDate: promotions.endDate,
@@ -440,6 +446,7 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
     })
     .from(promotions)) as Array<{
     id: string;
+    title: string | null;
     published: number | boolean | null;
     startDate: string | null;
     endDate: string | null;
@@ -464,25 +471,32 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
     target_id: t.targetId,
   }));
 
+  const promoLikes = promoRows.map(
+    (p): PromoLike => ({
+      id: p.id,
+      title: p.title,
+      published: p.published ?? 0,
+      start_date: p.startDate,
+      end_date: p.endDate,
+      sort_order: p.sortOrder,
+      banner_text: p.bannerText,
+      show_card_badge: p.showCardBadge,
+    })
+  );
+  const promoCtx = {
+    qmiId: id,
+    communityId: effCommunityId || null,
+    floorPlanId: effFloorPlanId || null,
+    cityId: effCityId || null,
+  };
+  const preferredPromotionId = s(r.preferred_promotion_id);
+  // Every promo that currently applies (winner first, before preference) — the
+  // operator's "Preferred Incentive" picker offers exactly these.
+  const applicable = applicablePromos(promoCtx, promoLikes, promoTargetRows);
   const winner = resolveEffectivePromo(
     'qmi',
-    {
-      qmiId: id,
-      communityId: effCommunityId || null,
-      floorPlanId: effFloorPlanId || null,
-      cityId: effCityId || null,
-    },
-    promoRows.map(
-      (p): PromoLike => ({
-        id: p.id,
-        published: p.published ?? 0,
-        start_date: p.startDate,
-        end_date: p.endDate,
-        sort_order: p.sortOrder,
-        banner_text: p.bannerText,
-        show_card_badge: p.showCardBadge,
-      })
-    ),
+    { ...promoCtx, preferredPromoId: preferredPromotionId || null },
+    promoLikes,
     promoTargetRows
   );
   const showCardBadge = winner?.show_card_badge === true || winner?.show_card_badge === 1;
@@ -637,6 +651,15 @@ export async function buildQmiDetailView(id: string): Promise<QmiDetailView | nu
     },
 
     promotions: promotionsList,
+
+    // 0030 Preferred Incentive picker: current value + every currently-applicable promo
+    // (resolution order, default winner first).
+    preferredPromotionId,
+    applicablePromos: applicable.map((p, i) => ({
+      id: p.id,
+      title: (typeof p.title === 'string' && p.title.trim()) || p.id,
+      isDefault: i === 0,
+    })),
 
     resolvedListingPromoText,
 

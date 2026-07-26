@@ -67,6 +67,7 @@ SELECT
   q.featured_image, q.image_2, q.image_3, q.image_4, q.image_5,
   q.photo_gallery_json,    -- 0010: per-home gallery, JSON array of {url, alt}
   q.description, q.upgrades, q.incentive, q.virtual_tour_url,
+  q.preferred_promotion_id,
   q.mls_id, q.mls_number, q.year_built, q.lot_size_sqft,
   q.hers_score, q.arm_rate, q.promo_text, q.availability_text, q.nter_now, q.cities,
   q.posted, q.publish_date, q.last_modified_time,
@@ -158,6 +159,7 @@ SELECT
   q.featured_image, q.image_2, q.image_3, q.image_4, q.image_5,
   q.photo_gallery_json,    -- 0010: per-home gallery, JSON array of {url, alt}
   q.description, q.upgrades, q.incentive, q.virtual_tour_url,
+  q.preferred_promotion_id,
   q.mls_id, q.mls_number, q.year_built, q.lot_size_sqft,
   q.hers_score, q.arm_rate, q.promo_text, q.availability_text, q.nter_now, q.cities,
   q.posted, q.publish_date, q.last_modified_time,
@@ -267,6 +269,7 @@ SELECT
   c.brochure_pdf_url,
   c.office_phone, c.office_hours, c.schedule_visit, c.lending,
   c.mine_link, c.nter_now, c.community_map_embed, c.incentive,
+  c.preferred_promotion_id,
   -- [P2] floor_plan_plaintext dropped from the public view (legacy Airtable aiText;
   -- the floor_plans.communities relationship is the real source). Column retained.
   c.hoa_links_json, c.city_id
@@ -287,6 +290,7 @@ SELECT
   ci.published, ci.coming_soon,
   ci.map_latitude, ci.map_longitude,
   ci.hero_image_url, ci.hero_description, ci.national_recognition, ci.incentive,
+  ci.preferred_promotion_id,
   ci.where_we_build_image_url,
   ci.city_copy_blocks_json, ci.city_venue_blocks_json
 FROM cities ci

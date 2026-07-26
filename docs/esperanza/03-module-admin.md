@@ -414,6 +414,42 @@ compiles them into `lib/help-content.generated.ts`, rendered at `/help`.
 | Change Status page / header pill | `lib/status-page.ts`, `components/status-page-view.tsx`, `components/status-header-pill.tsx`, `app/(app)/status/page.tsx` |
 | Change the community price-source selector UI | `lib/field-config.ts` (communities `close_out_elevation`) + the `buildFieldView` special-case in `lib/build-edit-view.ts` (renders it as the synced/override control) |
 
+### Promotion resolution, overlap, and the Preferred Incentive (0030)
+
+Every card/page shows at most ONE promotion, resolved by `@esperanza/db/promo`
+`resolveEffectivePromo()`: most specific target wins (qmi > community > floor_plan >
+city > global), then lowest `sort_order`, then id — filtered to published promos inside
+their `start_date`/`end_date` window (set the dates in the promo editor; expired promos
+drop off automatically).
+
+When SEVERAL promotions apply to the same entity, the operator can pick the winner
+explicitly — **Preferred Incentive** (`preferred_promotion_id`, migration 0030) on:
+
+- **QMI detail** (Marketing card) — the picker lists exactly the promotions that
+  currently apply to that home, with the default winner labeled. Saves through the
+  normal QMI save.
+- **Community / City edit form** — a `select` over published promotions
+  (`field-config.ts` `selectSource: 'promotions'`).
+
+A preference only wins if the chosen promo is still a real candidate (published, in its
+date window, targeting the entity) — a stale pick is ignored, never invents a promo.
+
+**Visibility & warnings**
+
+- QMI list: an **Incentive** column shows each home's effective badge (per-home
+  `incentive` override, else the resolved promo's `banner_text` when
+  `show_card_badge` is on) — what the live card shows, no site visit needed.
+- Dashboard + Promotions page: `PromoHealthBanner` (`lib/promo-health.ts`) warns when
+  (a) a published community carries 2+ live community-level promo targets with no
+  preference set (winner is otherwise decided invisibly by promotion order), or
+  (b) a published community has published QMIs that NO promotion reaches (badgeless
+  cards — e.g. Villas at Tres Lagos, found in the 2026-07-26 audit).
+
+After deploying 0030: re-apply `views.sql` (the three public views now expose
+`preferred_promotion_id`) and re-run the field-definitions seed
+(`npx tsx packages/db/scripts/seed-field-definitions.ts --remote`) so the new
+form field appears in the registry-driven forms.
+
 ### Promotion surfaces ("Where it shows" + visual previews)
 
 A promotion renders on up to five independent surfaces, each an explicit boolean on

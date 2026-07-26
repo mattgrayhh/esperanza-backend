@@ -46,6 +46,13 @@ export interface ResolveContext {
    */
   floorPlanId?: string | null;
   cityId?: string | null;
+  /**
+   * 0030 operator tie-break: when several promotions apply, this one wins — but
+   * ONLY if it is itself an eligible candidate (published, in window, and one of
+   * its targets matches this context). A stale/bogus preference is ignored, so a
+   * preference can narrow the outcome but never invent one.
+   */
+  preferredPromoId?: string | null;
 }
 
 /**
@@ -134,38 +141,53 @@ export function resolveEffectivePromo<P extends PromoLike>(
   targets: readonly PromoTargetLike[],
   now: string = new Date().toISOString().slice(0, 10)
 ): P | null {
-  // index targets by promotion_id
+  const candidates = applicablePromos(ctx, promos, targets, now);
+  if (candidates.length === 0) return null;
+
+  // Operator tie-break (0030) beats specificity/sort_order — but only among real candidates.
+  if (ctx.preferredPromoId) {
+    const preferred = candidates.find((p) => p.id === ctx.preferredPromoId);
+    if (preferred) return preferred;
+  }
+
+  return candidates[0]!;
+}
+
+/**
+ * ALL eligible promotions for an entity, in resolution order (winner first,
+ * ignoring any preference). Powers the admin "Preferred Incentive" picker and
+ * the overlap warnings — resolveEffectivePromo() returns only the winner.
+ */
+export function applicablePromos<P extends PromoLike>(
+  ctx: ResolveContext,
+  promos: readonly P[],
+  targets: readonly PromoTargetLike[],
+  now: string = new Date().toISOString().slice(0, 10)
+): P[] {
   const byPromo = new Map<string, PromoTargetLike[]>();
   for (const t of targets) {
     const arr = byPromo.get(t.promotion_id);
     if (arr) arr.push(t);
     else byPromo.set(t.promotion_id, [t]);
   }
-
-  type Candidate = { promo: P; specificity: number };
-  const candidates: Candidate[] = [];
-
+  const candidates: Array<{ promo: P; specificity: number }> = [];
   for (const p of promos) {
     if (!isActive(p)) continue;
     if (!inDateWindow(p, now)) continue;
     const tgts = byPromo.get(p.id);
-    if (!tgts || tgts.length === 0) continue; // a promo with no target reaches nobody
+    if (!tgts || tgts.length === 0) continue;
     const matchType = bestMatchType(tgts, ctx);
     if (matchType === undefined) continue;
     candidates.push({ promo: p, specificity: SPECIFICITY[matchType] });
   }
-
-  if (candidates.length === 0) return null;
-
   candidates.sort((a, b) => {
-    if (a.specificity !== b.specificity) return a.specificity - b.specificity; // qmi>community>city>global
+    if (a.specificity !== b.specificity) return a.specificity - b.specificity;
     const sa = a.promo.sort_order ?? 0;
     const sb = b.promo.sort_order ?? 0;
-    if (sa !== sb) return sa - sb; // lowest sort_order wins
-    return a.promo.id < b.promo.id ? -1 : a.promo.id > b.promo.id ? 1 : 0; // deterministic
+    if (sa !== sb) return sa - sb;
+    return a.promo.id < b.promo.id ? -1 : a.promo.id > b.promo.id ? 1 : 0;
   });
-
-  return candidates[0]!.promo;
+  return candidates.map((c) => c.promo);
 }
 
 /** Published QMI row shape for promo→community indexing (api Worker / tests). */

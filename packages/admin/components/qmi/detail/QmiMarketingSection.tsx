@@ -23,11 +23,17 @@ type MarketingValues = {
 export function QmiMarketingSection({
   initial,
   resolvedListingPromoText,
+  preferredPromotionId,
+  applicablePromos,
   card,
 }: {
   initial: MarketingValues;
   /** Effective promo headline from linked promotions (mirrors live API promo_text). */
   resolvedListingPromoText: string;
+  /** 0030: current qmi.preferred_promotion_id ('' when unset). */
+  preferredPromotionId: string;
+  /** Promotions that currently apply to this home, resolution order (default first). */
+  applicablePromos: Array<{ id: string; title: string; isDefault: boolean }>;
   card: {
     address: string;
     cityName: string;
@@ -107,6 +113,33 @@ export function QmiMarketingSection({
             rows={3}
           />
         </div>
+
+        {applicablePromos.length > 0 && (
+          <div className="grid gap-1.5 text-sm" {...spotlightHandlers('incentive')}>
+            <FieldLabel
+              label="Preferred Incentive"
+              help={
+                applicablePromos.length > 1
+                  ? `${applicablePromos.length} promotions currently apply to this home. Pick which one shows on the card, or leave Default to use the most specific target (then promotion order).`
+                  : 'Only one promotion currently applies — the picker matters once several do.'
+              }
+            />
+            <select
+              name="preferred_promotion_id"
+              defaultValue={preferredPromotionId}
+              className="border-input h-9 w-full rounded-md border bg-transparent px-3 text-sm shadow-xs"
+            >
+              <option value="">
+                Default — {applicablePromos.find((p) => p.isDefault)?.title ?? '(none)'}
+              </option>
+              {applicablePromos.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Promo Text hidden pending clarity on how it maps to the live card vs Incentive.
             Omitting from FormData is safe — saveEntity only patches present keys. */}

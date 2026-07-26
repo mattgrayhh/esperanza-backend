@@ -98,6 +98,8 @@ export interface QmiRow {
   moveInDate: string | null
   availableNow: boolean
   published: boolean
+  /** The incentive badge this home's live card shows ("" = none). */
+  effectiveBadge: string
 }
 
 export interface QmiDataTableProps {
@@ -337,6 +339,7 @@ const COLUMN_LABELS: Record<string, string> = {
   basePrice: "Base price",
   currentPrice: "Current price",
   availability: "Availability",
+  incentive: "Incentive",
   status: "Status",
 }
 
@@ -428,6 +431,23 @@ function buildColumns(): ColumnDef<QmiRow>[] {
       header: ({ column }) => <SortHeader label="Availability" column={column} />,
       cell: ({ row }) => <AvailabilityCell row={row.original} />,
       sortingFn: "basic",
+    },
+    {
+      id: "incentive",
+      accessorFn: (r) => r.effectiveBadge,
+      header: ({ column }) => <SortHeader label="Incentive" column={column} />,
+      cell: ({ row }) =>
+        row.original.effectiveBadge ? (
+          <span
+            className="block max-w-[16rem] truncate text-xs"
+            title={row.original.effectiveBadge}
+          >
+            {row.original.effectiveBadge}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+      sortingFn: "alphanumeric",
     },
     {
       id: "status",

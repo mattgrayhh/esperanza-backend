@@ -803,6 +803,8 @@ function resolveFor(
     communityId?: string | null;
     floorPlanId?: string | null;
     cityId?: string | null;
+    /** 0030 operator tie-break (qmi.preferred_promotion_id / communities.…). */
+    preferredPromoId?: string | null;
   },
   now: string
 ): ResolvedPromo | null {
@@ -887,6 +889,7 @@ async function buildPayload(
             // exposes floor_plan_id as COALESCE(override, synced).
             floorPlanId: asStrOrNull(row['floor_plan_id']),
             cityId: asStrOrNull(row['city_id']),
+            preferredPromoId: asStrOrNull(row['preferred_promotion_id']),
           },
           now
         );
@@ -905,7 +908,11 @@ async function buildPayload(
           const resolved = resolveFor(
             ctx,
             'community',
-            { communityId: String(row['id']), cityId: asStrOrNull(row['city_id']) },
+            {
+              communityId: String(row['id']),
+              cityId: asStrOrNull(row['city_id']),
+              preferredPromoId: asStrOrNull(row['preferred_promotion_id']),
+            },
             now
           );
           return serializeCommunityRow(row, resolved);

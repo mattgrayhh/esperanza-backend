@@ -27,6 +27,7 @@
 
 import { sql } from 'drizzle-orm';
 import { getReadDb } from './db';
+import { resolveEffectivePromo, type PromoLike, type PromoTargetLike } from '@esperanza/db/promo';
 
 /** A QMI row as the bespoke client table consumes it (all display-ready strings + raw flags). */
 export interface QmiListRow {
@@ -59,6 +60,10 @@ export interface QmiListRow {
   availableNow: boolean;
   /** published gate (true = live, false = draft). */
   published: boolean;
+  /** The incentive badge this home's card shows on the live site: the per-home
+   *  `incentive` override when set, else the resolved effective promotion's banner
+   *  (honoring preferred_promotion_id). "" = no badge. */
+  effectiveBadge: string;
 }
 
 export interface QmiListView {
@@ -89,6 +94,10 @@ const QMI_LIST_SQL = `
     COALESCE(q.override_move_in_date, q.synced_move_in_date)  AS move_in_date,
     q.available_now                                            AS available_now,
     q.published                                                AS published,
+    COALESCE(q.override_community_id, q.synced_community_id)  AS community_id,
+    COALESCE(q.override_city_id, q.synced_city_id)            AS city_id,
+    q.incentive                                                AS incentive,
+    q.preferred_promotion_id                                   AS preferred_promotion_id,
     q.last_modified_time                                       AS last_modified_time
   FROM qmi q
   LEFT JOIN floor_plans fp
@@ -139,8 +148,52 @@ export async function buildQmiListView(): Promise<QmiListView> {
   const db = getReadDb();
   const raw = await db.all<Record<string, unknown>>(sql.raw(QMI_LIST_SQL));
 
+  // Effective-badge resolution (0030 visibility): same inputs the public API uses.
+  const promoRaw = await db.all<Record<string, unknown>>(
+    sql.raw(
+      `SELECT id, published, start_date, end_date, sort_order, banner_text, show_card_badge FROM promotions`
+    )
+  );
+  const targetRaw = await db.all<Record<string, unknown>>(
+    sql.raw(`SELECT promotion_id, target_type, target_id FROM promotion_targets`)
+  );
+  const promos: PromoLike[] = promoRaw.map((p) => ({
+    id: toStr(p['id']),
+    published: (p['published'] as number | boolean | null) ?? 0,
+    start_date: p['start_date'] == null ? null : toStr(p['start_date']),
+    end_date: p['end_date'] == null ? null : toStr(p['end_date']),
+    sort_order: toNum(p['sort_order']),
+    banner_text: toStr(p['banner_text']),
+    show_card_badge: p['show_card_badge'],
+  }));
+  const targets: PromoTargetLike[] = targetRaw.map((t) => ({
+    promotion_id: toStr(t['promotion_id']),
+    target_type: toStr(t['target_type']) as PromoTargetLike['target_type'],
+    target_id: t['target_id'] == null ? null : toStr(t['target_id']),
+  }));
+
   const rows: QmiListRow[] = raw.map((r) => {
     const moveIn = toStr(r['move_in_date']);
+    // Mirrors the API: per-home incentive overrides the resolved promo's banner,
+    // and the banner only shows when the winning promo's show_card_badge is on.
+    const incentive = toStr(r['incentive']).trim();
+    let effectiveBadge = incentive;
+    if (!effectiveBadge) {
+      const winner = resolveEffectivePromo(
+        'qmi',
+        {
+          qmiId: toStr(r['id']),
+          communityId: r['community_id'] == null ? null : toStr(r['community_id']),
+          floorPlanId: r['floor_plan_id'] == null ? null : toStr(r['floor_plan_id']),
+          cityId: r['city_id'] == null ? null : toStr(r['city_id']),
+          preferredPromoId: r['preferred_promotion_id'] == null ? null : toStr(r['preferred_promotion_id']),
+        },
+        promos,
+        targets
+      );
+      const showBadge = winner?.show_card_badge === 1 || winner?.show_card_badge === true;
+      effectiveBadge = winner && showBadge ? toStr(winner['banner_text']) : '';
+    }
     return {
       id: toStr(r['id']),
       address: toStr(r['address']),
@@ -157,6 +210,7 @@ export async function buildQmiListView(): Promise<QmiListView> {
       moveInDate: moveIn === '' ? null : moveIn,
       availableNow: toBool(r['available_now']),
       published: toBool(r['published']),
+      effectiveBadge,
     };
   });
 

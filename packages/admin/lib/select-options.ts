@@ -8,7 +8,7 @@
 
 // NOTE: server-only module — imported solely by RSC pages / server actions.
 import { getReadDb } from './db';
-import { floorPlans, communities, cities, qmi } from '@esperanza/db';
+import { floorPlans, communities, cities, qmi, promotions } from '@esperanza/db';
 import type { SelectSource } from './field-config';
 
 export interface SelectOption {
@@ -49,6 +49,18 @@ export async function loadOptions(source: SelectSource): Promise<SelectOption[]>
         .limit(LIMIT)) as Array<{ id: string; name: string | null }>;
       return rows
         .map((r) => ({ id: r.id, label: r.name?.trim() || r.id }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    }
+    case 'promotions': {
+      // Preferred-incentive picker (0030). Published promos only — an unpublished
+      // preference would silently be ignored by the resolver anyway.
+      const rows = (await db
+        .select({ id: promotions.id, title: promotions.title, published: promotions.published })
+        .from(promotions)
+        .limit(LIMIT)) as Array<{ id: string; title: string | null; published: number | boolean | null }>;
+      return rows
+        .filter((r) => r.published === 1 || r.published === true)
+        .map((r) => ({ id: r.id, label: r.title?.trim() || r.id }))
         .sort((a, b) => a.label.localeCompare(b.label));
     }
   }

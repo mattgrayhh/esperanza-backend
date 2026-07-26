@@ -50,7 +50,7 @@ export type Widget =
 export type Bucket = 'synced' | 'override' | 'admin' | 'publish' | 'target' | 'system';
 
 /** Which dynamic option set a `select` / `syncedOverride(select)` field draws from. */
-export type SelectSource = 'floor_plans' | 'communities' | 'cities';
+export type SelectSource = 'floor_plans' | 'communities' | 'cities' | 'promotions';
 
 /** A {value,label} option for a builder-defined `select` field (field_definitions.options_json). */
 export interface SelectOptionItem {
@@ -275,6 +275,8 @@ const qmi: EntityFieldConfig = {
     { field: 'description', label: 'Description', widget: 'richtext', bucket: 'admin', help: 'Leave blank to use the floor-plan copy. Set this only to override the plan description for this home (e.g. to format the features as bullet points).' },
     { field: 'upgrades', label: 'Upgrades', widget: 'textarea', bucket: 'admin' },
     { field: 'incentive', label: 'Incentive', widget: 'textarea', bucket: 'admin' },
+    // 0030 operator tie-break; rendered by the bespoke QMI detail (Marketing card), not the generic form.
+    { field: 'preferred_promotion_id', label: 'Preferred Incentive', widget: 'select', bucket: 'admin', selectSource: 'promotions', visibleInForm: false },
     { field: 'virtual_tour_url', label: 'Virtual Tour URL', widget: 'text', bucket: 'admin' },
     { field: 'mls_id', label: 'MLS ID', widget: 'text', bucket: 'admin' },
     { field: 'mls_number', label: 'MLS Number', widget: 'text', bucket: 'admin' },
@@ -359,6 +361,8 @@ const communities: EntityFieldConfig = {
     // [T7] security_details removed (dead — no fill).
     { field: 'nter_now', label: 'Enter Now', widget: 'text', bucket: 'admin', help: 'NterNow self-tour link (the "Enter Now" CTA). Distinct from Featured Video, which holds the Vimeo embed.' },
     { field: 'mine_link', label: 'Mine Link', widget: 'text', bucket: 'admin' },
+    // 0030 operator tie-break for overlapping promotions (see @esperanza/db/promo).
+    { field: 'preferred_promotion_id', label: 'Preferred Incentive', widget: 'select', bucket: 'admin', selectSource: 'promotions', help: 'When more than one promotion applies, this one shows. Leave blank for the default (most specific target, then promotion order). Ignored if the chosen promotion no longer applies.' },
     { field: 'features_download_url', label: 'Features Download (PDF)', widget: 'image', bucket: 'admin' },
     { field: 'resources_download_url', label: 'Resources Download (PDF)', widget: 'image', bucket: 'admin' },
     // Auto-filled dynamic-PDF link (ensurePdfRender). Hidden from the form (computed,
@@ -408,6 +412,8 @@ const cities: EntityFieldConfig = {
     { field: 'hero_description', label: 'Hero Description', widget: 'textarea', bucket: 'admin' },
     { field: 'national_recognition', label: 'National Recognition', widget: 'text', bucket: 'admin' },
     { field: 'incentive', label: 'Incentive', widget: 'textarea', bucket: 'admin' },
+    // 0030 operator tie-break for overlapping promotions (see @esperanza/db/promo).
+    { field: 'preferred_promotion_id', label: 'Preferred Incentive', widget: 'select', bucket: 'admin', selectSource: 'promotions', help: 'When more than one promotion applies, this one shows. Leave blank for the default (most specific target, then promotion order). Ignored if the chosen promotion no longer applies.' },
     // "Where We Build" image — bottom-of-page image (0017), site key `where_we_build_image`.
     { field: 'where_we_build_image_url', label: 'Where We Build Image', widget: 'image', bucket: 'admin' },
     // custom widget (handled out-of-band via saveCityBlocks); both JSON blobs are one widget instance each.
