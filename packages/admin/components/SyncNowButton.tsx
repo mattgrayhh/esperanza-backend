@@ -17,33 +17,47 @@ import { RefreshCwIcon, CircleCheckIcon, TriangleAlertIcon } from 'lucide-react'
 import { triggerIngestSync } from '../lib/actions';
 import { Button } from '@/components/ui/button';
 
+type SyncResult = { kind: 'ok' } | { kind: 'skipped'; detail: string } | { kind: 'error'; detail: string };
+
 export function SyncNowButton() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [result, setResult] = useState<'ok' | string | null>(null);
+  const [result, setResult] = useState<SyncResult | null>(null);
 
   function run() {
     setResult(null);
     startTransition(async () => {
       const res = await triggerIngestSync();
-      setResult(res.ok ? 'ok' : res.error);
-      if (res.ok) router.refresh();
+      if (!res.ok) {
+        setResult({ kind: 'error', detail: res.error });
+        return;
+      }
+      // "Skipped" is not "synced" — another run holds the lock and this one did
+      // nothing. Saying "Synced from Mark Systems" here would be a false green.
+      setResult(res.skipped ? { kind: 'skipped', detail: res.skipped } : { kind: 'ok' });
+      if (!res.skipped) router.refresh();
     });
   }
 
   return (
     <div className="flex items-center gap-2">
-      {result === 'ok' && !pending && (
+      {result?.kind === 'ok' && !pending && (
         <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
           <CircleCheckIcon className="size-3.5 text-primary" />
           Synced from Mark Systems
         </span>
       )}
-      {result != null && result !== 'ok' && !pending && (
-        <span className="max-w-md text-xs text-destructive text-pretty" title={result}>
+      {result?.kind === 'skipped' && !pending && (
+        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <TriangleAlertIcon className="size-3.5 text-amber-600 dark:text-amber-500" />
+          A sync is already running — nothing to do. Try again in a minute.
+        </span>
+      )}
+      {result?.kind === 'error' && !pending && (
+        <span className="max-w-md text-xs text-destructive text-pretty" title={result.detail}>
           <span className="inline-flex items-start gap-1.5">
             <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
-            <span>{result}</span>
+            <span>{result.detail}</span>
           </span>
         </span>
       )}

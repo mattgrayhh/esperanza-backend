@@ -10,8 +10,9 @@
 
 import Link from 'next/link';
 import { sql } from 'drizzle-orm';
-import { ArrowLeftIcon, ListChecksIcon } from 'lucide-react';
+import { ArrowLeftIcon, ListChecksIcon, TriangleAlertIcon } from 'lucide-react';
 import { getReadDb } from '@/lib/db';
+import { getSyncFreshness, type SyncFreshness } from '@/lib/sync-freshness';
 import {
   Card,
   CardHeader,
@@ -52,8 +53,11 @@ interface SyncRun {
   errorMessage: string | null;
 }
 
-async function load(): Promise<{ runs: SyncRun[]; audit: AuditRow[] }> {
+async function load(): Promise<{ runs: SyncRun[]; audit: AuditRow[]; freshness: SyncFreshness }> {
   const db = getReadDb();
+  // Read the AGE of the last good run, not just the status of the newest row —
+  // when the ingest dies before it can log, the newest row stays 'success' forever.
+  const freshness = await getSyncFreshness();
   const runs = await db.all<SyncRun>(
     sql.raw(
       `SELECT source, status, at, duration_s AS durationS, notes, error_message AS errorMessage
@@ -71,18 +75,18 @@ async function load(): Promise<{ runs: SyncRun[]; audit: AuditRow[] }> {
        LIMIT 80`
     )
   );
-  return { runs: runs ?? [], audit: audit ?? [] };
+  return { runs: runs ?? [], audit: audit ?? [], freshness };
 }
 
 function statusVariant(status: string | null): 'default' | 'secondary' | 'destructive' | 'outline' {
   if (status === 'success') return 'default';
-  if (status === 'error') return 'destructive';
-  if (status === 'partial') return 'outline';
+  if (status === 'error' || status === 'dlq') return 'destructive';
+  if (status === 'partial' || status === 'warning' || status === 'skipped') return 'outline';
   return 'secondary';
 }
 
 export default async function ActivityPage() {
-  const { runs, audit } = await load();
+  const { runs, audit, freshness } = await load();
   const groups = groupActivity(audit);
 
   return (
@@ -111,10 +115,26 @@ export default async function ActivityPage() {
           <CardTitle>Sync runs</CardTitle>
           <CardDescription>
             Snowflake → D1 sync runs. A failed run means D1 may be behind Snowflake
-            until the next successful sync.
+            until the next successful sync — and so does a run that never started, so
+            read the age of the newest row, not only its status.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-0">
+          {/* When the ingest dies before it can write, nothing turns red here — the
+              list simply stops, leaving an old 'success' at the top. This banner is
+              the only thing on the page that notices that. */}
+          {!freshness.fresh && (
+            <div
+              className="mx-4 mb-4 flex gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm"
+              role="alert"
+            >
+              <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
+              <div className="flex min-w-0 flex-col gap-1">
+                <p className="font-medium text-foreground">Sync is behind</p>
+                <p className="text-muted-foreground">{freshness.message}</p>
+              </div>
+            </div>
+          )}
           {runs.length === 0 ? (
             <div className="px-4">
               <Empty className="border-0">

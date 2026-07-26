@@ -17,7 +17,7 @@ Replacing Airtable with a **100% Cloudflare** stack for Esperanza Homes (Rhodes 
 - **Queues:** `esperanza-sync-queue`(+dlq).
 - **`esperanza-api`** DEPLOYED: `https://esperanza-api.round-base-ed8c.workers.dev` — public read API, validated against the live cache-worker golden (128 published QMIs, promo resolution, r2.dev images, 0 expiring URLs).
 - **`esperanza-admin`** DEPLOYED: `https://esperanza-admin.round-base-ed8c.workers.dev` — Auth.js v5 login. Bootstrap user **matt@hazard.house** (role `admin`); password was set this session and is in the transcript → **rotate it** via `npm run -w @esperanza/admin seed-admin -- --email matt@hazard.house --password 'NEW' --remote`. `AUTH_SECRET` set.
-- **`esperanza-ingest`** built, NOT cron-active (account caps at **5 cron triggers**, all held by legacy workers; freed at cutover). **`esperanza-renderings`** = stub (DESCOPED).
+- **`esperanza-ingest`** built and **cron-active** on `0 */4 * * *` (this line previously said "NOT cron-active, account caps at 5 cron triggers" — both halves are out of date as of 2026-07-26; no other esperanza worker holds a cron). **`esperanza-renderings`** = stub (DESCOPED).
 
 ## Data model (the keystone)
 - **3 ownership buckets:** (a) Snowflake-synced + override = QMI pricing/availability fields (`synced_*`/`override_*`; only `price` has the `last_synced_price` shadow) + `communities.square_footage_range`; (b) external = floor-plan renderings; (c) **admin-owned** (D1 = source of truth) = everything else. Ingest writes ONLY an allow-list of synced columns; admin owns the rest. `published` precedence: ingest may force `=0` (sold) only; admin owns `=1`.

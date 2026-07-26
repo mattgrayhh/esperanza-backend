@@ -260,17 +260,57 @@ export async function releaseSyncLock(db: D1Like): Promise<void> {
   await db.prepare(`DELETE FROM sync_lock WHERE name = 'ingest'`).bind().run();
 }
 
+// Best-effort telemetry: a sync_log write must never replace the error it is
+// reporting. If D1 itself is the thing that's broken, this INSERT fails too —
+// swallow it here so the original throw survives and reaches Workers Logs.
+async function logSyncFailure(
+  env: Env,
+  row: { status: string; startedAt: string; start: number; errorMessage?: string; notes?: string }
+): Promise<void> {
+  try {
+    await writeSyncLog(env, {
+      runId: crypto.randomUUID(),
+      source: 'snowflake',
+      status: row.status,
+      startedAt: row.startedAt,
+      finishedAt: new Date().toISOString(),
+      durationS: (Date.now() - row.start) / 1000,
+      notes: row.notes,
+      errorMessage: row.errorMessage,
+    });
+  } catch (logErr) {
+    console.error('sync_log write failed:', logErr instanceof Error ? logErr.message : logErr);
+  }
+}
+
 export async function runIngest(
   env: Env,
   opts: { forceUnpublish?: boolean } = {}
 ): Promise<{ skipped?: string } | void> {
   const startedAt = new Date().toISOString();
   const start = Date.now();
-  if (!(await acquireSyncLock(env.DB))) {
-    console.warn('ingest skipped: already running (sync_lock held)');
-    return { skipped: 'already running' };
-  }
+  // The lock acquisition lives INSIDE the try. It used to sit above it, so when
+  // acquireSyncLock itself threw — as it did for six days after 0029_sync_lock
+  // shipped to code but not to remote D1 — the throw escaped before reaching the
+  // catch below. No sync_log row was written, so the table simply STOPPED rather
+  // than going red, and every surface reading it kept showing the last success.
+  // Whatever breaks in here, it now leaves a row behind.
+  let lockHeld = false;
   try {
+    lockHeld = await acquireSyncLock(env.DB);
+    if (!lockHeld) {
+      // Not a failure — the other run will do the work. Logged anyway: a run that
+      // skips every time is how a wedged lock announces itself.
+      console.warn('ingest skipped: already running (sync_lock held)');
+      await logSyncFailure(env, {
+        status: 'skipped',
+        startedAt,
+        start,
+        notes: 'another run holds sync_lock; no work done',
+      });
+      return { skipped: 'already running' };
+    }
+
     const token = await snowflakeLogin(env);
     await snowflakeQuery(token, env, `USE WAREHOUSE ${env.SNOWFLAKE_WAREHOUSE}`);
 
@@ -359,17 +399,16 @@ export async function runIngest(
         : `producer enqueued ${messages.length} message(s); published ${stats.qmisPublished} re-available home(s)${stats.qmisPublishHeld ? ` (${stats.qmisPublishHeld} HELD for review — run ?force=1 to release)` : ''}; wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated${stats.unmatchedModels.length ? `; ⚠ ${stats.unmatchedModels.length} unmatched model(s) need an admin floor_plan: ${stats.unmatchedModels.join(', ')}` : ''}`,
     });
   } catch (err) {
-    await writeSyncLog(env, {
-      runId: crypto.randomUUID(),
-      source: 'snowflake',
+    await logSyncFailure(env, {
       status: 'error',
       startedAt,
-      finishedAt: new Date().toISOString(),
-      durationS: (Date.now() - start) / 1000,
+      start,
       errorMessage: err instanceof Error ? err.message : String(err),
     });
     throw err;
   } finally {
-    await releaseSyncLock(env.DB);
+    // Only the holder releases. A run that skipped because someone else held the
+    // lock must not delete it out from under the run that is still working.
+    if (lockHeld) await releaseSyncLock(env.DB);
   }
 }

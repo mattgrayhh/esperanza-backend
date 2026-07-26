@@ -191,7 +191,15 @@ If messages keep failing they land in `esperanza-sync-queue-dlq` after 3 retries
 consumer records each one as a `sync_log` row (status `dlq`, message body in
 `error_message`) — fix the underlying data, then re-run the ingest (`POST /run`).
 Concurrent runs are prevented by a `sync_lock` D1 row (15-min TTL); a second trigger
-logs "skipped: already running" and exits.
+writes a `sync_log` row with status `skipped` and exits without touching the lock.
+
+**Every exit path now leaves a `sync_log` row** — `success`, `warning` (unpublish guard),
+`error`, `skipped`, or `dlq`. The lock is acquired *inside* the run's try/catch precisely
+so that a failure in the acquisition itself is recorded. It was outside until 2026-07-26,
+and that gap is why the 0029 migration miss ran silently for six days: the run threw before
+it could log, so `sync_log` stopped rather than going red and every dashboard kept showing
+the previous success. If you are ever asked "is the sync healthy", answer with the **age of
+the newest good row**, or just `curl .../health/sync` on `esperanza-ops`.
 
 ---
 **Next:** [03 — Module: Admin Panel](./03-module-admin.md)

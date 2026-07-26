@@ -66,6 +66,22 @@ jobs:
           done
           echo "pkgs=$(echo $OUT | xargs)" >> "$GITHUB_OUTPUT"
 
+      # ── SCHEMA BEFORE CODE ──────────────────────────────────────────────────
+      # 2026-07-19: commit 62389f99 added 0029_sync_lock.sql AND the code that
+      # requires the table. CI shipped the code; nobody remembered `npm run
+      # db:migrate:remote`. Every ingest cron for the next six days died on
+      # `no such table: sync_lock`, and because the failure happened before the run
+      # could write to sync_log, no dashboard ever went red.
+      #
+      # Applying here removes the human step. `migrations apply` is idempotent —
+      # already-applied files are skipped — so this is a no-op on most pushes, and a
+      # failure here fails the build BEFORE any Worker ships ahead of its schema.
+      - name: Check migration filenames
+        run: node scripts/check-migrations.mjs
+
+      - name: Apply D1 migrations (remote)
+        run: npx wrangler d1 migrations apply esperanza --remote --config packages/db/wrangler.toml
+
       - name: Deploy
         if: steps.changes.outputs.pkgs != ''
         run: |
