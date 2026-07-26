@@ -31,7 +31,7 @@ const str = (v: unknown) => (v == null ? '' : String(v));
 export async function buildPromoHealth(): Promise<PromoHealth> {
   const db = getReadDb();
   const [promoRaw, targetRaw, commRaw, qmiRaw] = await Promise.all([
-    db.all<Row>(sql.raw(`SELECT id, title, published, start_date, end_date, sort_order FROM promotions`)),
+    db.all<Row>(sql.raw(`SELECT id, title, published, start_date, end_date, sort_order, show_card_badge FROM promotions`)),
     db.all<Row>(sql.raw(`SELECT promotion_id, target_type, target_id FROM promotion_targets`)),
     db.all<Row>(sql.raw(`SELECT id, name, published, preferred_promotion_id, city_id FROM communities`)),
     db.all<Row>(
@@ -54,6 +54,7 @@ export async function buildPromoHealth(): Promise<PromoHealth> {
     start_date: p['start_date'] == null ? null : str(p['start_date']),
     end_date: p['end_date'] == null ? null : str(p['end_date']),
     sort_order: p['sort_order'] == null ? 0 : Number(p['sort_order']),
+    show_card_badge: p['show_card_badge'],
   }));
   const livePromoById = new Map(
     promos
@@ -103,22 +104,24 @@ export async function buildPromoHealth(): Promise<PromoHealth> {
       });
     }
 
-    // 2. GAP — published QMIs, none of which any promotion reaches.
+    // 2. GAP — published QMIs, none of which any BADGE-BEARING promotion reaches.
+    // A global landing-page-only promo (show_card_badge off) still leaves every
+    // card badgeless — the symptom this warning exists for (Villas at Tres Lagos,
+    // 2026-07-26 audit) — so it does not count as coverage here.
     const homes = qmiByCommunity.get(cid) ?? [];
     if (homes.length === 0) continue;
-    const anyCovered = homes.some(
-      (q) =>
-        applicablePromos(
-          {
-            qmiId: str(q['id']),
-            communityId: cid,
-            floorPlanId: q['floor_plan_id'] == null ? null : str(q['floor_plan_id']),
-            cityId: q['city_id'] == null ? null : str(q['city_id']),
-          },
-          promos,
-          targets,
-          now
-        ).length > 0
+    const anyCovered = homes.some((q) =>
+      applicablePromos(
+        {
+          qmiId: str(q['id']),
+          communityId: cid,
+          floorPlanId: q['floor_plan_id'] == null ? null : str(q['floor_plan_id']),
+          cityId: q['city_id'] == null ? null : str(q['city_id']),
+        },
+        promos,
+        targets,
+        now
+      ).some((p) => p['show_card_badge'] === 1 || p['show_card_badge'] === true)
     );
     if (!anyCovered) gaps.push({ communityId: cid, communityName: name, qmiCount: homes.length });
   }
