@@ -73,6 +73,13 @@ service = "esperanza-pdf"
 binding = "INGEST"
 service = "esperanza-ingest"
 
+# Service binding to esperanza-ops. The /status page reads GET /health/sync via
+# this binding — same-account workers.dev fetches are blocked by Cloudflare, so
+# the public-URL fallback in status-live.ts only works from outside (local dev).
+[[services]]
+binding = "OPS"
+service = "esperanza-ops"
+
 # Service binding to the rhodes-availability Worker (Rhodes Living — the RENTAL tenant,
 # a separate company under the Rhodes parent brand). The /rhodes screen's server actions
 # (lib/rhodes-actions.ts) call its /api/* routes via this binding (Authorization: Bearer

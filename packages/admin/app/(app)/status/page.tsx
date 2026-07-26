@@ -11,9 +11,10 @@ export default async function StatusPage() {
     GITHUB_STATUS_TOKEN?: string;
     GITHUB_DISPATCH_TOKEN?: string;
     SENTRY_STATUS_TOKEN?: string;
+    OPS?: Fetcher;
   };
   const [snapshot, deployments, sentry] = await Promise.all([
-    getStatusSnapshot(),
+    getStatusSnapshot(env),
     loadDeployments(env),
     loadSentryIssues(env),
   ]);
