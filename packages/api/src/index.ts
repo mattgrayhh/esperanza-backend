@@ -1192,11 +1192,38 @@ const apiHandler = {
       wantsPurge && previewAuthorized(env.PURGE_KEY, request.headers.get('X-Purge-Key'));
 
     if (purgeAuthorized) {
-      // Admin cache-busting hook: DELETE the cached body (and the 24h backup) so the
-      // next read repopulates from D1. (The admin Worker calls this after a write.)
+      // Admin cache-busting hook: DELETE the cached body (and the 24h backup), then
+      // ACK IMMEDIATELY. The rebuild+rewarm runs in waitUntil — the old fall-through
+      // made every authorized purge wait out the full D1 rebuild (~7s for /qmi),
+      // which is what made admin image uploads crawl (each upload purges twice).
+      await Promise.all([cache.delete(cacheKey), cache.delete(backupKeyFor(cacheKeyUrl))]);
       ctx.waitUntil(
-        Promise.all([cache.delete(cacheKey), cache.delete(backupKeyFor(cacheKeyUrl))])
+        (async () => {
+          const session = env.DB.withSession('first-unconstrained');
+          const body = JSON.stringify(await buildPayload(entity, session));
+          const cacheControl = `public, max-age=${ttl}, s-maxage=${ttl}`;
+          await cache.put(
+            cacheKey,
+            new Response(body, {
+              headers: { 'Content-Type': 'application/json', 'Cache-Control': cacheControl },
+            })
+          );
+          await cache.put(
+            backupKeyFor(cacheKeyUrl),
+            new Response(body, {
+              headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'public, max-age=86400, s-maxage=86400',
+              },
+            })
+          );
+        })().catch((err) => Sentry.captureException(err))
       );
+      const out = new Response(JSON.stringify({ purged: true }), { status: 200 });
+      out.headers.set('Content-Type', 'application/json');
+      out.headers.set('X-Purge-Applied', '1');
+      for (const [k, v] of cors) out.headers.set(k, v);
+      return out;
     } else {
       const hit = await cache.match(cacheKey);
       if (hit) {
