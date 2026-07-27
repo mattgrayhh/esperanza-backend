@@ -128,12 +128,15 @@ function fmtPrice(n: number | null): string {
   return n == null ? "—" : usd.format(n)
 }
 
-/** Format a move-in date string. Accepts ISO-ish; falls back to the raw string. */
+/** Format a move-in date string. Accepts ISO-ish; falls back to the raw string.
+ *  timeZone is pinned: the server renders in UTC and a client in e.g. Central time
+ *  would otherwise format a date-only value one day earlier -> React hydration
+ *  mismatch (Sentry ESPERANZA-HOMES-3 on /qmi). */
 function fmtMoveIn(raw: string | null): string | null {
   if (!raw) return null
   const d = new Date(raw)
   if (Number.isNaN(d.getTime())) return raw
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
 }
 
 // =============================================================================

@@ -42,7 +42,8 @@ function toYmd(date: Date): string {
 /** Human label for the trigger (e.g. "May 31, 2026"). Falls back to the raw value. */
 function pretty(date: Date | undefined, raw: string): string {
   if (!date) return raw.trim() || 'Pick a date';
-  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  // Locale pinned so server and client hydrate the same label (date is local-noon, day-safe).
+  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 export function DatePicker({

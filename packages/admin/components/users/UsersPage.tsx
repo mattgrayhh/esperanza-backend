@@ -142,7 +142,8 @@ function relativeTime(iso: string | null | undefined): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   if (days < 30) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
+  // Pinned locale/zone: server (UTC) and client must format identically (hydration).
+  return new Date(iso).toLocaleDateString('en-US', { timeZone: 'UTC' });
 }
 
 // =============================================================================
