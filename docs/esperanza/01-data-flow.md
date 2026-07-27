@@ -235,7 +235,10 @@ There's no copy to keep in sync — the public site reads D1 **live**:
      `esperanza-frontend` so community pages without `community-homes-live.js` (e.g. Tres
      Lagos master plan) get the HubSpot form too.
 4. Admin writes purge the api's edge cache (`?purge=1`) so an edit shows within moments
-   rather than after the cache TTL.
+   rather than after the cache TTL. An authorized purge ACKs immediately (cache deleted,
+   `{purged:true}` + `X-Purge-Applied: 1`) and re-warms the cache in the background — it
+   does NOT wait out the D1 rebuild (that fall-through made every image upload pay the
+   ~7s /qmi rebuild twice; fixed 2026-07-26).
 
 So a saved/published edit is live as soon as the cache clears — nothing to push or
 backfill. See [doc 03](./03-module-admin.md) for the admin write path.
