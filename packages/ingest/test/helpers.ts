@@ -9,7 +9,7 @@ import Database from 'better-sqlite3';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { INGEST_ACTOR, type D1Like } from '../src/consumer.js';
+import type { D1Like } from '../src/consumer.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // packages/ingest/test → packages/db
@@ -53,40 +53,6 @@ export function setRunSeq(db: Database.Database, seq: number): void {
     `INSERT INTO sync_run_seq (name, seq, at) VALUES ('ingest', ?, '2026-07-28T00:00:00.000Z')
      ON CONFLICT(name) DO UPDATE SET seq = excluded.seq`
   ).run(seq);
-}
-
-/**
- * Insert a `published` audit row and return its id.
- *
- * The drift retraction compare-and-sets on the id of the ingest publish flip it is
- * undoing, so the flip has to exist for the write to land at all. Returns the real
- * AUTOINCREMENT id rather than a guess, which is the point — a later insert for the same
- * home gets a strictly higher one, and that is what makes a republish detectable.
- */
-export function seedPublishAudit(
-  db: Database.Database,
-  qmiId: string,
-  opts: { actor: string; action?: 'publish' | 'unpublish'; at?: string }
-): number {
-  const info = db
-    .prepare(
-      `INSERT INTO audit_log (entity, entity_id, field, action, old_value, new_value, actor, at)
-       VALUES ('qmi', ?, 'published', ?, ?, ?, ?, ?)`
-    )
-    .run(
-      qmiId,
-      opts.action ?? 'publish',
-      opts.action === 'unpublish' ? '1' : '0',
-      opts.action === 'unpublish' ? '0' : '1',
-      opts.actor,
-      opts.at ?? '2026-07-20T00:00:00.000Z'
-    );
-  return Number(info.lastInsertRowid);
-}
-
-/** The machine publish flip a retraction targets. */
-export function seedIngestPublish(db: Database.Database, qmiId: string, at?: string): number {
-  return seedPublishAudit(db, qmiId, { actor: INGEST_ACTOR, at });
 }
 
 /**

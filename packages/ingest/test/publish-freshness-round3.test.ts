@@ -6,23 +6,20 @@
 // at head 35ca757, so a future change that reintroduces one fails with its own name.
 //
 // The headline finding: a monotonic counter can only refuse an intent that arrives
-// LATE. It cannot retract one that arrived on time and was correct when it ran. That
-// case needs the newer decision to actively unpublish — which is safe to automate only
-// for inventory this pipeline published itself, hence the provenance check.
+// LATE. It cannot retract one that arrived on time and was correct when it ran. The
+// auto-retraction that briefly answered that was withdrawn in round 5 — see the last
+// describe() here and the drift block in diff.ts. Drift is reported, never applied.
 // =============================================================================
 
 import { describe, it, expect } from 'vitest';
 import Database from 'better-sqlite3';
-import { freshDb, d1, setRunSeq, seedIngestPublish } from './helpers.js';
-import { applyMessage, INGEST_ACTOR, type ConsumerEnv, type D1Like } from '../src/consumer.js';
-import { loadExistingQmis } from '../src/index.js';
+import { freshDb, d1, setRunSeq } from './helpers.js';
+import { applyMessage, type ConsumerEnv, type D1Like } from '../src/consumer.js';
 import { diff, type ExistingQmi, type Lookups } from '../src/diff.js';
 import type { SnowflakeQmiRow } from '../src/snowflake.js';
 
 const QMI_ID = 'recR3';
 const KEY = '002PG00000291';
-/** Stand-in for the audit_log.id of the ingest publish flip a retraction is undoing. */
-const AUDIT_ID = 4242;
 const IMAGE = 'https://img.hazardhouse.ai/qmi/2133-sand-lane.jpg';
 
 function seed(over: { published?: number; stage?: string | null; moveIn?: string | null } = {}) {
@@ -48,12 +45,17 @@ const publishedOf = (db: Database.Database) =>
 const auditCount = (db: Database.Database) =>
   (db.prepare(`SELECT COUNT(*) AS n FROM audit_log`).get() as { n: number }).n;
 
+/** Complete, not cast-through-unknown: the Sets are required, and a fixture that omits
+ *  them only survives while no test reaches buildQmiSyncedValues. */
 function emptyLookups(): Lookups {
   return {
+    cityByName: new Map(),
     communityByName: new Map(),
     floorPlanByName: new Map(),
-    cityByName: new Map(),
-  } as unknown as Lookups;
+    validCities: new Set(),
+    validCommunities: new Set(),
+    validFloorPlans: new Set(),
+  };
 }
 
 // ── SEQ_BUMP_AFTER_READ ──────────────────────────────────────────────────────────
@@ -188,13 +190,23 @@ describe('HARNESS_ATOMICITY — a failure AFTER the batch has started executing'
 });
 
 // ── PRIMARY BLOCKER: run 1 publishes validly, run 2 reports the home unready ──────
-describe('the cross-run schedule no freshness rule can close', () => {
-  const sfRow = (stage: string): SnowflakeQmiRow =>
+describe('the cross-run schedule no freshness rule can close — REPORTED, not retracted', () => {
+  // Round 3 identified this ordering: run N publishes home X validly and commits, run N+1
+  // then reports X unready. Nothing is stale, so no freshness rule can reject anything.
+  //
+  // The auto-retraction that briefly answered it was withdrawn in round 5. Retracting
+  // "only what the machine published" needs to know who owns a live home's publication at
+  // DELIVERY time, and no such signal exists yet: the real admin control audits
+  // `field='status'` (so a provenance query over `field='published'` cannot see it), and
+  // the admin inserts its audit row after the flip commits, leaving a window with no owner
+  // recorded at all. See the drift block in diff.ts for the full reasoning and the fix
+  // that would be needed. Until that lands, drift is counted and named for a human.
+  const sfRow = (stage: string) =>
     ({
       eciKey: KEY,
       houseNumber: '2133',
+      communityName: 'Palo Alto Groves',
       address: '2133 Sand Lane',
-      communityName: null,
       constructionStage: stage,
       moveInDate: null,
       ratifiedSalesPrice: null,
@@ -209,18 +221,14 @@ describe('the cross-run schedule no freshness rule can close', () => {
       image_url: IMAGE,
       synced_construction_stage: 'Buyer Sign Off',
       synced_move_in_date: null,
-      // A machine-published row always has the publish flip's audit id alongside the
-      // flag — they are read from the same row (see loadExistingQmis).
-      ...(over.machine_published === 1 ? { machine_publish_audit_id: AUDIT_ID } : {}),
       ...over,
     }) as ExistingQmi;
 
-  it('retracts a home INGEST published once a newer run reports it unready', () => {
-    // Run 1's publish was valid and committed. Run 2 now sees 'Build Pad'.
-    const { messages, stats } = diff(
-      [sfRow('Build Pad')],
+  const run = (row: ExistingQmi, stage: string) =>
+    diff(
+      [sfRow(stage)],
       [],
-      [live({ machine_published: 1 })],
+      [row],
       emptyLookups(),
       [],
       [],
@@ -231,125 +239,32 @@ describe('the cross-run schedule no freshness rule can close', () => {
       2
     );
 
-    // Round 4 split this out of qmi.unpublish: the sold/removed path stays unconditional,
-    // the drift retraction carries what it needs to re-verify itself at delivery.
-    const un = messages.find((m) => m.kind === 'qmi.retract');
-    expect(un).toBeDefined();
-    expect(un!.kind === 'qmi.retract' && un!.qmiId).toBe(QMI_ID);
-    expect(un!.kind === 'qmi.retract' && un!.runSeq).toBe(2); // sequenced, like every intent
-    expect(un!.kind === 'qmi.retract' && un!.publishAuditId).toBe(AUDIT_ID);
-    expect(un!.kind === 'qmi.retract' && un!.expect).toEqual({ stage: 'Build Pad', moveIn: null });
+  it('reports a drifted live home and emits NO message that could take it down', () => {
+    const { messages, stats } = run(live({}), 'Build Pad');
+
+    // The whole point: this leg cannot remove a live listing. Neither kind is emitted for
+    // it — `qmi.unpublish` belongs to sold/removed, and there is no retraction kind.
     expect(messages.find((m) => m.kind === 'qmi.unpublish')).toBeUndefined();
-    expect(stats.qmisDriftUnpublished).toBe(1);
-    expect(stats.qmisPublishedDrifted).toBe(0); // not merely reported — acted on
-  });
-
-  it('does NOT retract a home a HUMAN published — it only reports it', () => {
-    const { messages, stats } = diff(
-      [sfRow('Build Pad')],
-      [],
-      [live({ machine_published: 0 })],
-      emptyLookups(),
-      [],
-      [],
-      [],
-      new Map(),
-      false,
-      '2026-07-28',
-      2
-    );
-
-    expect(messages.find((m) => m.kind === 'qmi.retract')).toBeUndefined();
-    expect(stats.qmisDriftUnpublished).toBe(0);
+    expect(messages.some((m) => (m as { kind: string }).kind === 'qmi.retract')).toBe(false);
     expect(stats.qmisPublishedDrifted).toBe(1);
     expect(stats.driftedPublishedIds).toEqual([QMI_ID]);
   });
 
-  it('leaves a still-ready machine-published home alone', () => {
-    const { messages, stats } = diff(
-      [sfRow('Buyer Sign Off')],
-      [],
-      [live({ machine_published: 1 })],
-      emptyLookups(),
-      [],
-      [],
-      [],
-      new Map(),
-      false,
-      '2026-07-28',
-      2
-    );
+  it('reports drift regardless of who published the home', () => {
+    // Provenance is no longer consulted at all, so a machine-published and a
+    // human-published drifted home are treated identically: both reported, neither touched.
+    const machine = run(live({}), 'Build Pad');
+    const human = run(live({}), 'Preliminary Plan Review');
 
-    expect(messages.find((m) => m.kind === 'qmi.retract')).toBeUndefined();
-    expect(stats.qmisDriftUnpublished).toBe(0);
+    for (const r of [machine, human]) {
+      expect(r.messages.find((m) => m.kind === 'qmi.unpublish')).toBeUndefined();
+      expect(r.stats.qmisPublishedDrifted).toBe(1);
+    }
+  });
+
+  it('does not report a still-ready live home', () => {
+    const { stats } = run(live({}), 'Buyer Sign Off');
     expect(stats.qmisPublishedDrifted).toBe(0);
-  });
-
-  it('the retraction actually lands, and is attributed to ingest', async () => {
-    const db = seed({ published: 1, stage: 'Build Pad' });
-    setRunSeq(db, 2);
-    // The flip being retracted has to exist for the consumer to compare against it.
-    const publishAuditId = seedIngestPublish(db, QMI_ID);
-    const env = { DB: d1(db) } as unknown as ConsumerEnv;
-
-    await applyMessage(env, {
-      kind: 'qmi.retract',
-      snowflakeKey: KEY,
-      qmiId: QMI_ID,
-      runSeq: 2,
-      expect: { stage: 'Build Pad', moveIn: null },
-      publishAuditId,
-    });
-
-    expect(publishedOf(db)).toBe(0);
-    const row = db
-      .prepare(`SELECT actor, action, new_value FROM audit_log WHERE entity_id = ? AND action = 'unpublish'`)
-      .get(QMI_ID) as { actor: string; action: string; new_value: string };
-    expect(row).toEqual({ actor: INGEST_ACTOR, action: 'unpublish', new_value: '0' });
-    db.close();
-  });
-});
-
-// ── Provenance, read from the real schema ────────────────────────────────────────
-describe('machine_published provenance', () => {
-  it('is 1 only when the LAST published-flip was ingest, and 0 for the pre-attribution backlog', async () => {
-    const db = seed({ published: 1 });
-    db.prepare(
-      `INSERT INTO qmi (id, eci_key, housenumber, synced_address, published)
-       VALUES ('recHUMAN', '002PG00000999', '9', '9 Human Way', 1)`
-    ).run();
-    db.prepare(
-      `INSERT INTO qmi (id, eci_key, housenumber, synced_address, published)
-       VALUES ('recBACKLOG', '002PG00000888', '8', '8 Backlog Rd', 1)`
-    ).run();
-
-    const audit = db.prepare(
-      `INSERT INTO audit_log (entity, entity_id, field, action, old_value, new_value, actor, at)
-       VALUES ('qmi', ?, 'published', ?, ?, ?, ?, ?)`
-    );
-    // Machine published it, and nobody has touched it since.
-    audit.run(QMI_ID, 'publish', '0', '1', INGEST_ACTOR, '2026-07-20T00:00:00.000Z');
-    // Machine published it, then a HUMAN re-published it later — the newest flip wins, so
-    // this is human-owned and the drift leg must leave it alone.
-    audit.run('recHUMAN', 'publish', '0', '1', INGEST_ACTOR, '2026-07-20T00:00:00.000Z');
-    audit.run('recHUMAN', 'publish', '0', '1', 'matt@hazard.house', '2026-07-25T00:00:00.000Z');
-    // recBACKLOG has no published audit row at all — the ~101-home cleanup shape.
-
-    const rows = await loadExistingQmis(d1(db));
-    const by = new Map(rows.map((r) => [r.id, Number(r.machine_published)]));
-
-    expect(by.get(QMI_ID)).toBe(1);
-    expect(by.get('recHUMAN')).toBe(0);
-    expect(by.get('recBACKLOG')).toBe(0);
-
-    // The audit id travels with the flag, from the SAME row, so the consumer can
-    // re-verify ownership against the exact flip the producer judged (round 4).
-    const ids = new Map(rows.map((r) => [r.id, r.machine_publish_audit_id ?? null]));
-    const ingestFlip = db
-      .prepare(`SELECT id FROM audit_log WHERE entity_id = ? AND action = 'publish'`)
-      .get(QMI_ID) as { id: number };
-    expect(Number(ids.get(QMI_ID))).toBe(ingestFlip.id);
-    expect(ids.get('recBACKLOG')).toBeNull(); // nothing to point at → nothing to retract
-    db.close();
+    expect(stats.driftedPublishedIds).toEqual([]);
   });
 });

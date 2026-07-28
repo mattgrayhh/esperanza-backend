@@ -47,7 +47,6 @@ import type {
   SyncMessage,
   QmiUpsertMessage,
   QmiUnpublishMessage,
-  QmiRetractMessage,
   QmiPublishMessage,
   CommunityUpsertMessage,
   FloorPlanUpsertMessage,
@@ -191,8 +190,6 @@ export async function applyMessage(
       return applyQmiUpsert(env, msg, ctx);
     case 'qmi.unpublish':
       return applyQmiUnpublish(env, msg, ctx);
-    case 'qmi.retract':
-      return applyQmiRetract(env, msg); // reads the run counter itself — capped leg
     case 'qmi.publish':
       return applyQmiPublish(env, msg); // reads the run counter itself — see below
     case 'community.upsert':
@@ -558,8 +555,8 @@ async function applyQmiUnpublish(
   //
   // No readiness or provenance predicate here, deliberately — see QmiUnpublishMessage.
   // The home is not for sale; that is a fact, not a judgement that can go stale between
-  // the snapshot and delivery. Readiness DRIFT is the judgement call, and it now has its
-  // own path (applyQmiRetract) so hardening it cannot silently constrain this one.
+  // the snapshot and delivery. Readiness DRIFT is the judgement call, and it is reported
+  // for a human rather than applied here — see the drift block in diff().
   const changed = await flipPublishedWithAudit(
     env,
     msg.qmiId,
@@ -571,160 +568,6 @@ async function applyQmiUnpublish(
     console.warn(
       `[ingest:unpublish] SKIPPED ${msg.qmiId} (${msg.snowflakeKey}): a newer producer run ` +
         `started between the freshness check and the write, or the row was already hidden.`
-    );
-    return result;
-  }
-  result.unpublished = 1;
-  return result;
-}
-
-/**
- * The compare-and-set the READINESS-DRIFT RETRACTION runs under — the only leg that can
- * take a live home down on a judgement rather than on a fact, and the one review round 4
- * broke. Two predicates, for the two schedules it reproduced.
- *
- * 1. STATE. The row must still hold the effective stage / move-in date the producer
- *    judged unready. Same `COALESCE(NULLIF(TRIM(override),''), NULLIF(TRIM(synced),''))`
- *    spelling as publishCas, for the same reason: the SQL and firstFilled() cannot be
- *    allowed to disagree about "effective", and `IS` handles the NULLs that `=` would
- *    silently drop. Closes ADMIN_READY_OVERRIDE_RACE — an override landing after the
- *    snapshot changes the effective value, so the statement matches zero rows.
- *
- * 2. OWNERSHIP. The newest `action = 'publish'` audit row for this home must still be
- *    exactly the flip this message is retracting. Closes HUMAN_REPUBLISH_RACE: a human
- *    republish inserts a strictly higher AUTOINCREMENT id, so the subquery returns that
- *    id instead and the predicate fails. Ownership is thereby re-decided INSIDE the
- *    write, which is the whole point — round 4's finding was that checking it in the
- *    producer's snapshot proves nothing about who owns the row minutes later.
- *
- * WHY `action = 'publish'` AND NOT EVERY `field = 'published'` ROW. flipPublishedWithAudit
- * puts this CAS on BOTH its statements, and its audit INSERT (an 'unpublish', since this
- * leg flips to 0) runs BEFORE its UPDATE in the same transaction. A predicate keyed on
- * the newest `published` row of any action would therefore match its own fresh insert and
- * fail the UPDATE — committing an audit row for a retraction that never happened, the
- * exact failure flipPublishedWithAudit exists to prevent. Filtering to 'publish' makes
- * the predicate structurally blind to anything this transaction writes.
- *
- * The residual case that leaves is an unaudited republish — a future code path setting
- * published = 1 without an audit row. There is none today: togglePublished
- * (admin/lib/actions.ts:636) is the only hand-written publish and it always audits. If
- * one is ever added, this predicate silently stops being able to see it, so the second
- * clause below refuses when ANY non-ingest actor has touched this home's publication
- * since the flip — which catches an unaudited republish preceded by an audited
- * unpublish, and costs one indexed subquery on a leg capped at 15 rows per run.
- */
-function retractCas(
-  expect: { stage: string | null; moveIn: string | null },
-  publishAuditId: number
-): { sql: string; binds: unknown[] } {
-  return {
-    sql:
-      ` AND COALESCE(NULLIF(TRIM(override_construction_stage), ''), NULLIF(TRIM(synced_construction_stage), '')) IS ?` +
-      ` AND COALESCE(NULLIF(TRIM(override_move_in_date), ''), NULLIF(TRIM(synced_move_in_date), '')) IS ?` +
-      ` AND (SELECT a.id FROM audit_log a
-               WHERE a.entity = 'qmi' AND a.entity_id = qmi.id
-                 AND a.field = 'published' AND a.action = 'publish'
-               ORDER BY a.id DESC LIMIT 1) = ?` +
-      // COALESCE, because audit_log.actor is nullable and `NULL <> 'ingest'` evaluates to
-      // NULL, not true — an unattributed row would slip through a guard whose entire job
-      // is "nobody else has touched this". A row that does not say who wrote it is
-      // certainly not ours. (No such row exists in production today; this is about the
-      // predicate meaning what it says.)
-      ` AND NOT EXISTS (SELECT 1 FROM audit_log a
-                          WHERE a.entity = 'qmi' AND a.entity_id = qmi.id
-                            AND a.field = 'published' AND a.id > ?
-                            AND COALESCE(a.actor, '') <> ?)`,
-    binds: [expect.stage, expect.moveIn, publishAuditId, publishAuditId, INGEST_ACTOR],
-  };
-}
-
-/**
- * READINESS DRIFT: retract a publication INGEST made, because the home has fallen out of
- * the readiness horizon. Separate from applyQmiUnpublish on purpose — see
- * QmiRetractMessage and retractCas.
- */
-async function applyQmiRetract(env: ConsumerEnv, msg: QmiRetractMessage): Promise<ApplyResult> {
-  const result = emptyResult();
-  const who = `${msg.qmiId} (${msg.snowflakeKey})`;
-  // Counter read FRESH, like the publish leg and for the same reason: a batch that began
-  // before a new run started would judge this intent against a snapshot older than the
-  // intent itself. This leg is capped at DRIFT_UNPUBLISH_MAX_PER_RUN, so that is a handful
-  // of single-row reads per run.
-  const freshness = qmiFreshnessCas('retract', who, msg.runSeq, await currentRunSeq(env.DB));
-  if (!freshness) return result;
-
-  // FAIL CLOSED on an intent that cannot prove what it is undoing. A pre-round-4 message
-  // in flight across the deploy has no expect/publishAuditId, so it cannot be compare-and-
-  // set and must not fall back to an unconditional flip — that unguarded write IS the bug
-  // round 4 found. The next run re-derives the drift from D1, so the cost is one cycle.
-  if (!msg.expect || !Number.isFinite(Number(msg.publishAuditId))) {
-    console.warn(
-      `[ingest:retract] SKIPPED ${who}: intent carries no expected state or publish audit ` +
-        `id, so ownership and readiness cannot be re-verified. The next run re-derives it.`
-    );
-    return result;
-  }
-
-  const row = await env.DB.prepare(
-    `SELECT published, override_construction_stage, synced_construction_stage,
-            override_move_in_date, synced_move_in_date
-       FROM qmi WHERE id = ?`
-  )
-    .bind(msg.qmiId)
-    .first<{
-      published: number | null;
-      override_construction_stage: string | null;
-      synced_construction_stage: string | null;
-      override_move_in_date: string | null;
-      synced_move_in_date: string | null;
-    }>();
-
-  // Deleted, or already down (a human beat us to it) — nothing to retract.
-  if (!row || Number(row.published) !== 1) return result;
-
-  const stage = firstFilled(row.override_construction_stage, row.synced_construction_stage);
-  const moveIn = firstFilled(row.override_move_in_date, row.synced_move_in_date);
-
-  // READY AGAIN → leave it live. NOT redundant with the CAS below, and I checked rather
-  // than assumed: mutation-testing this branch fails a test the value predicates cannot
-  // catch. isPublishReady is `moveIn <= today + PUBLISH_HORIZON_DAYS`, so a home beyond
-  // the horizon drifts INTO readiness as the clock advances, with every column unchanged —
-  // so every value predicate still matches and only re-running the RULE refuses it.
-  // Evaluated with the current date for exactly that reason, which is also the safe
-  // direction for a leg that removes live listings.
-  if (isPublishReady(stage, moveIn)) {
-    console.warn(
-      `[ingest:retract] SKIPPED ${who}: publishable again at delivery — ` +
-        `stage=${stage ?? 'none'} moveIn=${moveIn ?? 'none'}. Leaving it live.`
-    );
-    return result;
-  }
-
-  // DIAGNOSTIC, NOT THE GUARD (same shape as the publish leg). retractCas is the
-  // authority; this exists so "the row moved under us" reads differently in the log from
-  // "the compare-and-set found someone else's row". Do not delete the CAS on its strength.
-  if (msg.expect.stage !== stage || msg.expect.moveIn !== moveIn) {
-    console.warn(
-      `[ingest:retract] SKIPPED ${who}: the row moved since the decision — decided on ` +
-        `stage=${msg.expect.stage ?? 'none'} moveIn=${msg.expect.moveIn ?? 'none'}, ` +
-        `row now stage=${stage ?? 'none'} moveIn=${moveIn ?? 'none'}`
-    );
-    return result;
-  }
-
-  const cas = retractCas(msg.expect, Number(msg.publishAuditId));
-  const changed = await flipPublishedWithAudit(
-    env,
-    msg.qmiId,
-    0,
-    'readiness drift on a home ingest published — no longer inside the horizon',
-    { sql: cas.sql + freshness.sql, binds: [...cas.binds, ...freshness.binds] }
-  );
-  if (changed === 0) {
-    console.warn(
-      `[ingest:retract] SKIPPED ${who}: compare-and-set did not match — the home was ` +
-        `re-published by someone else, its readiness inputs moved, or a newer run started ` +
-        `between the checks above and the write.`
     );
     return result;
   }
@@ -1028,7 +871,6 @@ export interface MessageBatchLike<Body> {
 const PURGE_DEPS: Record<SyncMessage['kind'], string[]> = {
   'qmi.upsert': ['qmi'],
   'qmi.unpublish': ['qmi'],
-  'qmi.retract': ['qmi'],
   'qmi.publish': ['qmi'],
   'community.upsert': ['communities', 'cities', 'qmi'],
   'floorplan.upsert': ['floorplans', 'qmi'],

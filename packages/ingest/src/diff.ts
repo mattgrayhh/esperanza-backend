@@ -6,7 +6,6 @@
 // Message shapes the queue carries (one per changed record):
 //   { kind: 'qmi.upsert',  ... }   new spec OR changed existing
 //   { kind: 'qmi.unpublish', ... } sold/removed → force published=0 (NEVER =1)
-//   { kind: 'qmi.retract', ... }   readiness drift on a home INGEST published → =0
 //   { kind: 'qmi.publish', ... }   re-available + imaged + ready → published=1
 //   { kind: 'community.upsert', ... } square_footage_range changed
 //
@@ -65,56 +64,13 @@ export interface QmiUpsertMessage extends RunStamped {
  * not a judgement that can be wrong at delivery time the way a readiness assessment
  * can: the home is not for sale. A home wrongly taken down here is re-published by the
  * next run's publish leg, which is the cheap direction. Review round 4 was explicit that
- * this path should stay unconditional — the drift retraction is what needed guarding,
- * and it is now a SEPARATE kind (QmiRetractMessage) so hardening one cannot weaken the
- * other by accident.
+ * this path should stay unconditional, and it is the ONLY path that forces published = 0
+ * unattended — readiness drift is reported for a human, never retracted (see diff()).
  */
 export interface QmiUnpublishMessage extends RunStamped {
   kind: 'qmi.unpublish';
   snowflakeKey: string;
   qmiId: string;
-}
-
-/**
- * READINESS-DRIFT RETRACTION: a home that INGEST published has since fallen out of the
- * readiness horizon, so the pipeline takes back its own publication. Split out of
- * `qmi.unpublish` in review round 4 — see the drift block in diff() for the policy
- * (retract what the machine published, report what a human did).
- *
- * This is the only leg in the pipeline that can take a LIVE home down on a judgement
- * rather than on a fact, so every input to that judgement is re-validated at delivery
- * and compare-and-set inside the mutating statement. Round 4 reproduced both schedules
- * that a producer-side provenance check cannot cover, because both happen AFTER the
- * snapshot and INSIDE the same run (so the run sequence is identical and blind to them):
- *
- *   * HUMAN_REPUBLISH_RACE — a human unpublishes and republishes the home before this
- *     intent lands. The row is live again, but a PERSON put it there. Retracting it
- *     crosses the exact ownership boundary the policy promises never to cross.
- *   * ADMIN_READY_OVERRIDE_RACE — an admin sets a ready-stage override before this
- *     intent lands. The home is publish-ready at delivery; taking it down is simply wrong.
- */
-export interface QmiRetractMessage extends RunStamped {
-  kind: 'qmi.retract';
-  snowflakeKey: string;
-  qmiId: string;
-  /**
-   * The EFFECTIVE stage / move-in date the producer judged UNREADY, normalised exactly
-   * as firstFilled() does. The consumer re-runs isPublishReady on the row as it stands
-   * and compare-and-sets on these values, so a home that has since become ready — or
-   * moved at all — is left alone.
-   */
-  expect: { stage: string | null; moveIn: string | null };
-  /**
-   * `audit_log.id` of the ingest publish flip being retracted — the durable identity of
-   * the decision this message is undoing.
-   *
-   * The consumer requires this to STILL be the newest `action = 'publish'` audit row for
-   * the home. `audit_log.id` is INTEGER PRIMARY KEY AUTOINCREMENT, so any republish
-   * inserts a strictly higher id and the predicate stops matching; there is no clock and
-   * no tie to reason about. That is what makes HUMAN_REPUBLISH_RACE detectable at
-   * delivery, which a snapshot-time actor check structurally cannot be.
-   */
-  publishAuditId: number;
 }
 
 /** Re-publish: a home that IS in the current available Snowflake set, is currently
@@ -160,7 +116,6 @@ export interface FloorPlanUpsertMessage {
 export type SyncMessage =
   | QmiUpsertMessage
   | QmiUnpublishMessage
-  | QmiRetractMessage
   | QmiPublishMessage
   | CommunityUpsertMessage
   | FloorPlanUpsertMessage;
@@ -192,33 +147,6 @@ export interface ExistingQmi {
    *  stage is honoured rather than overridden by the raw Snowflake feed. */
   override_move_in_date?: string | null;
   override_construction_stage?: string | null;
-  /**
-   * PROVENANCE: 1 when this row's most recent published→1 transition was written by
-   * ingest itself (audit_log.actor = INGEST_ACTOR), 0/absent when a human did it or
-   * when it predates attribution entirely.
-   *
-   * This is what makes readiness drift safe to act on automatically. Retracting a
-   * publish the machine made is symmetric — same actor, same rule, fully attributed.
-   * Retracting one a HUMAN made is not: sales may be showing a slipped home on purpose,
-   * and nothing records that intent. So the drift leg unpublishes only its own work and
-   * reports the rest. See the drift block in diff().
-   *
-   * SNAPSHOT-TIME ONLY. This says who owned the publication when the producer read D1,
-   * and review round 4 reproduced a human unpublish+republish landing between that read
-   * and delivery. The retraction therefore re-checks ownership at delivery against
-   * machine_publish_audit_id; this flag only decides whether to emit at all.
-   */
-  machine_published?: number | null;
-  /**
-   * `audit_log.id` of the publish flip machine_published was derived from — the durable
-   * identity carried to the consumer so ownership can be re-verified inside the write.
-   *
-   * Ordered by `id`, NOT by `at`: id is AUTOINCREMENT and therefore strictly monotonic in
-   * insertion order, while `at` is a text clock that can tie within a millisecond or skew
-   * backwards. The consumer's compare-and-set picks the newest publish row by the same
-   * rule, and the two MUST agree on which row that is — so both order by id.
-   */
-  machine_publish_audit_id?: number | null;
   synced_lot_number: string | null;
   synced_elevation_type: string | null;
   synced_material_type: string | null;
@@ -284,9 +212,6 @@ export interface DiffResult {
      *  HUMAN-published only — reported, never auto-unpublished (see the drift block). */
     qmisPublishedDrifted: number;
     /** Machine-published homes that drifted out of readiness and were RETRACTED this run. */
-    qmisDriftUnpublished: number;
-    /** Machine-published drift over DRIFT_UNPUBLISH_MAX_PER_RUN, held for the next run. */
-    qmisDriftUnpublishHeld: number;
     /** First few drifted ids, so /sync-status names them instead of only counting. */
     driftedPublishedIds: string[];
     qmisInSnowflake: number;
@@ -349,15 +274,6 @@ export const UNPUBLISH_GUARD_MIN_SNOWFLAKE_RATIO = 0.5;
  * releases the whole batch at once.
  */
 export const PUBLISH_GUARD_MAX_PER_RUN = 15;
-
-/**
- * Cap on the readiness-drift retraction leg, mirroring PUBLISH_GUARD_MAX_PER_RUN.
- *
- * A sudden mass of drift is far more likely to be a bad feed than 50 homes genuinely
- * regressing at once, and taking live listings DOWN is the expensive direction. The
- * overflow is warned about and retried next run rather than dropped.
- */
-export const DRIFT_UNPUBLISH_MAX_PER_RUN = 15;
 
 export interface UnpublishGuardResult {
   tripped: boolean;
@@ -585,8 +501,6 @@ export function diff(
     qmisPublished: 0,
     qmisPublishHeld: 0,
     qmisPublishedDrifted: 0,
-    qmisDriftUnpublished: 0,
-    qmisDriftUnpublishHeld: 0,
     driftedPublishedIds: [] as string[],
     /** Withheld by the readiness gate (unbuilt / too far out) — NOT a backlog. */
     qmisPublishNotReady: 0,
@@ -766,46 +680,45 @@ export function diff(
     stats.qmisPublishHeld = publishCandidates.length - release.length;
   }
 
-  // ── READINESS DRIFT on already-live homes (2026-07-28, reviews round 1 and 3) ─────
+  // ── READINESS DRIFT on already-live homes — REPORTED, NEVER RETRACTED ────────────
   // The publish gate governs the MOMENT OF PUBLICATION and nothing else. A home that was
   // legitimately published while it sat inside the horizon can later fall outside it —
   // the builder pushes the move-in date, or the construction stage regresses — and the
   // unpublish leg would not notice, because it triggers on ABSENCE from Snowflake, not on
-  // readiness.
+  // readiness. So this leg exists to SURFACE that condition for a human.
   //
-  // This is also the ONE ordering no freshness rule can close, and review round 3 was
-  // right to keep pressing on it. Run N publishes home X validly and commits; run N+1
-  // then reports X unready. Nothing was stale — the publish was correct when it ran — so
-  // rejecting late messages cannot help. The newer decision has to actively retract.
+  // IT DELIBERATELY DOES NOT AUTO-UNPUBLISH, and the history is worth keeping because the
+  // reasoning is not obvious (reviews rounds 3-5, 2026-07-28):
   //
-  // POLICY — RETRACT WHAT THE MACHINE PUBLISHED, REPORT WHAT A HUMAN DID.
-  // The asymmetry is the whole point, and it is what makes this safe to automate:
+  // Round 3 correctly observed that this is the one ordering no freshness rule can close —
+  // run N publishes home X validly and commits, run N+1 then reports X unready, nothing is
+  // stale, so no late-message rule can help. It offered two remedies: a durable per-QMI
+  // publication owner/revision, or a sequenced unpublish for machine-published inventory.
   //
-  //   * machine-published (audit_log.actor = ingest): unpublishing is symmetric with
-  //     publishing. Same actor, same readiness rule, and the retraction is itself
-  //     attributed, so "why did this home disappear" has an answer in audit_log.
-  //   * human-published: reported, never touched. Sales may be showing a slipped home
-  //     deliberately and nothing records that intent — silently pulling live listings
-  //     unattended is the same class of mistake as silently publishing them, which is
-  //     the incident that started all of this.
+  // Rounds 4 and 5 then took the second remedy apart. Retracting only "what the machine
+  // published" requires knowing WHO owns a live home's publication at the moment the
+  // retraction lands, and that ownership signal does not exist:
   //
-  // The ~101-home cleanup backlog is entirely in the second bucket: those rows predate
-  // attribution, so no audit_log row names ingest as their publisher and this leg will
-  // not touch a single one. That cleanup stays a reviewed, human-run script. Verified
-  // rather than assumed — see the machine_published field on ExistingQmi.
-  // PROVENANCE IS RE-CHECKED AT DELIVERY, NOT JUST HERE (review round 4). What follows
-  // decides only whether to EMIT. Between this snapshot and the message landing, a human
-  // can unpublish and republish the home, or an admin can override the stage back into
-  // readiness — both inside the same run, so the run sequence sees nothing. The intent
-  // therefore carries the values judged and the id of the publish flip being retracted,
-  // and the consumer compare-and-sets on both. See QmiRetractMessage.
+  //   * `audit_log` cannot supply it. The real QMI admin control is gate="status" →
+  //     setStatus, which changes `published` but audits `field='status'`, so any
+  //     provenance query over `field='published'` is blind to the actual human path
+  //     (round 5). And `togglePublished`/`setStatus` both insert their audit row AFTER
+  //     the flip commits (postWrite, actions.ts), leaving a window in which a home is
+  //     live with no row yet naming its owner — a duplicate delivery inside that window
+  //     retracts a human's publication (round 5).
+  //   * No existing column can stand in. `updated_at` is the only one every writer sets
+  //     atomically with `published`, but ingest churns it with its own upserts in the
+  //     same run, so compare-and-setting on it would refuse every retraction.
+  //
+  // Closing it properly means a publication-owner marker written in the SAME statement as
+  // every `published` change, by all four writers (setStatus, togglePublished, ingest, and
+  // scripts/reconcile-published-readiness.ts). That is a schema decision — `qmi` sits at
+  // 99 of D1's 100-column cap, so it is the last column or a side table plus an atomic
+  // admin batch — and it belongs in its own reviewed change, not bolted onto this gate.
+  //
+  // Until then the honest posture is the one this PR started with: count it, name the
+  // homes in sync_log, and let a human decide. Nothing here can take a live listing down.
   const drifted: string[] = [];
-  const driftUnpublish: {
-    id: string;
-    key: string;
-    publishAuditId: number;
-    expect: { stage: string | null; moveIn: string | null };
-  }[] = [];
   for (const e of existingQmis) {
     if (e.published !== 1) continue;
     const k = snowflakeKey(e.eci_key);
@@ -820,44 +733,7 @@ export function diff(
     );
     const moveIn = firstFilled(e.override_move_in_date, incoming?.moveInDate, e.synced_move_in_date);
     if (isPublishReady(stage, moveIn, todayIso)) continue;
-    // Retract only with a concrete publish flip to point at. machine_published === 1
-    // implies such a row exists (the flag is derived FROM it), but a missing id would
-    // leave the consumer with nothing to compare-and-set against, so fall through to
-    // report-only rather than emit an intent that cannot prove what it is undoing.
-    const auditId = Number(e.machine_publish_audit_id);
-    if (Number(e.machine_published) === 1 && Number.isFinite(auditId) && auditId > 0) {
-      driftUnpublish.push({
-        id: e.id,
-        key: k,
-        publishAuditId: auditId,
-        expect: { stage, moveIn },
-      });
-    } else drifted.push(e.id);
-  }
-
-  // Capped for the same reason the publish leg is: a sudden mass of drift is far more
-  // likely to be a bad feed than 50 homes genuinely regressing at once, and taking live
-  // listings down is the expensive direction to get wrong. The remainder is WARN-listed
-  // and retried next run, so nothing is lost — it just does not all happen unattended.
-  const driftRelease = driftUnpublish.slice(0, DRIFT_UNPUBLISH_MAX_PER_RUN);
-  for (const d of driftRelease) {
-    messages.push({
-      kind: 'qmi.retract',
-      snowflakeKey: d.key,
-      qmiId: d.id,
-      runSeq,
-      expect: d.expect,
-      publishAuditId: d.publishAuditId,
-    });
-  }
-  stats.qmisDriftUnpublished = driftRelease.length;
-  stats.qmisDriftUnpublishHeld = driftUnpublish.length - driftRelease.length;
-  if (stats.qmisDriftUnpublishHeld > 0) {
-    console.warn(
-      `[ingest:diff] DRIFT UNPUBLISH STAGED — ${driftUnpublish.length} machine-published ` +
-        `home(s) have drifted out of readiness; unpublishing ${driftRelease.length} this run, ` +
-        `${stats.qmisDriftUnpublishHeld} held for the next.`
-    );
+    drifted.push(e.id);
   }
 
   stats.qmisPublishedDrifted = drifted.length;
