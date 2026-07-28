@@ -118,6 +118,13 @@ export function getEntity(key: string): EntityDef | undefined {
   return (ENTITIES as Record<string, EntityDef>)[key];
 }
 
+/** Resolve an entity by registry key (`floor_plans`) OR url segment (`floor-plans`). */
+export function resolveEntity(keyOrSegment: string): EntityDef | undefined {
+  const direct = getEntity(keyOrSegment);
+  if (direct) return direct;
+  return ENTITY_LIST.find((e) => e.segment === keyOrSegment);
+}
+
 /** Singularize a plural entity label for "New X" / breadcrumb context. Handles the
  *  -ies → -y case (Communities→Community, Cities→City) and the plain trailing -s,
  *  while leaving already-singular labels untouched. Fixes the old `replace(/s$/,'')`
