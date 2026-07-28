@@ -80,8 +80,9 @@ interface Row {
   id: string;
   synced_address: string | null;
   synced_community_name: string | null;
-  synced_construction_stage: string | null;
+  effective_stage: string | null;
   effective_move_in: string | null;
+  is_model_home: number | null;
 }
 
 const today = todayIsoDate();
@@ -90,26 +91,52 @@ const cutoff = addDays(today, horizonDays);
 console.log(`Mode: ${mode} · ${apply ? 'APPLY' : 'dry-run'}`);
 console.log(`Rule: keep published when stage is move-in-ready OR move-in <= ${cutoff} (today ${today} + ${horizonDays}d)\n`);
 
+// Effective values, matching the gate and v_public_qmi's COALESCE.
 const rows = d1Json(
-  `SELECT id, synced_address, synced_community_name, synced_construction_stage,
-          COALESCE(override_move_in_date, synced_move_in_date) AS effective_move_in
+  `SELECT id, synced_address, synced_community_name,
+          COALESCE(override_construction_stage, synced_construction_stage) AS effective_stage,
+          COALESCE(override_move_in_date, synced_move_in_date) AS effective_move_in,
+          COALESCE(synced_is_model_home, 0) AS is_model_home
      FROM qmi WHERE published = 1`
 ) as Row[];
 
 const keep: Row[] = [];
 const drop: Row[] = [];
+// Model homes are marketing assets — deliberately shown early, regardless of how far
+// out their construction stage reads. Nothing records WHO published a row, so a model
+// home in the drop set cannot be distinguished from one a human put up on purpose.
+// Tearing down a showcase home is the more expensive mistake, so they are held out and
+// reported for a human instead of being unpublished automatically.
+const modelHomes: Row[] = [];
 for (const r of rows) {
-  (isPublishReady(r.synced_construction_stage, r.effective_move_in, today, horizonDays) ? keep : drop).push(r);
+  if (isPublishReady(r.effective_stage, r.effective_move_in, today, horizonDays)) {
+    keep.push(r);
+  } else if (Number(r.is_model_home) === 1) {
+    modelHomes.push(r);
+  } else {
+    drop.push(r);
+  }
 }
 
 console.log(`Published now: ${rows.length}`);
-console.log(`  keep:      ${keep.length}`);
-console.log(`  unpublish: ${drop.length}\n`);
+console.log(`  keep:                        ${keep.length}`);
+console.log(`  unpublish:                   ${drop.length}`);
+console.log(`  model homes held for review: ${modelHomes.length}\n`);
+
+if (modelHomes.length) {
+  console.log('MODEL HOMES outside the horizon — NOT touched, decide by hand:');
+  for (const r of modelHomes) {
+    console.log(
+      `  ${r.id}  ${(r.effective_move_in ?? 'no date').padEnd(12)} ${String(r.effective_stage ?? '').padEnd(30)} ${r.synced_address ?? ''} (${r.synced_community_name ?? ''})`
+    );
+  }
+  console.log('');
+}
 
 // Grouped so a human can sanity-check the shape before trusting the list.
 const byStage = new Map<string, number>();
 for (const r of drop) {
-  const k = r.synced_construction_stage ?? '(none)';
+  const k = r.effective_stage ?? '(none)';
   byStage.set(k, (byStage.get(k) ?? 0) + 1);
 }
 console.log('Would unpublish, by construction stage:');
@@ -120,7 +147,7 @@ for (const [stage, n] of [...byStage].sort((a, b) => b[1] - a[1])) {
 console.log('\nWould unpublish, detail:');
 for (const r of drop.sort((a, b) => (a.effective_move_in ?? '').localeCompare(b.effective_move_in ?? ''))) {
   console.log(
-    `  ${r.id}  ${(r.effective_move_in ?? 'no date').padEnd(12)} ${String(r.synced_construction_stage ?? '').padEnd(30)} ${r.synced_address ?? ''} (${r.synced_community_name ?? ''})`
+    `  ${r.id}  ${(r.effective_move_in ?? 'no date').padEnd(12)} ${String(r.effective_stage ?? '').padEnd(30)} ${r.synced_address ?? ''} (${r.synced_community_name ?? ''})`
   );
 }
 
@@ -137,21 +164,30 @@ if (drop.length > maxUnpublish) {
   process.exit(1);
 }
 
-// Chunked so no single statement approaches D1's bound-parameter ceiling (~100).
+// Chunked to keep each SQL text and its printed progress manageable; ids are
+// interpolated (escaped) rather than bound, so D1's ~100 bound-parameter ceiling does
+// not apply here.
 const CHUNK = 50;
 let written = 0;
 for (let i = 0; i < drop.length; i += CHUNK) {
   const slice = drop.slice(i, i + CHUNK);
   const ids = slice.map((r) => `'${r.id.replace(/'/g, "''")}'`).join(',');
-  d1Json(
-    `UPDATE qmi SET published = 0, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-      WHERE published = 1 AND id IN (${ids})`
-  );
-  // Attribution, matching the ingest's machine actor so the admin can explain the change.
+  // Audit INSERT and UPDATE go in ONE d1 call, so they land in a single request rather
+  // than two independent ones. Two calls could commit the unpublish and then lose the
+  // audit row to a mid-run failure — reproducing the exact unattributed-machine-flip
+  // problem this change exists to fix.
+  //
+  // The INSERT runs FIRST and selects `published = 1`, so it records exactly the rows the
+  // UPDATE is about to change. Ordering it after the UPDATE would instead match anything
+  // already at 0 — including a row some other actor (an admin, or the live ingest cron
+  // sharing this table) unpublished between the initial SELECT and now — and attribute
+  // that change to this script.
   d1Json(
     `INSERT INTO audit_log (entity, entity_id, field, action, old_value, new_value, actor)
      SELECT 'qmi', id, 'published', 'unpublish', '1', '0', 'readiness-reconcile'
-       FROM qmi WHERE id IN (${ids}) AND published = 0`
+       FROM qmi WHERE published = 1 AND id IN (${ids});
+     UPDATE qmi SET published = 0, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+      WHERE published = 1 AND id IN (${ids});`
   );
   written += slice.length;
   console.log(`  applied ${written}/${drop.length}`);

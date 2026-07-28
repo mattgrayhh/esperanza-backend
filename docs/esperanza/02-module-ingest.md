@@ -143,8 +143,17 @@ availability onto it in both directions; see the publish/unpublish bullets below
   `?force=1` releases the staging **cap**, NOT the readiness gate. Rejections are counted
   separately in `sync_log` as "withheld by readiness gate" so they are never mistaken for
   a reviewable backlog. See `packages/ingest/test/publish-readiness-gate.test.ts`.
+  The gate reads **effective** values — `override_construction_stage` and
+  `override_move_in_date` win over the incoming Snowflake value, which wins over the D1
+  copy — so an admin hold on the stage is honoured instead of being overruled by the raw
+  feed on the next cycle, and an admin *correcting* a stale feed stage does get the home
+  published. A blank incoming stage falls back to D1 rather than reading as "not ready"
+  (Snowflake coerces null text to `''`, which `??` would not skip).
   To retro-apply the rule to already-published homes:
   `npx tsx scripts/reconcile-published-readiness.ts --remote` (dry-run; `--apply` writes).
+  It holds **model homes** out of the unpublish set and lists them separately — they are
+  deliberately marketed early, and nothing records who published a row, so tearing one
+  down automatically is the more expensive mistake.
 - **Machine publishes are attributed (2026-07-28):** every ingest flip of `published`
   writes an `audit_log` row (`actor = ingest-autopublish`, action `publish`/`unpublish`)
   in addition to `sync_log`. Before this, the ingest wrote only `sync_log` while the

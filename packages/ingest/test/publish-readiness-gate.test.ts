@@ -86,6 +86,7 @@ function existing(i: number, over?: Partial<ExistingQmi>): ExistingQmi {
     synced_construction_stage: 'Build Pad',
     synced_move_in_date: null,
     override_move_in_date: null,
+    override_construction_stage: null,
     synced_lot_number: null,
     synced_elevation_type: null,
     synced_material_type: null,
@@ -226,6 +227,45 @@ describe('diff publish readiness gate', () => {
     );
     expect(ids).toEqual([]);
     expect(stats.qmisPublishNotReady).toBe(1);
+  });
+
+  // ── Effective-value resolution (found by review, 2026-07-28) ──────────────
+  // The gate originally read only the incoming Snowflake stage, ignoring
+  // override_construction_stage — which v_public_qmi coalesces (views.sql:33) and the
+  // admin exposes as an editable field. Both directions were wrong and untested.
+
+  it("an admin's stage override HOLDS BACK a home the raw feed calls finished", () => {
+    // Snowflake says Buyer Sign Off; an admin has overridden the stage to hold it. The
+    // public view honours the override, so the unattended publish must too — otherwise
+    // the next 4-hour cycle silently overrules an explicit hold.
+    const { ids, stats } = runDiff(
+      [sfRow(10, 'Buyer Sign Off', '2027-06-01')],
+      [existing(10, { override_construction_stage: 'Sales Hold' })]
+    );
+    expect(ids).toEqual([]);
+    expect(stats.qmisPublishNotReady).toBe(1);
+  });
+
+  it("an admin's stage override PUBLISHES a home whose feed stage is stale", () => {
+    // Snowflake still lags at Frame Labor 1 with no usable date; the admin has corrected
+    // the stage to finished. Ignoring the override leaves the home invisible forever —
+    // the manual-checklist problem this feature exists to remove.
+    const { ids } = runDiff(
+      [sfRow(11, 'Frame Labor 1', null)],
+      [existing(11, { override_construction_stage: 'Buyer Sign Off' })]
+    );
+    expect(ids).toEqual(['rec11']);
+  });
+
+  it('falls back to the D1 stage when Snowflake sends a blank one', () => {
+    // snowflake.ts coerces a null CONSTRUCTION_STAGE to '' (String(x ?? '').trim()), and
+    // '' ?? fallback yields '' — so a blank incoming stage must not read as "not ready"
+    // when D1 still holds a good value.
+    const { ids } = runDiff(
+      [sfRow(12, '', null)],
+      [existing(12, { synced_construction_stage: 'Buyer Sign Off' })]
+    );
+    expect(ids).toEqual(['rec12']);
   });
 
   it('gate-rejected homes are NOT released by operator force', () => {

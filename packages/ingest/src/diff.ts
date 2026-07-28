@@ -23,6 +23,17 @@ import type {
 } from './snowflake.js';
 import { squareFootageRange, countRange } from './snowflake.js';
 import { isPublishReady, todayIsoDate } from './availability.js';
+
+/**
+ * First value that is neither null/undefined nor blank-after-trim. Unlike `??`, this
+ * skips the empty strings the Snowflake parser produces for null text columns.
+ */
+function firstFilled(...vals: Array<string | null | undefined>): string | null {
+  for (const v of vals) {
+    if (v != null && String(v).trim() !== '') return v;
+  }
+  return null;
+}
 import type { SyncedQmiValues, SyncedCommunityValues, SyncedFloorPlanValues } from './synced.js';
 import { snowflakeKey } from './synced.js';
 
@@ -103,9 +114,12 @@ export interface ExistingQmi {
   synced_elevation: string | null;
   synced_construction_stage: string | null;
   synced_move_in_date: string | null;
-  /** Admin override of the move-in date. The publish gate judges the EFFECTIVE date
-   *  (override ?? synced), matching what v_public_qmi shows a visitor. */
+  /** Admin overrides. The publish gate judges the EFFECTIVE values (override wins),
+   *  matching the COALESCE v_public_qmi / v_preview_qmi apply (views.sql:33,125) — so it
+   *  decides on what a visitor would actually see, and an explicit admin hold on the
+   *  stage is honoured rather than overridden by the raw Snowflake feed. */
   override_move_in_date?: string | null;
+  override_construction_stage?: string | null;
   synced_lot_number: string | null;
   synced_elevation_type: string | null;
   synced_material_type: string | null;
@@ -570,11 +584,25 @@ export function diff(
     if (!(snowflakeEcis.has(k) && e.published === 0 && (e.image_url ?? '').trim() !== '')) {
       continue;
     }
-    // Judge the incoming Snowflake values (this run may be updating them), with the
-    // admin's date override winning — the same COALESCE v_public_qmi applies.
+    // Judge the EFFECTIVE values a visitor would see: admin override first (the same
+    // COALESCE v_public_qmi applies), then this run's incoming Snowflake value — the run
+    // may be updating it — then the last-known-good D1 copy.
+    //
+    // Overrides must win. An admin who overrides the stage to hold a home back would
+    // otherwise be silently overruled by the raw feed on the next 4-hour cycle; and an
+    // admin correcting a stale Snowflake stage would never get the home published.
+    //
+    // firstFilled, not ??: snowflake.ts coerces a null CONSTRUCTION_STAGE to '' (String(x
+    // ?? '').trim()), and '' ?? fallback yields '', so a momentarily blank stage would be
+    // read as "not ready" instead of falling back to D1. moveInDate is properly nullable,
+    // but treat both the same way so the two lines cannot drift apart again.
     const incoming = snowflakeByEci.get(k);
-    const stage = incoming?.constructionStage ?? e.synced_construction_stage;
-    const moveIn = e.override_move_in_date ?? incoming?.moveInDate ?? e.synced_move_in_date;
+    const stage = firstFilled(
+      e.override_construction_stage,
+      incoming?.constructionStage,
+      e.synced_construction_stage
+    );
+    const moveIn = firstFilled(e.override_move_in_date, incoming?.moveInDate, e.synced_move_in_date);
     if (!isPublishReady(stage, moveIn, todayIso)) {
       stats.qmisPublishNotReady++;
       continue;
