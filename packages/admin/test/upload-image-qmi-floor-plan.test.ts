@@ -89,3 +89,25 @@ describe('uploadImage — qmi.floor_plan_image override', () => {
     expect(H.images.has('qmi/recapUOUOtwQWVHS1/custom-layout.png')).toBe(true);
   });
 });
+
+describe('uploadImage — url segment alias (floor-plans)', () => {
+  beforeEach(() => {
+    H.sqlite
+      .prepare(`INSERT INTO floor_plans (id, name, published) VALUES ('fpNew', 'Test Plan', 0)`)
+      .run();
+  });
+
+  it('accepts the public url segment floor-plans (EntityEditForm used to pass segment)', async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const file = new File([png], 'main.png', { type: 'image/png' });
+    const res = await uploadImage('floor-plans', 'fpNew', 'image_url', file);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.url).toContain('/floor_plans/fpNew/');
+    }
+    const row = H.sqlite
+      .prepare('SELECT image_url FROM floor_plans WHERE id = ?')
+      .get('fpNew') as { image_url: string };
+    expect(row.image_url).toContain('/floor_plans/fpNew/');
+  });
+});

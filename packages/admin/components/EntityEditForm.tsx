@@ -348,7 +348,7 @@ export function EntityEditForm({
           f.kind === 'image' ? (
             <ImageUploader
               key={f.field}
-              entity={segment}
+              entity={entityKey}
               id={id}
               field={f.field}
               label={f.label}
@@ -382,7 +382,7 @@ export function EntityEditForm({
       return (
         <div key={f.field} className="col-span-1 sm:col-span-2">
           <ImageGalleryEditor
-            entity={segment}
+            entity={entityKey}
             id={id}
             field={f.field}
             label={f.label}
@@ -396,7 +396,7 @@ export function EntityEditForm({
       return (
         <div key={f.field} className="col-span-1 sm:col-span-2">
           <ElevationGalleryEditor
-            entity={segment}
+            entity={entityKey}
             id={id}
             field={f.field}
             label={f.label}
@@ -419,7 +419,7 @@ export function EntityEditForm({
           optionItems={f.optionItems}
           readOnly={f.readOnly}
           help={f.help}
-          entity={segment}
+          entity={entityKey}
           id={id}
         />
       </div>

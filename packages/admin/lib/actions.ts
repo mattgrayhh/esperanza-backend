@@ -50,7 +50,7 @@ import {
 import type { PromoTargetType } from '@esperanza/db/promo';
 import { getDb, idColumn, type Db } from './db';
 import { getCurrentUser, isAdmin } from './auth';
-import { getEntity, isOverrideField, asOverridableEntity, type EntityKey } from './entities';
+import { getEntity, resolveEntity, type EntityKey } from './entities';
 import { columnMapForEntity, coerceForColumn, toDrizzlePatch, readRowColumn } from './fields';
 import { publishGateColumn } from './field-config';
 import { statusGate, statusPatch, deriveStatus } from './status';
@@ -1032,7 +1032,7 @@ export async function uploadImage(
   field: string,
   file: File
 ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
-  const def = getEntity(entity);
+  const def = resolveEntity(entity);
   if (!def) return { ok: false, error: `Unknown entity: ${entity}` };
   if (!id) return { ok: false, error: 'Missing record id' };
   if (!file || file.size === 0) return { ok: false, error: 'Empty file' };
@@ -1116,7 +1116,7 @@ export async function uploadBlockImage(
   slot: string,
   file: File
 ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
-  const def = getEntity(entity);
+  const def = resolveEntity(entity);
   if (!def) return { ok: false, error: `Unknown entity: ${entity}` };
   if (!id) return { ok: false, error: 'Missing record id' };
   if (!file || file.size === 0) return { ok: false, error: 'Empty file' };
@@ -1157,7 +1157,7 @@ export async function uploadGalleryImage(
   index: number,
   file: File
 ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
-  const def = getEntity(entity);
+  const def = resolveEntity(entity);
   if (!def) return { ok: false, error: `Unknown entity: ${entity}` };
   if (!id) return { ok: false, error: 'Missing record id' };
   if (!file || file.size === 0) return { ok: false, error: 'Empty file' };
