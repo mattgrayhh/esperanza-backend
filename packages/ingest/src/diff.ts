@@ -28,7 +28,18 @@ import { snowflakeKey } from './synced.js';
 
 // -- queue message contract --
 
-export interface QmiUpsertMessage {
+/**
+ * Producer run stamp carried by every QMI intent (migration 0031). The consumer
+ * refuses an intent whose run is no longer the current one — see run-seq.ts for the
+ * three delivery schedules that made a consumer-side state re-check insufficient on
+ * its own. Optional only so pre-0031 messages in flight across a deploy still type;
+ * an unstamped publish intent is treated as stale.
+ */
+export interface RunStamped {
+  runSeq?: number;
+}
+
+export interface QmiUpsertMessage extends RunStamped {
   kind: 'qmi.upsert';
   /** DM_HOUSE natural key (eci_key) — diff match key & importer coordination. */
   snowflakeKey: string;
@@ -44,7 +55,7 @@ export interface QmiUpsertMessage {
   ratifiedSalesPrice: number | null;
 }
 
-export interface QmiUnpublishMessage {
+export interface QmiUnpublishMessage extends RunStamped {
   kind: 'qmi.unpublish';
   snowflakeKey: string;
   qmiId: string;
@@ -55,10 +66,25 @@ export interface QmiUnpublishMessage {
  *  (guarded WHERE published=0). This is the PUBLISH direction ingest never had — a
  *  new/relisted available home used to stay invisible until a manual admin flip, which
  *  is why each parity audit re-found a different missing home (audit 2026-07-21). */
-export interface QmiPublishMessage {
+export interface QmiPublishMessage extends RunStamped {
   kind: 'qmi.publish';
   snowflakeKey: string;
   qmiId: string;
+  /**
+   * The EFFECTIVE stage / move-in date this publish decision was made on (override
+   * first, then this run's incoming Snowflake value, then D1 — see the publish leg).
+   * The consumer compare-and-sets on exactly these values, so the flip lands only
+   * while the row still says what the producer judged:
+   *
+   *   * the row has NOT yet received this run's upsert  → values differ → no publish
+   *     (the home waits one cycle rather than going live on pre-run data);
+   *   * an admin placed an override hold after the decision → differ → no publish;
+   *   * a newer run moved the stage or date → differ → no publish.
+   *
+   * Trimmed, and null for absent/blank — the same normalisation firstFilled applies,
+   * so the SQL comparison and the TypeScript predicate cannot disagree.
+   */
+  expect?: { stage: string | null; moveIn: string | null };
 }
 
 export interface CommunityUpsertMessage {
@@ -440,7 +466,14 @@ export function diff(
   /** Operator force: bypass the over-published fraction heuristic (see evaluateUnpublishGuard). */
   forceUnpublish = false,
   /** Injectable "today" (YYYY-MM-DD) for the publish readiness horizon. Tests pin it. */
-  todayIso: string = todayIsoDate()
+  todayIso: string = todayIsoDate(),
+  /**
+   * This run's sequence from sync_run_seq (migration 0031), stamped on every QMI intent
+   * so the consumer can refuse one that a later run has already superseded. Undefined
+   * leaves intents unstamped, which the consumer's publish path treats as stale — so a
+   * caller that forgets it under-publishes rather than publishing something unready.
+   */
+  runSeq?: number
 ): DiffResult {
   const messages: SyncMessage[] = [];
   const stats = {
@@ -506,6 +539,7 @@ export function diff(
         isNew: true,
         slugSource: row.address || null,
         ratifiedSalesPrice: row.ratifiedSalesPrice,
+        runSeq,
       });
       stats.qmisCreated++;
     } else if (
@@ -521,6 +555,7 @@ export function diff(
         isNew: false,
         slugSource: null,
         ratifiedSalesPrice: row.ratifiedSalesPrice,
+        runSeq,
       });
       stats.qmisUpdated++;
     }
@@ -540,7 +575,7 @@ export function diff(
     eciKeyedCount++;
     if (e.published === 1) publishedEciCount++;
     if (!snowflakeEcis.has(k) && e.published === 1) {
-      unpublishCandidates.push({ kind: 'qmi.unpublish', snowflakeKey: k, qmiId: e.id });
+      unpublishCandidates.push({ kind: 'qmi.unpublish', snowflakeKey: k, qmiId: e.id, runSeq });
     }
   }
   const unpublishGuard = evaluateUnpublishGuard(
@@ -604,7 +639,15 @@ export function diff(
       stats.qmisPublishNotReady++;
       continue;
     }
-    publishCandidates.push({ kind: 'qmi.publish', snowflakeKey: k, qmiId: e.id });
+    // Carry the values the decision was made on. The consumer compare-and-sets on them,
+    // so the flip cannot land on a row that has moved since — see QmiPublishMessage.
+    publishCandidates.push({
+      kind: 'qmi.publish',
+      snowflakeKey: k,
+      qmiId: e.id,
+      runSeq,
+      expect: { stage, moveIn },
+    });
   }
   const snowflakeShrunk =
     eciKeyedCount > 0 && snowflakeQmis.length < UNPUBLISH_GUARD_MIN_SNOWFLAKE_RATIO * eciKeyedCount;

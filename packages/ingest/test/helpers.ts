@@ -36,6 +36,18 @@ export function freshDb(): Database.Database {
 }
 
 /**
+ * Pin the producer run counter (migration 0031). Use it to stage the queue-reordering
+ * cases: seed the counter at the run a message claims to come from, then advance it to
+ * stand in for "a newer producer run has since started".
+ */
+export function setRunSeq(db: Database.Database, seq: number): void {
+  db.prepare(
+    `INSERT INTO sync_run_seq (name, seq, at) VALUES ('ingest', ?, '2026-07-28T00:00:00.000Z')
+     ON CONFLICT(name) DO UPDATE SET seq = excluded.seq`
+  ).run(seq);
+}
+
+/**
  * Wrap a better-sqlite3 Database in the async D1Like surface the consumer uses.
  * SQLite is synchronous; we just resolve immediately. Matches the subset of the
  * D1 API the consumer calls (prepare → bind → run / first / all, and batch).
@@ -69,11 +81,17 @@ export function d1(db: Database.Database): D1Like {
       // mirrors D1's batch (a single implicit transaction). The bound run() is
       // declared async but executes synchronously (no awaits), so it's safe
       // inside db.transaction.
-      const results: unknown[] = [];
+      const pending: Promise<unknown>[] = [];
       db.transaction(() => {
-        for (const s of statements as { run(): Promise<unknown> }[]) results.push(s.run());
+        for (const s of statements as { run(): Promise<unknown> }[]) pending.push(s.run());
       })();
-      return results;
+      // AWAIT them. run() is declared async, so pushing its return value straight
+      // through handed callers an array of PROMISES — and changedRows(promise) reads
+      // 0, exactly as it would for a write the guard refused. Every batched write
+      // therefore looked like a no-op to the caller under test while really having
+      // committed, which is precisely the distinction the publish compare-and-set
+      // needs to be able to prove. D1's batch resolves its results; so does this now.
+      return Promise.all(pending);
     },
   };
 }

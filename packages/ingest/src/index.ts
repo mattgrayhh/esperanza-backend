@@ -45,6 +45,7 @@ import {
   type SyncMessage,
 } from './diff.js';
 import { handleQueueBatch, handleDlqBatch, writeSyncLog, type ConsumerEnv, type D1Like } from './consumer.js';
+import { nextRunSeq } from './run-seq.js';
 
 export interface Env extends SnowflakeEnv, ConsumerEnv {
   DB: D1Like;
@@ -313,6 +314,12 @@ export async function runIngest(
       return { skipped: 'already running' };
     }
 
+    // Claim this run's sequence (migration 0031) BEFORE anything is enqueued. Every QMI
+    // intent carries it, and the consumer refuses one whose run has been superseded —
+    // that is what stops a delayed publish from a previous run landing on top of a newer
+    // decision. Bumped under sync_lock, so two runs can never claim the same number.
+    const runSeq = await nextRunSeq(env.DB, startedAt);
+
     const token = await snowflakeLogin(env);
     await snowflakeQuery(token, env, `USE WAREHOUSE ${env.SNOWFLAKE_WAREHOUSE}`);
 
@@ -346,7 +353,9 @@ export async function runIngest(
       existingCommunities,
       existingFloorPlans,
       communityPriceFrom,
-      opts.forceUnpublish ?? false
+      opts.forceUnpublish ?? false,
+      undefined, // todayIso — production always uses the real UTC date
+      runSeq
     );
 
     if (messages.length > 0) await enqueue(env, messages);
@@ -405,8 +414,8 @@ export async function runIngest(
       floorPlansUpdated: stats.floorPlansUpdated,
       unresolvedLinks: stats.unresolvedLinks,
       notes: unpublishGuard.tripped
-        ? `producer enqueued ${messages.length} message(s); published ${stats.qmisPublished} re-available home(s)${stats.qmisPublishHeld ? ` (${stats.qmisPublishHeld} HELD for review — run ?force=1 to release)` : ''}${stats.qmisPublishNotReady ? ` (${stats.qmisPublishNotReady} withheld by readiness gate — unbuilt or beyond the ${PUBLISH_HORIZON_DAYS}-day horizon)` : ''}; wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated${stats.unmatchedModels.length ? `; ⚠ ${stats.unmatchedModels.length} unmatched model(s) need an admin floor_plan: ${stats.unmatchedModels.join(', ')}` : ''}${driftNote}; ${unpublishGuard.reason}`
-        : `producer enqueued ${messages.length} message(s); published ${stats.qmisPublished} re-available home(s)${stats.qmisPublishHeld ? ` (${stats.qmisPublishHeld} HELD for review — run ?force=1 to release)` : ''}${stats.qmisPublishNotReady ? ` (${stats.qmisPublishNotReady} withheld by readiness gate — unbuilt or beyond the ${PUBLISH_HORIZON_DAYS}-day horizon)` : ''}; wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated${stats.unmatchedModels.length ? `; ⚠ ${stats.unmatchedModels.length} unmatched model(s) need an admin floor_plan: ${stats.unmatchedModels.join(', ')}` : ''}${driftNote}`,
+        ? `producer run ${runSeq} enqueued ${messages.length} message(s); published ${stats.qmisPublished} re-available home(s)${stats.qmisPublishHeld ? ` (${stats.qmisPublishHeld} HELD for review — run ?force=1 to release)` : ''}${stats.qmisPublishNotReady ? ` (${stats.qmisPublishNotReady} withheld by readiness gate — unbuilt or beyond the ${PUBLISH_HORIZON_DAYS}-day horizon)` : ''}; wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated${stats.unmatchedModels.length ? `; ⚠ ${stats.unmatchedModels.length} unmatched model(s) need an admin floor_plan: ${stats.unmatchedModels.join(', ')}` : ''}${driftNote}; ${unpublishGuard.reason}`
+        : `producer run ${runSeq} enqueued ${messages.length} message(s); published ${stats.qmisPublished} re-available home(s)${stats.qmisPublishHeld ? ` (${stats.qmisPublishHeld} HELD for review — run ?force=1 to release)` : ''}${stats.qmisPublishNotReady ? ` (${stats.qmisPublishNotReady} withheld by readiness gate — unbuilt or beyond the ${PUBLISH_HORIZON_DAYS}-day horizon)` : ''}; wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated${stats.unmatchedModels.length ? `; ⚠ ${stats.unmatchedModels.length} unmatched model(s) need an admin floor_plan: ${stats.unmatchedModels.join(', ')}` : ''}${driftNote}`,
     });
   } catch (err) {
     await logSyncFailure(env, {

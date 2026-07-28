@@ -189,10 +189,36 @@ availability onto it in both directions; see the publish/unpublish bullets below
   `max_retries`. That is the deliberate trade — a publish deferred a cycle is recoverable,
   a silently unattributed live home is the bug this feature exists to end.
 - **The consumer re-checks the producer's preconditions (2026-07-28 review):** stage,
-  move-in date **and** `image_url`, all override-first from current D1 state. The one
-  precondition it cannot re-check is presence in the Snowflake available set (the consumer
-  has no feed) — that case self-heals, because a home published while absent from the feed
-  is `published = 1` on the next run, which is exactly what the unpublish leg triggers on.
+  move-in date **and** `image_url`, all override-first from current D1 state.
+- **Queue intents carry a producer run sequence, and the publish flip is a compare-and-set
+  (★, 2026-07-28 review round 2, migration `0031_sync_run_seq`):** re-reading current D1
+  state is **not sufficient on its own**, because Queues delivery is unordered and
+  retryable. Three schedules were reproduced against the previous head:
+  1. an older `qmi.publish` executes, passes against its own run's data, and is then
+     overtaken by a newer unready `qmi.upsert` → home live at `Build Pad`;
+  2. the home leaves the Snowflake available set; the newer run emits no unpublish because
+     the row was still hidden when it took its snapshot, so a delayed publish revives it;
+  3. an admin override lands between the readiness `SELECT` and the write, which guarded
+     only `published = 0` → published over the hold.
+
+  `runIngest` now bumps a single monotonic counter (`sync_run_seq`, under `sync_lock`)
+  **before** it enqueues anything and stamps every QMI intent with it. The consumer refuses
+  any intent whose run has been superseded — that closes (1) and (2), which both require
+  the stale intent to run after a newer run began. An **unstamped** publish intent (a
+  pre-0031 message in flight across a deploy) is refused too; the cost is one cycle,
+  because publish candidates are re-derived from D1 every run. Schedule (3) happens inside
+  a single run and no sequence number can see it, so the publish message additionally
+  carries the **effective stage / move-in date it was decided on**, and the flip is a
+  compare-and-set on those values plus `image_url` in the same statement as the `audit_log`
+  insert. Anything that moves in that window changes nothing and writes no audit row.
+  A consequence worth knowing: a publish intent that arrives **before its own run's**
+  upsert sees pre-run values, mismatches, and waits a cycle. That is the fail-closed
+  direction, and it is why the counter is bumped before the enqueue rather than after.
+  See `packages/ingest/src/run-seq.ts` and
+  `packages/ingest/test/publish-intent-freshness.test.ts`.
+
+  **`sync_log` names the run** (`producer run N enqueued …`, `… (producer run N)` on the
+  consumer row), so a stale-intent skip can be traced to the run that emitted it.
 - **Availability text** (e.g. "Available JUN 2026" / "Available Now") is auto-derived from
   the move-in date (`src/availability.ts`) — but only if marketing hasn't written custom
   copy. Hand-authored availability text survives.

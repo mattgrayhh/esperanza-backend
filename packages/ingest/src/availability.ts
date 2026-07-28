@@ -28,15 +28,21 @@ export function todayIsoDate(): string {
 }
 
 /**
- * First value that is neither null/undefined nor blank-after-trim. Unlike `??`, this
- * skips the empty strings the Snowflake parser produces for null text columns
+ * First value that is neither null/undefined nor blank-after-trim, TRIMMED. Unlike `??`,
+ * this skips the empty strings the Snowflake parser produces for null text columns
  * (String(x ?? '').trim()), where `'' ?? fallback` would yield '' and read as a real
  * value. Lives here, beside the gate, because BOTH the producer (diff.ts) and the queue
  * consumer resolve effective override→feed→D1 values with it and the two must not drift.
+ *
+ * The result is trimmed because it is also the value the publish intent carries and the
+ * consumer compare-and-sets on in SQL (`COALESCE(NULLIF(TRIM(override),''), …) IS ?`).
+ * Returning the raw value would let a padded ' Buyer Sign Off ' from the feed compare
+ * unequal to its own trimmed column expression and silently refuse to publish.
  */
 export function firstFilled(...vals: Array<string | null | undefined>): string | null {
   for (const v of vals) {
-    if (v != null && String(v).trim() !== '') return v;
+    const s = v == null ? '' : String(v).trim();
+    if (s !== '') return s;
   }
   return null;
 }

@@ -42,6 +42,7 @@ import {
   applySyncedFloorPlan,
   assertFloorPlanPatchAllowed,
 } from './synced.js';
+import { currentRunSeq, isCurrentIntent } from './run-seq.js';
 import type {
   SyncMessage,
   QmiUpsertMessage,
@@ -156,20 +157,41 @@ const emptyResult = (): ApplyResult => ({
 });
 
 /**
+ * Per-BATCH state resolved once and threaded into every message, so a 100-message
+ * batch does not re-read the same row 100 times.
+ */
+export interface ApplyContext {
+  /**
+   * The producer run sequence D1 currently holds (migration 0031), or null when it
+   * could not be read. Null fails the publish path closed — see run-seq.ts.
+   */
+  currentRunSeq: number | null;
+}
+
+/** Batch-scoped state. Read once per batch; looked up per message only in tests. */
+async function resolveContext(env: ConsumerEnv, ctx?: ApplyContext): Promise<ApplyContext> {
+  return ctx ?? { currentRunSeq: await currentRunSeq(env.DB) };
+}
+
+/**
  * Apply a single message. Exported so tests can drive it against a better-sqlite3
  * DB via a thin D1Like adapter. Returns a small result for sync_log aggregation.
+ *
+ * `ctx` carries batch-scoped state (the current producer run sequence). Omit it and
+ * each message resolves its own — convenient for tests, wasteful for a real batch.
  */
 export async function applyMessage(
   env: ConsumerEnv,
-  msg: SyncMessage
+  msg: SyncMessage,
+  ctx?: ApplyContext
 ): Promise<ApplyResult> {
   switch (msg.kind) {
     case 'qmi.upsert':
-      return applyQmiUpsert(env, msg);
+      return applyQmiUpsert(env, msg, ctx);
     case 'qmi.unpublish':
-      return applyQmiUnpublish(env, msg);
+      return applyQmiUnpublish(env, msg, ctx);
     case 'qmi.publish':
-      return applyQmiPublish(env, msg);
+      return applyQmiPublish(env, msg); // reads the run counter itself — see below
     case 'community.upsert':
       return applyCommunityUpsert(env, msg);
     case 'floorplan.upsert':
@@ -177,8 +199,42 @@ export async function applyMessage(
   }
 }
 
-async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<ApplyResult> {
+/**
+ * Stale-intent check for the DATA paths (upsert / unpublish).
+ *
+ * Stricter than "is this the current run" in one direction and looser in another, on
+ * purpose:
+ *   * an intent from an OLDER run is refused — applying run N's values over run N+1's
+ *     would resurrect data the newer run has already corrected;
+ *   * an UNSTAMPED intent is ACCEPTED, unlike on the publish path. A pre-0031 message
+ *     in flight across a deploy carries real feed data whose worst case is being one
+ *     cycle behind, which is what the next run fixes anyway. Refusing it would drop
+ *     price/availability updates for no safety gain, since neither path can set
+ *     published = 1.
+ */
+function isStaleDataIntent(msgSeq: number | undefined, ctx: ApplyContext): boolean {
+  if (msgSeq == null) return false; // unstamped → accept (see above)
+  if (ctx.currentRunSeq == null) return false; // unknown → accept; nothing here publishes
+  return msgSeq < ctx.currentRunSeq;
+}
+
+async function applyQmiUpsert(
+  env: ConsumerEnv,
+  msg: QmiUpsertMessage,
+  outerCtx?: ApplyContext
+): Promise<ApplyResult> {
   const result = emptyResult();
+
+  const ctx = await resolveContext(env, outerCtx);
+  if (isStaleDataIntent(msg.runSeq, ctx)) {
+    // A newer run has already read Snowflake and written whatever is true now. Applying
+    // this would overwrite fresher values with older ones.
+    console.warn(
+      `[ingest:upsert] SKIPPED ${msg.qmiId ?? 'new'} (${msg.snowflakeKey}): stale intent ` +
+        `from run ${msg.runSeq}, current run is ${ctx.currentRunSeq}`
+    );
+    return result;
+  }
 
   // Build the synced patch — STRUCTURALLY only allow-listed columns can appear.
   const patch = applySynced(msg.values);
@@ -380,19 +436,26 @@ export const INGEST_ACTOR = 'ingest-autopublish';
 
 /**
  * Flip `published` and record who did it, atomically. Returns the number of rows the
- * flip actually changed (0 = already in that state, nothing written).
+ * flip actually changed (0 = already in that state or the guard did not match, and
+ * nothing was written).
  *
  * The audit INSERT goes FIRST and is guarded on the PRE-flip value via INSERT…SELECT, so
  * within the transaction it matches exactly the rows the UPDATE is about to change. That
  * is what keeps a no-op flip from writing an audit row claiming a change that never
  * happened — the previous `if (changedRows > 0)` check could not be used here, because
  * both statements are submitted together and there is no point between them to branch on.
+ *
+ * `cas` appends the SAME extra WHERE predicates to BOTH statements — the compare-and-set
+ * the publish path needs (see applyQmiPublish). It has to be both, or a guard that fails
+ * would still leave an audit row inside the transaction describing a flip that never
+ * happened.
  */
 async function flipPublishedWithAudit(
   env: ConsumerEnv,
   qmiId: string,
   to: 0 | 1,
-  reason: string
+  reason: string,
+  cas: { sql: string; binds: unknown[] } = { sql: '', binds: [] }
 ): Promise<number> {
   const from = to === 1 ? 0 : 1;
   const action = to === 1 ? 'publish' : 'unpublish';
@@ -401,11 +464,11 @@ async function flipPublishedWithAudit(
       env.DB.prepare(
         `INSERT INTO audit_log (entity, entity_id, field, action, old_value, new_value, actor)
          SELECT 'qmi', id, 'published', ?, ?, ?, ?
-           FROM qmi WHERE id = ? AND published = ?`
-      ).bind(action, String(from), String(to), INGEST_ACTOR, qmiId, from),
+           FROM qmi WHERE id = ? AND published = ?${cas.sql}`
+      ).bind(action, String(from), String(to), INGEST_ACTOR, qmiId, from, ...cas.binds),
       env.DB.prepare(
-        `UPDATE qmi SET published = ?, updated_at = ? WHERE id = ? AND published = ?`
-      ).bind(to, nowIso(), qmiId, from),
+        `UPDATE qmi SET published = ?, updated_at = ? WHERE id = ? AND published = ?${cas.sql}`
+      ).bind(to, nowIso(), qmiId, from, ...cas.binds),
     ]);
     return changedRows(results[1]);
   } catch (err) {
@@ -419,8 +482,22 @@ async function flipPublishedWithAudit(
   }
 }
 
-async function applyQmiUnpublish(env: ConsumerEnv, msg: QmiUnpublishMessage): Promise<ApplyResult> {
+async function applyQmiUnpublish(
+  env: ConsumerEnv,
+  msg: QmiUnpublishMessage,
+  outerCtx?: ApplyContext
+): Promise<ApplyResult> {
   const result = emptyResult();
+  const ctx = await resolveContext(env, outerCtx);
+  // A previous run's "this home is gone" must not take down a home a NEWER run has
+  // since seen back in the available set and re-published.
+  if (isStaleDataIntent(msg.runSeq, ctx)) {
+    console.warn(
+      `[ingest:unpublish] SKIPPED ${msg.qmiId} (${msg.snowflakeKey}): stale intent from ` +
+        `run ${msg.runSeq}, current run is ${ctx.currentRunSeq}`
+    );
+    return result;
+  }
   // SOLD/REMOVED: force published = 0 ONLY. The statement guards published=1 so an
   // already-unpublished row is a no-op, and there is NO branch that sets =1.
   await flipPublishedWithAudit(env, msg.qmiId, 0, 'no longer in the Snowflake available set');
@@ -434,8 +511,60 @@ function changedRows(res: unknown): number {
   return r?.meta?.changes ?? r?.changes ?? 0;
 }
 
+/**
+ * The compare-and-set the publish flip runs under: the row must STILL hold the effective
+ * stage / move-in date the producer decided on, and must still carry an image.
+ *
+ * `COALESCE(NULLIF(TRIM(x), ''), NULLIF(TRIM(y), ''))` is firstFilled() in SQL — override
+ * first, blank treated as absent, result trimmed — so the SQL and the TypeScript
+ * predicate cannot disagree about what "effective" means. `IS` rather than `=` because
+ * either side may legitimately be NULL (a home ready on its stage alone has no date), and
+ * `NULL = NULL` is NULL in SQL, which would silently never match.
+ */
+function publishCas(expect: { stage: string | null; moveIn: string | null }): {
+  sql: string;
+  binds: unknown[];
+} {
+  return {
+    sql:
+      ` AND COALESCE(NULLIF(TRIM(override_construction_stage), ''), NULLIF(TRIM(synced_construction_stage), '')) IS ?` +
+      ` AND COALESCE(NULLIF(TRIM(override_move_in_date), ''), NULLIF(TRIM(synced_move_in_date), '')) IS ?` +
+      ` AND TRIM(COALESCE(image_url, '')) <> ''`,
+    binds: [expect.stage, expect.moveIn],
+  };
+}
+
 async function applyQmiPublish(env: ConsumerEnv, msg: QmiPublishMessage): Promise<ApplyResult> {
   const result = emptyResult();
+  // Read the counter FRESH rather than taking the batch-scoped value. A batch that began
+  // before a new producer run started would otherwise judge this intent against a snapshot
+  // older than the intent itself and let a superseded publish through. The publish leg is
+  // capped at PUBLISH_GUARD_MAX_PER_RUN per run, so this is a handful of single-row reads,
+  // not one per message. The data paths keep the cached value — nothing there can publish.
+  const seq = await currentRunSeq(env.DB);
+
+  // ── FRESHNESS (2026-07-28 review round 2) ──────────────────────────────────────
+  // Re-reading D1 below closes the "state changed BEFORE this message was delivered"
+  // half of the problem and CANNOT close the other half: an intent that executes
+  // against its own run's data and is then overtaken by a newer run's upsert leaves the
+  // home live and unready. Two schedules were reproduced in review — an older publish
+  // landing before a newer unready upsert, and an older publish reviving a home that
+  // had since left the Snowflake available set (where the newer run emits no unpublish,
+  // because the row was still hidden when it took its snapshot).
+  //
+  // Both require the intent to run after a newer producer run has begun, so both are
+  // refused here. An UNSTAMPED intent (pre-0031, in flight across a deploy) has no
+  // freshness evidence and is refused too: the cost is one 4-hour cycle of delay for a
+  // home that is genuinely ready, and the producer re-derives publish candidates from
+  // D1 every run, so nothing is permanently lost. See run-seq.ts.
+  if (!isCurrentIntent(msg.runSeq, seq)) {
+    console.warn(
+      `[ingest:publish] SKIPPED ${msg.qmiId} (${msg.snowflakeKey}): stale publish intent — ` +
+        `decided by run ${msg.runSeq ?? 'unstamped'}, current run is ${seq ?? 'unknown'}. ` +
+        `The next run re-publishes it if it is still ready.`
+    );
+    return result;
+  }
   // RE-AVAILABLE + imaged: set published = 1. The query guards published = 0 so it only
   // flips a currently-hidden row (never touches a live one, and re-running is a no-op).
   // The diff only emits this for homes in the current available Snowflake set that carry
@@ -463,11 +592,12 @@ async function applyQmiPublish(env: ConsumerEnv, msg: QmiPublishMessage): Promis
   // image between the diff and delivery just as easily as a stage can move.
   //
   // The one precondition that CANNOT be re-checked here is presence in the Snowflake
-  // available set: the consumer has no feed. That gap is self-healing rather than
-  // unguarded — a home published while absent from the feed is published = 1 on the next
-  // run, which is exactly what the unpublish leg triggers on, so the following cycle
-  // takes it back down. Readiness drift is the case that does NOT self-heal, which is
-  // why the diff reports it for a human instead.
+  // available set: the consumer has no feed. The freshness check above is what covers
+  // it — a home that left the set can only be revived by an intent from an earlier run,
+  // and those are now refused. (The residual case, a home leaving the set inside its own
+  // run's window, still self-heals: the row is published = 1 by the next run, which is
+  // exactly what the unpublish leg triggers on.) Readiness drift on an already-live home
+  // is the case that does NOT self-heal, which is why the diff reports it for a human.
   const row = await env.DB.prepare(
     `SELECT published, image_url, override_construction_stage, synced_construction_stage,
             override_move_in_date, synced_move_in_date
@@ -492,22 +622,52 @@ async function applyQmiPublish(env: ConsumerEnv, msg: QmiPublishMessage): Promis
   const imaged = (row.image_url ?? '').trim() !== '';
   if (!imaged || !isPublishReady(stage, moveIn)) {
     console.warn(
-      `[ingest:publish] SKIPPED ${msg.qmiId} (${msg.snowflakeKey}): stale publish intent — ` +
-        `stage=${stage ?? 'none'} moveIn=${moveIn ?? 'none'} imaged=${imaged} ` +
-        `no longer passes the publish preconditions`
+      `[ingest:publish] SKIPPED ${msg.qmiId} (${msg.snowflakeKey}): no longer publishable — ` +
+        `stage=${stage ?? 'none'} moveIn=${moveIn ?? 'none'} imaged=${imaged}`
     );
     return result;
   }
 
-  // Atomic flip + attribution. changedRows is 0 only if the row was flipped between the
-  // SELECT above and this batch, in which case there is nothing to attribute.
+  // The row must also still hold the values the DECISION was made on. Same-run ordering
+  // is not guaranteed either, so "currently ready" is not enough: if this run's upsert
+  // has not landed yet, the row is ready on PRE-RUN data while the producer judged the
+  // incoming data, and the two can disagree. Refuse, and let the next cycle publish it.
+  //
+  // DIAGNOSTIC, NOT THE GUARD. The compare-and-set below is the authority and refuses
+  // this case on its own (verified by removing this block: the tests still pass). It
+  // stays because the two situations need different words in the log — an intent that
+  // arrived before its own run's upsert is routine and self-correcting, while a row
+  // changing between the read and the write is a genuine race worth noticing. Do not
+  // delete the CAS on the strength of this check.
+  const expect = msg.expect ?? { stage, moveIn };
+  if (expect.stage !== stage || expect.moveIn !== moveIn) {
+    console.warn(
+      `[ingest:publish] SKIPPED ${msg.qmiId} (${msg.snowflakeKey}): the row moved since the ` +
+        `decision — decided on stage=${expect.stage ?? 'none'} moveIn=${expect.moveIn ?? 'none'}, ` +
+        `row now stage=${stage ?? 'none'} moveIn=${moveIn ?? 'none'}`
+    );
+    return result;
+  }
+
+  // Atomic flip + attribution, COMPARE-AND-SET on those same values. The read above
+  // cannot be trusted on its own: an admin hold landing between it and this write would
+  // have been overwritten by a statement guarded only on `published = 0` (reproduced in
+  // review). changedRows is 0 when anything moved in that window — no publish, no audit
+  // row, and the next run re-decides against whatever the row says then.
   const changed = await flipPublishedWithAudit(
     env,
     msg.qmiId,
     1,
-    'available in Snowflake, imaged, inside the readiness horizon'
+    'available in Snowflake, imaged, inside the readiness horizon',
+    publishCas(expect)
   );
   if (changed > 0) result.published = 1;
+  else {
+    console.warn(
+      `[ingest:publish] SKIPPED ${msg.qmiId} (${msg.snowflakeKey}): the row changed between the ` +
+        `readiness check and the write (compare-and-set did not match)`
+    );
+  }
   return result;
 }
 
@@ -672,9 +832,17 @@ export async function handleQueueBatch(
   let errors = 0;
   let lastError: string | null = null;
 
+  // Batch-scoped: read the producer run sequence ONCE rather than per message.
+  const ctx: ApplyContext = { currentRunSeq: await currentRunSeq(env.DB) };
+
+  // Successful messages are acked only after the post-steps below, so the batch's
+  // telemetry is attempted while the messages are still redeliverable. Failures still
+  // retry immediately and independently (→ DLQ after max_retries).
+  const applied: QueueMessageLike<SyncMessage>[] = [];
+
   for (const m of batch.messages) {
     try {
-      const r = await applyMessage(env, m.body);
+      const r = await applyMessage(env, m.body, ctx);
       agg.created += r.created;
       agg.updated += r.updated;
       agg.unpublished += r.unpublished;
@@ -683,7 +851,7 @@ export async function handleQueueBatch(
       agg.floorPlans += r.floorPlans;
       agg.priceUpdated += r.priceUpdated;
       touchedKinds.add(m.body.kind);
-      m.ack();
+      applied.push(m);
     } catch (err) {
       errors++;
       lastError = err instanceof Error ? err.message : String(err);
@@ -692,25 +860,44 @@ export async function handleQueueBatch(
   }
 
   // Purge the public api edge cache for the entity types this batch changed so
-  // synced edits show before the TTL. One fetch per distinct entity, best-effort.
-  await purgeTouchedEntities(env, touchedKinds);
+  // synced edits show before the TTL. One fetch per distinct entity, best-effort:
+  // purgePublicCacheEntities already logs and swallows per-entity failures, so the
+  // worst case is an entity type serving stale reads until its TTL. Guarded anyway —
+  // before this, a throw from here skipped the sync_log write below entirely, so a
+  // batch could apply its writes and leave no telemetry at all.
+  try {
+    await purgeTouchedEntities(env, touchedKinds);
+  } catch (err) {
+    console.error('[ingest:purge] batch purge failed:', err instanceof Error ? err.message : err);
+  }
 
-  await writeSyncLog(env, {
-    runId: crypto.randomUUID(),
-    source: 'snowflake',
-    status: errors === 0 ? 'success' : 'partial',
-    startedAt,
-    finishedAt: nowIso(),
-    durationS: (Date.now() - start) / 1000,
-    qmisCreated: agg.created,
-    qmisUpdated: agg.updated,
-    qmisUnpublished: agg.unpublished,
-    communitiesUpdated: agg.communities,
-    floorPlansUpdated: agg.floorPlans,
-    pricesUpdated: agg.priceUpdated,
-    notes: `consumer batch of ${batch.messages.length} message(s); ${agg.published} re-published`,
-    errorMessage: lastError,
-  });
+  // Telemetry is not worth re-applying a whole batch of already-committed writes for, so
+  // a failure here is logged and the messages are still acked. If D1 is the thing that is
+  // broken, the applies above have already failed and retried on their own.
+  try {
+    await writeSyncLog(env, {
+      runId: crypto.randomUUID(),
+      source: 'snowflake',
+      status: errors === 0 ? 'success' : 'partial',
+      startedAt,
+      finishedAt: nowIso(),
+      durationS: (Date.now() - start) / 1000,
+      qmisCreated: agg.created,
+      qmisUpdated: agg.updated,
+      qmisUnpublished: agg.unpublished,
+      communitiesUpdated: agg.communities,
+      floorPlansUpdated: agg.floorPlans,
+      pricesUpdated: agg.priceUpdated,
+      notes:
+        `consumer batch of ${batch.messages.length} message(s); ${agg.published} re-published` +
+        ` (producer run ${ctx.currentRunSeq ?? 'unknown'})`,
+      errorMessage: lastError,
+    });
+  } catch (err) {
+    console.error('[ingest:sync-log] batch telemetry write failed:', err instanceof Error ? err.message : err);
+  }
+
+  for (const m of applied) m.ack();
 }
 
 /**

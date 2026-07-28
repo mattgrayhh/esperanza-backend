@@ -16,10 +16,29 @@
 // =============================================================================
 
 import { describe, it, expect } from 'vitest';
-import { freshDb, d1 } from './helpers.js';
+import { freshDb, d1, setRunSeq } from './helpers.js';
 import { applyMessage, INGEST_ACTOR, type ConsumerEnv } from '../src/consumer.js';
+import type { QmiPublishMessage } from '../src/diff.js';
 
 const QMI_ID = 'recAUDIT1';
+const KEY = '002PG00000290';
+
+/**
+ * A publish intent as the producer would emit it: stamped with the run that decided it
+ * (migration 0031) and carrying the effective values the decision was made on. Both are
+ * required — an unstamped intent is refused as stale, and a mismatched `expect` refuses
+ * the compare-and-set. Defaults match seedQmi's default row.
+ */
+function publishMsg(over: Partial<QmiPublishMessage> = {}): QmiPublishMessage {
+  return {
+    kind: 'qmi.publish',
+    snowflakeKey: KEY,
+    qmiId: QMI_ID,
+    runSeq: 1,
+    expect: { stage: 'Buyer Sign Off', moveIn: null },
+    ...over,
+  };
+}
 
 // 'Buyer Sign Off' is the final in-inventory stage, so these rows pass the consumer's
 // readiness re-check on their stage alone and no fixture date can go stale as real dates
@@ -44,6 +63,8 @@ function seedQmi(
     over.moveIn ?? null,
     over.imageUrl === undefined ? 'https://img.hazardhouse.ai/qmi/2133-sand-lane.jpg' : over.imageUrl
   );
+  // The producer bumps this before it enqueues, so run 1 is the current run here.
+  setRunSeq(db, 1);
   return db;
 }
 
@@ -56,7 +77,7 @@ describe('machine publish/unpublish attribution', () => {
     const db = seedQmi(0);
     const env = { DB: d1(db) } as unknown as ConsumerEnv;
 
-    await applyMessage(env, { kind: 'qmi.publish', snowflakeKey: '002PG00000290', qmiId: QMI_ID });
+    await applyMessage(env, publishMsg());
 
     expect(db.prepare(`SELECT published FROM qmi WHERE id = ?`).get(QMI_ID)).toEqual({ published: 1 });
     expect(audit(db)).toEqual([
@@ -89,7 +110,7 @@ describe('machine publish/unpublish attribution', () => {
     const db = seedQmi(1); // already published — the guarded UPDATE changes nothing
     const env = { DB: d1(db) } as unknown as ConsumerEnv;
 
-    await applyMessage(env, { kind: 'qmi.publish', snowflakeKey: '002PG00000290', qmiId: QMI_ID });
+    await applyMessage(env, publishMsg());
 
     expect(audit(db)).toEqual([]);
     db.close();
@@ -116,7 +137,7 @@ describe('machine publish/unpublish attribution', () => {
     const db = seedQmi(0, { stage: 'Build Pad', moveIn: '2099-01-01' });
     const env = { DB: d1(db) } as unknown as ConsumerEnv;
 
-    await applyMessage(env, { kind: 'qmi.publish', snowflakeKey: '002PG00000290', qmiId: QMI_ID });
+    await applyMessage(env, publishMsg());
 
     expect(db.prepare(`SELECT published FROM qmi WHERE id = ?`).get(QMI_ID)).toEqual({ published: 0 });
     expect(audit(db)).toEqual([]); // no flip happened, so nothing to attribute
@@ -130,7 +151,7 @@ describe('machine publish/unpublish attribution', () => {
     db.prepare(`UPDATE qmi SET override_construction_stage = 'Build Pad' WHERE id = ?`).run(QMI_ID);
     const env = { DB: d1(db) } as unknown as ConsumerEnv;
 
-    await applyMessage(env, { kind: 'qmi.publish', snowflakeKey: '002PG00000290', qmiId: QMI_ID });
+    await applyMessage(env, publishMsg());
 
     expect(db.prepare(`SELECT published FROM qmi WHERE id = ?`).get(QMI_ID)).toEqual({ published: 0 });
     db.close();
@@ -142,7 +163,7 @@ describe('machine publish/unpublish attribution', () => {
     db.prepare(`DELETE FROM qmi WHERE id = ?`).run(QMI_ID);
 
     await expect(
-      applyMessage(env, { kind: 'qmi.publish', snowflakeKey: '002PG00000290', qmiId: QMI_ID })
+      applyMessage(env, publishMsg())
     ).resolves.toBeDefined();
     expect(audit(db)).toEqual([]);
     db.close();
@@ -154,7 +175,7 @@ describe('machine publish/unpublish attribution', () => {
     const db = seedQmi(0, { imageUrl: null });
     const env = { DB: d1(db) } as unknown as ConsumerEnv;
 
-    await applyMessage(env, { kind: 'qmi.publish', snowflakeKey: '002PG00000290', qmiId: QMI_ID });
+    await applyMessage(env, publishMsg());
 
     expect(db.prepare(`SELECT published FROM qmi WHERE id = ?`).get(QMI_ID)).toEqual({ published: 0 });
     expect(audit(db)).toEqual([]);
@@ -179,7 +200,7 @@ describe('machine publish/unpublish attribution', () => {
       db.exec('DROP TABLE audit_log');
 
       await expect(
-        applyMessage(env, { kind: 'qmi.publish', snowflakeKey: '002PG00000290', qmiId: QMI_ID })
+        applyMessage(env, publishMsg())
       ).rejects.toThrow();
       // The critical assertion: the home did NOT go live without an actor.
       expect(db.prepare(`SELECT published FROM qmi WHERE id = ?`).get(QMI_ID)).toEqual({ published: 0 });
@@ -204,7 +225,7 @@ describe('machine publish/unpublish attribution', () => {
       const db = seedQmi(0);
       const env = { DB: d1(db) } as unknown as ConsumerEnv;
 
-      await applyMessage(env, { kind: 'qmi.publish', snowflakeKey: '002PG00000290', qmiId: QMI_ID });
+      await applyMessage(env, publishMsg());
 
       expect(db.prepare(`SELECT published FROM qmi WHERE id = ?`).get(QMI_ID)).toEqual({ published: 1 });
       expect(audit(db)).toHaveLength(1);
