@@ -109,6 +109,30 @@ describe('HUMAN_REPUBLISH_RACE — a human unpublishes and republishes before de
     db.close();
   });
 
+  it('refuses when an UNATTRIBUTED row touched the publication after the flip', async () => {
+    // audit_log.actor is nullable, and `NULL <> 'ingest-autopublish'` is NULL rather than
+    // true, so a bare `<>` would let an unattributed row through the one guard whose job
+    // is "nobody else has touched this". A row that does not say who wrote it is not ours.
+    //
+    // The unattributed row is an UNPUBLISH on purpose. An unattributed *publish* would be
+    // caught by the flip-identity predicate instead (it would become the newest publish
+    // row), so it would not exercise this clause at all — which is exactly what a first
+    // draft of this test did, and it passed with the bug still in place.
+    const db = seedDrifted();
+    const machineFlip = seedIngestPublish(db, QMI_ID);
+    db.prepare(
+      `INSERT INTO audit_log (entity, entity_id, field, action, old_value, new_value, actor, at)
+       VALUES ('qmi', ?, 'published', 'unpublish', '1', '0', NULL, '2026-07-28T12:00:00.000Z')`
+    ).run(QMI_ID);
+    // …and something put it back without recording itself, so the row is live again.
+
+    await applyMessage({ DB: d1(db) } as unknown as ConsumerEnv, retract(machineFlip));
+
+    expect(publishedOf(db)).toBe(1);
+    expect(unpublishAudits(db)).toBe(1); // only the seeded unattributed one
+    db.close();
+  });
+
   it('refuses when a human unpublished after the flip, even with no republish audit row', async () => {
     // Defence in depth for a publish path that does not audit. None exists today
     // (togglePublished always audits), but if one is added, the newest-publish-row test

@@ -625,9 +625,15 @@ function retractCas(
                WHERE a.entity = 'qmi' AND a.entity_id = qmi.id
                  AND a.field = 'published' AND a.action = 'publish'
                ORDER BY a.id DESC LIMIT 1) = ?` +
+      // COALESCE, because audit_log.actor is nullable and `NULL <> 'ingest'` evaluates to
+      // NULL, not true — an unattributed row would slip through a guard whose entire job
+      // is "nobody else has touched this". A row that does not say who wrote it is
+      // certainly not ours. (No such row exists in production today; this is about the
+      // predicate meaning what it says.)
       ` AND NOT EXISTS (SELECT 1 FROM audit_log a
                           WHERE a.entity = 'qmi' AND a.entity_id = qmi.id
-                            AND a.field = 'published' AND a.id > ? AND a.actor <> ?)`,
+                            AND a.field = 'published' AND a.id > ?
+                            AND COALESCE(a.actor, '') <> ?)`,
     binds: [expect.stage, expect.moveIn, publishAuditId, publishAuditId, INGEST_ACTOR],
   };
 }
