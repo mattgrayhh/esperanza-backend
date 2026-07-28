@@ -25,7 +25,12 @@
 // synced_price as the divergence anchor / diagnostic.
 // =============================================================================
 
-import { deriveAvailabilityText, isAutoAvailabilityText } from './availability.js';
+import {
+  deriveAvailabilityText,
+  firstFilled,
+  isAutoAvailabilityText,
+  isPublishReady,
+} from './availability.js';
 import { ensurePdfRender } from '@esperanza/db/pdf-ensure';
 import { affectedRenderKeys } from '@esperanza/db/pdf-invalidate';
 import { PUBLIC_CACHE_ALWAYS, purgePublicCacheEntities } from '@esperanza/db/public-cache-purge';
@@ -362,52 +367,64 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
 // not published by me"). Every machine flip of `published` now records itself with a
 // machine actor, so the admin can answer "why is this home live?".
 //
-// Best-effort: an audit write must never fail the sync itself — the publish has
-// already been applied by the time we get here.
+// GUARANTEED, not best-effort (2026-07-28 review). The flip and its audit row go out as
+// ONE D1 batch, which D1 runs in a single implicit transaction: either the home changes
+// state AND the row says who changed it, or neither happens. An earlier version wrote the
+// audit afterwards and swallowed its failure, which meant a publish could still land with
+// no actor — recreating, in the narrow failure case, the exact "shows published, but not
+// by me" confusion this code exists to end. A silently unattributed flip is the bug; a
+// publish deferred to the next cycle is not. handleQueueBatch retries the message
+// independently and DLQs it after max_retries, so a persistent audit failure surfaces in
+// sync_log rather than quietly shedding attribution.
 export const INGEST_ACTOR = 'ingest-autopublish';
 
-async function auditPublishFlip(
+/**
+ * Flip `published` and record who did it, atomically. Returns the number of rows the
+ * flip actually changed (0 = already in that state, nothing written).
+ *
+ * The audit INSERT goes FIRST and is guarded on the PRE-flip value via INSERT…SELECT, so
+ * within the transaction it matches exactly the rows the UPDATE is about to change. That
+ * is what keeps a no-op flip from writing an audit row claiming a change that never
+ * happened — the previous `if (changedRows > 0)` check could not be used here, because
+ * both statements are submitted together and there is no point between them to branch on.
+ */
+async function flipPublishedWithAudit(
   env: ConsumerEnv,
   qmiId: string,
-  action: 'publish' | 'unpublish',
+  to: 0 | 1,
   reason: string
-): Promise<void> {
+): Promise<number> {
+  const from = to === 1 ? 0 : 1;
+  const action = to === 1 ? 'publish' : 'unpublish';
   try {
-    await env.DB.prepare(
-      `INSERT INTO audit_log (entity, entity_id, field, action, old_value, new_value, actor)
-       VALUES ('qmi', ?, 'published', ?, ?, ?, ?)`
-    )
-      .bind(
-        qmiId,
-        action,
-        action === 'publish' ? '0' : '1',
-        action === 'publish' ? '1' : '0',
-        INGEST_ACTOR
-      )
-      .run();
+    const results = await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO audit_log (entity, entity_id, field, action, old_value, new_value, actor)
+         SELECT 'qmi', id, 'published', ?, ?, ?, ?
+           FROM qmi WHERE id = ? AND published = ?`
+      ).bind(action, String(from), String(to), INGEST_ACTOR, qmiId, from),
+      env.DB.prepare(
+        `UPDATE qmi SET published = ?, updated_at = ? WHERE id = ? AND published = ?`
+      ).bind(to, nowIso(), qmiId, from),
+    ]);
+    return changedRows(results[1]);
   } catch (err) {
+    // Rethrow: the batch rolled back, so the home did NOT change state. Failing the
+    // message is what gets it retried; swallowing here would drop the flip silently.
     console.error(
-      `[ingest:audit] ${action} ${qmiId} (${reason}) failed:`,
+      `[ingest:publish-flip] ${action} ${qmiId} (${reason}) failed and rolled back:`,
       err instanceof Error ? err.message : err
     );
+    throw err;
   }
 }
 
 async function applyQmiUnpublish(env: ConsumerEnv, msg: QmiUnpublishMessage): Promise<ApplyResult> {
   const result = emptyResult();
-  // SOLD/REMOVED: force published = 0 ONLY. The query guards published=1 so an
+  // SOLD/REMOVED: force published = 0 ONLY. The statement guards published=1 so an
   // already-unpublished row is a no-op, and there is NO branch that sets =1.
-  const res = await env.DB.prepare(
-    `UPDATE qmi SET published = 0, updated_at = ? WHERE id = ? AND published = 1`
-  )
-    .bind(nowIso(), msg.qmiId)
-    .run();
+  await flipPublishedWithAudit(env, msg.qmiId, 0, 'no longer in the Snowflake available set');
   result.unpublished = 1;
-  // Only audit a real flip — the guarded UPDATE is a no-op when already unpublished,
-  // and an audit row for a no-op would be a lie in the edit history.
-  if (changedRows(res) > 0) {
-    await auditPublishFlip(env, msg.qmiId, 'unpublish', 'no longer in the Snowflake available set');
-  }
   return result;
 }
 
@@ -424,17 +441,73 @@ async function applyQmiPublish(env: ConsumerEnv, msg: QmiPublishMessage): Promis
   // The diff only emits this for homes in the current available Snowflake set that carry
   // an image — the sale-gate + image precondition are enforced upstream. Mirror of
   // applyQmiUnpublish in the opposite direction (the direction ingest previously lacked).
-  // The diff also enforces the readiness gate (isPublishReady) before emitting this, so a
-  // home that is still a pad never reaches here.
-  const res = await env.DB.prepare(
-    `UPDATE qmi SET published = 1, updated_at = ? WHERE id = ? AND published = 0`
+  //
+  // READINESS RE-CHECK (2026-07-28 review). The diff enforces isPublishReady before
+  // emitting this message, but the message carries only an id — it is an INTENT, and a
+  // queue message can be delivered late or retried after a failure. By the time it lands
+  // the home's stage or move-in date may have moved, or an admin may have set an override
+  // to hold it back; flipping published = 1 on that stale intent would put an unready
+  // home on the site through the very path this gate exists to close. So the decision is
+  // re-made here against the row as it stands NOW.
+  //
+  // Deliberately fail-closed. Queues do not guarantee ordering, so this run's
+  // qmi.upsert may not have landed yet and D1 may still hold pre-run values — in which
+  // case a genuinely-ready home is skipped and the next cycle publishes it. A one-cycle
+  // delay is the correct trade against publishing a pad.
+  //
+  // No incoming-feed value is available here, and that is the point: current D1 state
+  // (override first, exactly as v_public_qmi COALESCEs) is what a visitor would see.
+  //
+  // image_url is re-read for the same reason. It is the producer's OTHER precondition —
+  // un-imaged homes are held back so no card renders blank — and an admin can clear an
+  // image between the diff and delivery just as easily as a stage can move.
+  //
+  // The one precondition that CANNOT be re-checked here is presence in the Snowflake
+  // available set: the consumer has no feed. That gap is self-healing rather than
+  // unguarded — a home published while absent from the feed is published = 1 on the next
+  // run, which is exactly what the unpublish leg triggers on, so the following cycle
+  // takes it back down. Readiness drift is the case that does NOT self-heal, which is
+  // why the diff reports it for a human instead.
+  const row = await env.DB.prepare(
+    `SELECT published, image_url, override_construction_stage, synced_construction_stage,
+            override_move_in_date, synced_move_in_date
+       FROM qmi WHERE id = ?`
   )
-    .bind(nowIso(), msg.qmiId)
-    .run();
-  result.published = 1;
-  if (changedRows(res) > 0) {
-    await auditPublishFlip(env, msg.qmiId, 'publish', 'available in Snowflake, imaged, inside the readiness horizon');
+    .bind(msg.qmiId)
+    .first<{
+      published: number | null;
+      image_url: string | null;
+      override_construction_stage: string | null;
+      synced_construction_stage: string | null;
+      override_move_in_date: string | null;
+      synced_move_in_date: string | null;
+    }>();
+
+  // Row deleted since the message was queued, or already live — nothing to do. (The
+  // guarded UPDATE would be a no-op anyway; returning early keeps the log quiet.)
+  if (!row || Number(row.published) === 1) return result;
+
+  const stage = firstFilled(row.override_construction_stage, row.synced_construction_stage);
+  const moveIn = firstFilled(row.override_move_in_date, row.synced_move_in_date);
+  const imaged = (row.image_url ?? '').trim() !== '';
+  if (!imaged || !isPublishReady(stage, moveIn)) {
+    console.warn(
+      `[ingest:publish] SKIPPED ${msg.qmiId} (${msg.snowflakeKey}): stale publish intent — ` +
+        `stage=${stage ?? 'none'} moveIn=${moveIn ?? 'none'} imaged=${imaged} ` +
+        `no longer passes the publish preconditions`
+    );
+    return result;
   }
+
+  // Atomic flip + attribution. changedRows is 0 only if the row was flipped between the
+  // SELECT above and this batch, in which case there is nothing to attribute.
+  const changed = await flipPublishedWithAudit(
+    env,
+    msg.qmiId,
+    1,
+    'available in Snowflake, imaged, inside the readiness horizon'
+  );
+  if (changed > 0) result.published = 1;
   return result;
 }
 

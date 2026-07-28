@@ -1,5 +1,10 @@
 # dependencies
-node_modules/
+# No trailing slash: `node_modules/` matches DIRECTORIES only, so a node_modules
+# *symlink* (how git worktrees here borrow the main checkout's installs) slipped past
+# it and got committed as a mode-120000 blob pointing at an absolute local path. That
+# makes `npm ci` fail ENOTDIR in any fresh clone, i.e. in CI and deploy. Slashless
+# matches both the real directory and the symlink.
+node_modules
 
 # build output
 dist/

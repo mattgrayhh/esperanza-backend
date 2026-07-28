@@ -22,18 +22,7 @@ import type {
   SnowflakeFloorPlanRow,
 } from './snowflake.js';
 import { squareFootageRange, countRange } from './snowflake.js';
-import { isPublishReady, todayIsoDate } from './availability.js';
-
-/**
- * First value that is neither null/undefined nor blank-after-trim. Unlike `??`, this
- * skips the empty strings the Snowflake parser produces for null text columns.
- */
-function firstFilled(...vals: Array<string | null | undefined>): string | null {
-  for (const v of vals) {
-    if (v != null && String(v).trim() !== '') return v;
-  }
-  return null;
-}
+import { firstFilled, isPublishReady, todayIsoDate } from './availability.js';
 import type { SyncedQmiValues, SyncedCommunityValues, SyncedFloorPlanValues } from './synced.js';
 import { snowflakeKey } from './synced.js';
 
@@ -180,6 +169,12 @@ export interface DiffResult {
     /** Candidates rejected by the readiness gate (unbuilt or beyond the horizon). Not a
      *  backlog — these should NOT be released by ?force=1 either. */
     qmisPublishNotReady: number;
+    /** ALREADY-published homes that no longer pass the readiness gate — the builder
+     *  pushed the move-in date out, or the stage regressed, after the home went live.
+     *  Reported only, NEVER auto-unpublished (see the drift block for the policy). */
+    qmisPublishedDrifted: number;
+    /** First few drifted ids, so /sync-status names them instead of only counting. */
+    driftedPublishedIds: string[];
     qmisInSnowflake: number;
     communitiesUpdated: number;
     floorPlansUpdated: number;
@@ -454,6 +449,8 @@ export function diff(
     qmisUnpublished: 0,
     qmisPublished: 0,
     qmisPublishHeld: 0,
+    qmisPublishedDrifted: 0,
+    driftedPublishedIds: [] as string[],
     /** Withheld by the readiness gate (unbuilt / too far out) — NOT a backlog. */
     qmisPublishNotReady: 0,
     qmisInSnowflake: snowflakeQmis.length,
@@ -621,6 +618,44 @@ export function diff(
     stats.qmisPublished = release.length;
     stats.qmisPublishHeld = publishCandidates.length - release.length;
   }
+
+  // ── READINESS DRIFT on already-live homes (2026-07-28 review) ────────────────
+  // The gate above governs the MOMENT OF PUBLICATION and nothing else. A home that was
+  // legitimately published while it sat inside the horizon can later fall outside it —
+  // the builder pushes the move-in date, or the construction stage regresses — and
+  // nothing in this pipeline would notice, because the unpublish leg triggers on ABSENCE
+  // from Snowflake, not on readiness. So "the gate is on" must not be read as "everything
+  // live is currently ready".
+  //
+  // POLICY — FLAG, DO NOT AUTO-UNPUBLISH. Deliberate, and the conservative direction:
+  // silently pulling live listings unattended is the same class of mistake as silently
+  // publishing them, which is what caused this incident. Sales may have reasons to keep a
+  // slipped home visible, and audit_log records the actor but not the intent. So drift is
+  // counted and named for /sync-status, and a human decides — the 106-home cleanup is a
+  // separate reviewed script for exactly that reason.
+  //
+  // Expect the first run after deploy to report roughly the size of that cleanup backlog
+  // (~106 on 2026-07-28); it drops to near zero once the reconciliation has been run.
+  const drifted: string[] = [];
+  for (const e of existingQmis) {
+    if (e.published !== 1) continue;
+    const k = snowflakeKey(e.eci_key);
+    // Not in the available set → the unpublish leg already owns this row; flagging it
+    // here too would double-report the same home.
+    if (!k || !snowflakeEcis.has(k)) continue;
+    const incoming = snowflakeByEci.get(k);
+    const stage = firstFilled(
+      e.override_construction_stage,
+      incoming?.constructionStage,
+      e.synced_construction_stage
+    );
+    const moveIn = firstFilled(e.override_move_in_date, incoming?.moveInDate, e.synced_move_in_date);
+    if (!isPublishReady(stage, moveIn, todayIso)) drifted.push(e.id);
+  }
+  stats.qmisPublishedDrifted = drifted.length;
+  // Capped: this string lands in a sync_log message, and naming 100+ ids would bury the
+  // rest of the run's summary. The count is the signal; the ids are a starting point.
+  stats.driftedPublishedIds = drifted.slice(0, 20);
 
   // Communities: sqft range + bed/bath ranges + price_from (0007), with change
   // detection so an unchanged community emits NO message (no needless queue churn).

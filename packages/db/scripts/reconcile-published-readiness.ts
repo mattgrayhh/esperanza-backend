@@ -96,7 +96,12 @@ const rows = d1Json(
   `SELECT id, synced_address, synced_community_name,
           COALESCE(override_construction_stage, synced_construction_stage) AS effective_stage,
           COALESCE(override_move_in_date, synced_move_in_date) AS effective_move_in,
-          COALESCE(synced_is_model_home, 0) AS is_model_home
+          -- override FIRST, exactly as v_public_qmi/v_preview_qmi do (views.sql:38,130).
+          -- Reading synced_ alone would ignore an admin who flagged a home as a model
+          -- (it would be unpublished despite the hold) or who cleared the flag with
+          -- override = 0 (it would be spared despite not being one). Trailing 0 makes
+          -- "neither set" explicit rather than leaning on Number(null) === 0.
+          COALESCE(override_is_model_home, synced_is_model_home, 0) AS is_model_home
      FROM qmi WHERE published = 1`
 ) as Row[];
 

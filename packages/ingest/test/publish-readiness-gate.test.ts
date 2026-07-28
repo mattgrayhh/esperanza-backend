@@ -18,8 +18,10 @@ import type { SnowflakeQmiRow } from '../src/snowflake.js';
 import {
   PUBLISH_HORIZON_DAYS,
   addDays,
+  deriveAvailabilityText,
   isPublishReady,
   isWithinPublishHorizon,
+  parseIsoCalendarDate,
 } from '../src/availability.js';
 
 const TODAY = '2026-07-28';
@@ -126,6 +128,7 @@ function runDiff(sf: SnowflakeQmiRow[], rows: ExistingQmi[], force = false) {
       .map((m) => (m as { qmiId: string }).qmiId)
       .sort(),
     stats,
+    messages,
   };
 }
 
@@ -160,6 +163,114 @@ describe('publish horizon helpers', () => {
     // 'Buyer Sign Off' is the final in-inventory stage; its estimated date is moot.
     expect(isPublishReady('Buyer Sign Off', '2027-12-01', TODAY)).toBe(true);
     expect(isPublishReady('buyer sign off', null, TODAY)).toBe(true);
+  });
+});
+
+// ── Impossible dates ────────────────────────────────────────────────────────────
+// The horizon comparison is lexicographic, so a shape-only check let a date that does
+// not exist sort INSIDE the horizon and publish: '2026-02-31' <= '2026-11-25' is true
+// as a string. A day that is not on the calendar is a corrupt feed value, and the gate
+// must fail closed on it exactly as it does on a missing one.
+describe('publish gate rejects impossible calendar dates', () => {
+  it('rejects a day past the end of its month', () => {
+    // All inside the 120-day horizon by string order, so ONLY calendar validity can
+    // be what rejects them.
+    expect(isWithinPublishHorizon('2026-02-31', TODAY)).toBe(false);
+    expect(isWithinPublishHorizon('2026-02-30', TODAY)).toBe(false);
+    expect(isWithinPublishHorizon('2026-04-31', TODAY)).toBe(false);
+    expect(isWithinPublishHorizon('2026-06-31', TODAY)).toBe(false);
+    expect(isWithinPublishHorizon('2026-09-31', TODAY)).toBe(false);
+    expect(isWithinPublishHorizon('2026-11-31', TODAY)).toBe(false);
+  });
+
+  it('applies the Gregorian leap rule to Feb 29', () => {
+    // 2028 and 2000 are leap years; 2026 and 1900 are not. Checked against the horizon
+    // that contains each date so validity is the only variable.
+    expect(parseIsoCalendarDate('2028-02-29')).not.toBeNull();
+    expect(parseIsoCalendarDate('2000-02-29')).not.toBeNull();
+    expect(parseIsoCalendarDate('2026-02-29')).toBeNull();
+    expect(parseIsoCalendarDate('1900-02-29')).toBeNull();
+    expect(isWithinPublishHorizon('2026-02-29', TODAY)).toBe(false);
+    expect(isWithinPublishHorizon('2028-02-29', '2028-02-01')).toBe(true);
+  });
+
+  it('rejects out-of-range months and zero days', () => {
+    expect(isWithinPublishHorizon('2026-00-15', TODAY)).toBe(false);
+    expect(isWithinPublishHorizon('2026-13-15', TODAY)).toBe(false);
+    expect(isWithinPublishHorizon('2026-08-00', TODAY)).toBe(false);
+  });
+
+  it('rejects trailing junk and wrong shapes rather than parsing a prefix', () => {
+    expect(isWithinPublishHorizon('2026-08-15T00:00:00Z', TODAY)).toBe(false);
+    expect(isWithinPublishHorizon('2026-08-15 ', TODAY)).toBe(true); // surrounding space is trimmed
+    expect(isWithinPublishHorizon('2026-08-15x', TODAY)).toBe(false);
+    expect(isWithinPublishHorizon('2026-8-15', TODAY)).toBe(false);
+    expect(isWithinPublishHorizon('26-08-15', TODAY)).toBe(false);
+  });
+
+  it('an impossible date does not publish a home through the full diff', () => {
+    // The regression in the shape a visitor would have seen it: a pad whose move-in
+    // date does not exist must not reach the site.
+    const { ids, stats } = runDiff([sfRow(1, 'Build Pad', '2026-02-31')], [existing(1)]);
+    expect(ids).toEqual([]);
+    expect(stats.qmisPublishNotReady).toBe(1);
+  });
+
+  it('still renders month-window text for an impossible date (gate strict, render lenient)', () => {
+    // Deliberate asymmetry: the day is not an input to month-window text, and returning
+    // null would leave availability_text absent, which makes the badge fall back to the
+    // raw ISO string — showing the visitor "2026-09-31" verbatim. See availability.ts.
+    // September has 30 days, so this date does not exist; the WINDOW is still correct.
+    expect(deriveAvailabilityText('2026-09-31', TODAY)).toBe('Available SEP/OCT 2026');
+    // ...and the same value is still refused by the gate.
+    expect(isWithinPublishHorizon('2026-09-31', TODAY)).toBe(false);
+  });
+});
+
+// ── Readiness drift on already-live homes ───────────────────────────────────────
+// The gate governs the moment of publication only. A home published while it was inside
+// the horizon can slip out of it later, and the unpublish leg would never notice because
+// it triggers on ABSENCE from Snowflake. Drift is REPORTED so a human can act; it must
+// never unpublish a live listing on its own.
+describe('readiness drift on published homes', () => {
+  it('flags a live home that has slipped out of the horizon', () => {
+    const { stats } = runDiff(
+      [sfRow(1, 'Build Pad', '2027-06-01')],
+      [existing(1, { published: 1 })]
+    );
+    expect(stats.qmisPublishedDrifted).toBe(1);
+    expect(stats.driftedPublishedIds).toEqual(['rec1']);
+  });
+
+  it('does NOT unpublish a drifted home — reporting only', () => {
+    const { messages } = runDiff(
+      [sfRow(1, 'Build Pad', '2027-06-01')],
+      [existing(1, { published: 1 })]
+    );
+    expect(messages.filter((m) => m.kind === 'qmi.unpublish')).toEqual([]);
+  });
+
+  it('does not flag a live home that is still ready', () => {
+    const ready = runDiff([sfRow(1, 'Buyer Sign Off', null)], [existing(1, { published: 1 })]);
+    expect(ready.stats.qmisPublishedDrifted).toBe(0);
+    const inHorizon = runDiff([sfRow(2, 'Frame Labor 1', '2026-09-10')], [existing(2, { published: 1 })]);
+    expect(inHorizon.stats.qmisPublishedDrifted).toBe(0);
+  });
+
+  it('does not double-report a home already gone from Snowflake', () => {
+    // Absent from the feed → the unpublish leg owns it. Counting it as drift too would
+    // report the same home twice under two different remedies.
+    const { stats } = runDiff([], [existing(1, { published: 1 })]);
+    expect(stats.qmisPublishedDrifted).toBe(0);
+  });
+
+  it("respects an admin's stage override when judging drift", () => {
+    // Feed says pad, admin says finished → live and legitimately so, not drift.
+    const { stats } = runDiff(
+      [sfRow(1, 'Build Pad', '2027-06-01')],
+      [existing(1, { published: 1, override_construction_stage: 'Buyer Sign Off' })]
+    );
+    expect(stats.qmisPublishedDrifted).toBe(0);
   });
 });
 

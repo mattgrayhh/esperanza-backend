@@ -382,6 +382,14 @@ export async function runIngest(
     }
 
     // producer-side telemetry (the consumer writes a separate row per batch).
+    // Already-live homes that have drifted out of readiness. Reported, never
+    // auto-unpublished (see the drift block in diff.ts) — so it must read as something a
+    // human needs to look at, not as something the run handled.
+    const driftNote = stats.qmisPublishedDrifted
+      ? `; ⚠ ${stats.qmisPublishedDrifted} published home(s) no longer pass the readiness gate` +
+        ` (NOT auto-unpublished — review needed): ${stats.driftedPublishedIds.join(', ')}` +
+        `${stats.qmisPublishedDrifted > stats.driftedPublishedIds.length ? ' …' : ''}`
+      : '';
     await writeSyncLog(env, {
       runId: crypto.randomUUID(),
       source: 'snowflake',
@@ -397,8 +405,8 @@ export async function runIngest(
       floorPlansUpdated: stats.floorPlansUpdated,
       unresolvedLinks: stats.unresolvedLinks,
       notes: unpublishGuard.tripped
-        ? `producer enqueued ${messages.length} message(s); published ${stats.qmisPublished} re-available home(s)${stats.qmisPublishHeld ? ` (${stats.qmisPublishHeld} HELD for review — run ?force=1 to release)` : ''}${stats.qmisPublishNotReady ? ` (${stats.qmisPublishNotReady} withheld by readiness gate — unbuilt or beyond the ${PUBLISH_HORIZON_DAYS}-day horizon)` : ''}; wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated${stats.unmatchedModels.length ? `; ⚠ ${stats.unmatchedModels.length} unmatched model(s) need an admin floor_plan: ${stats.unmatchedModels.join(', ')}` : ''}; ${unpublishGuard.reason}`
-        : `producer enqueued ${messages.length} message(s); published ${stats.qmisPublished} re-available home(s)${stats.qmisPublishHeld ? ` (${stats.qmisPublishHeld} HELD for review — run ?force=1 to release)` : ''}${stats.qmisPublishNotReady ? ` (${stats.qmisPublishNotReady} withheld by readiness gate — unbuilt or beyond the ${PUBLISH_HORIZON_DAYS}-day horizon)` : ''}; wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated${stats.unmatchedModels.length ? `; ⚠ ${stats.unmatchedModels.length} unmatched model(s) need an admin floor_plan: ${stats.unmatchedModels.join(', ')}` : ''}`,
+        ? `producer enqueued ${messages.length} message(s); published ${stats.qmisPublished} re-available home(s)${stats.qmisPublishHeld ? ` (${stats.qmisPublishHeld} HELD for review — run ?force=1 to release)` : ''}${stats.qmisPublishNotReady ? ` (${stats.qmisPublishNotReady} withheld by readiness gate — unbuilt or beyond the ${PUBLISH_HORIZON_DAYS}-day horizon)` : ''}; wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated${stats.unmatchedModels.length ? `; ⚠ ${stats.unmatchedModels.length} unmatched model(s) need an admin floor_plan: ${stats.unmatchedModels.join(', ')}` : ''}${driftNote}; ${unpublishGuard.reason}`
+        : `producer enqueued ${messages.length} message(s); published ${stats.qmisPublished} re-available home(s)${stats.qmisPublishHeld ? ` (${stats.qmisPublishHeld} HELD for review — run ?force=1 to release)` : ''}${stats.qmisPublishNotReady ? ` (${stats.qmisPublishNotReady} withheld by readiness gate — unbuilt or beyond the ${PUBLISH_HORIZON_DAYS}-day horizon)` : ''}; wrote ${elevationRows.length} elevation price(s) (${elevationSkipped} unresolved); ${membershipChanged.length} plan membership(s) updated${stats.unmatchedModels.length ? `; ⚠ ${stats.unmatchedModels.length} unmatched model(s) need an admin floor_plan: ${stats.unmatchedModels.join(', ')}` : ''}${driftNote}`,
     });
   } catch (err) {
     await logSyncFailure(env, {

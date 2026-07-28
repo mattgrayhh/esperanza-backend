@@ -153,7 +153,28 @@ availability onto it in both directions; see the publish/unpublish bullets below
   `npx tsx scripts/reconcile-published-readiness.ts --remote` (dry-run; `--apply` writes).
   It holds **model homes** out of the unpublish set and lists them separately — they are
   deliberately marketed early, and nothing records who published a row, so tearing one
-  down automatically is the more expensive mistake.
+  down automatically is the more expensive mistake. Model-home status is read as
+  `COALESCE(override_is_model_home, synced_is_model_home, 0)`, matching the views.
+- **The gate is re-checked at apply time, not just at diff time (2026-07-28 review):** a
+  queue message carries only a qmi id, so it is an *intent* recorded when the diff ran, and
+  Queues may deliver it late or retry it. `applyQmiPublish` therefore re-evaluates
+  `isPublishReady` against the row as it stands **now** (override → D1 synced) and skips
+  with a `[ingest:publish] SKIPPED` warning if the home stopped qualifying. This is
+  deliberately fail-closed: queue ordering is not guaranteed, so if this run's
+  `qmi.upsert` has not landed yet the publish is skipped and the next cycle does it — a
+  one-cycle delay is the right trade against publishing a pad. It also means an admin hold
+  placed *after* the message was queued still wins.
+- **Readiness drift is reported, never auto-corrected (2026-07-28 review):** the gate
+  governs the *moment of publication* only. A home published while it sat inside the
+  horizon can slip out later (the builder pushes the move-in date, or the stage regresses),
+  and the unpublish leg would not notice because it triggers on **absence from Snowflake**,
+  not on readiness. Each run counts those homes and names the first 20 in `sync_log`
+  (`⚠ N published home(s) no longer pass the readiness gate (NOT auto-unpublished —
+  review needed)`). **This is a flag, not an action, by design:** silently pulling live
+  listings unattended is the same class of mistake as silently publishing them. Sales may
+  have reason to keep a slipped home visible, so a human decides. Expect the first run
+  after deploy to report roughly the size of the reconciliation backlog (~106 on
+  2026-07-28), falling to near zero once that script has been run.
 - **Machine publishes are attributed (2026-07-28):** every ingest flip of `published`
   writes an `audit_log` row (`actor = ingest-autopublish`, action `publish`/`unpublish`)
   in addition to `sync_log`. Before this, the ingest wrote only `sync_log` while the
@@ -161,6 +182,17 @@ availability onto it in both directions; see the publish/unpublish bullets below
   actor and editors could not tell who had published them. No-op flips write no row.
   The admin renders the actor as "Snowflake sync (auto-publish)". See
   `packages/ingest/test/machine-publish-audit.test.ts`.
+  **Atomic, not best-effort (2026-07-28 review):** the flip and its `audit_log` row go out
+  as one `DB.batch` — a single D1 transaction — so a home never changes state without a row
+  saying who changed it. If the audit write fails the flip rolls back and the queue message
+  is rejected: it retries independently and lands in the DLQ (visible in `sync_log`) after
+  `max_retries`. That is the deliberate trade — a publish deferred a cycle is recoverable,
+  a silently unattributed live home is the bug this feature exists to end.
+- **The consumer re-checks the producer's preconditions (2026-07-28 review):** stage,
+  move-in date **and** `image_url`, all override-first from current D1 state. The one
+  precondition it cannot re-check is presence in the Snowflake available set (the consumer
+  has no feed) — that case self-heals, because a home published while absent from the feed
+  is `published = 1` on the next run, which is exactly what the unpublish leg triggers on.
 - **Availability text** (e.g. "Available JUN 2026" / "Available Now") is auto-derived from
   the move-in date (`src/availability.ts`) — but only if marketing hasn't written custom
   copy. Hand-authored availability text survives.
