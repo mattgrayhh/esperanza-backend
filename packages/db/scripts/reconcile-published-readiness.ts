@@ -72,7 +72,14 @@ function d1Json(command: string): any[] {
     ],
     { cwd: PKG_DB_DIR, env: process.env, encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 }
   );
-  const parsed = JSON.parse(out);
+  // `--json` is not a promise of a clean stdout: wrangler prepends human banners to it
+  // (the "Cloudflare agent skills are available for…" notice, update nags, deprecation
+  // warnings), and a bare JSON.parse of the whole buffer dies on the first letter of
+  // them. Seen 2026-07-28 on wrangler 4.x, which made this script unrunnable. Slice from
+  // the first structural character instead of trying to enumerate the banners.
+  const start = out.search(/[[{]/);
+  if (start < 0) throw new Error(`wrangler returned no JSON:\n${out.slice(0, 500)}`);
+  const parsed = JSON.parse(out.slice(start));
   return parsed?.[0]?.results ?? [];
 }
 
