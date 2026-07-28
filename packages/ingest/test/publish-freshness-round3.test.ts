@@ -13,7 +13,7 @@
 
 import { describe, it, expect } from 'vitest';
 import Database from 'better-sqlite3';
-import { freshDb, d1, setRunSeq } from './helpers.js';
+import { freshDb, d1, setRunSeq, seedIngestPublish } from './helpers.js';
 import { applyMessage, INGEST_ACTOR, type ConsumerEnv, type D1Like } from '../src/consumer.js';
 import { loadExistingQmis } from '../src/index.js';
 import { diff, type ExistingQmi, type Lookups } from '../src/diff.js';
@@ -21,6 +21,8 @@ import type { SnowflakeQmiRow } from '../src/snowflake.js';
 
 const QMI_ID = 'recR3';
 const KEY = '002PG00000291';
+/** Stand-in for the audit_log.id of the ingest publish flip a retraction is undoing. */
+const AUDIT_ID = 4242;
 const IMAGE = 'https://img.hazardhouse.ai/qmi/2133-sand-lane.jpg';
 
 function seed(over: { published?: number; stage?: string | null; moveIn?: string | null } = {}) {
@@ -207,6 +209,9 @@ describe('the cross-run schedule no freshness rule can close', () => {
       image_url: IMAGE,
       synced_construction_stage: 'Buyer Sign Off',
       synced_move_in_date: null,
+      // A machine-published row always has the publish flip's audit id alongside the
+      // flag — they are read from the same row (see loadExistingQmis).
+      ...(over.machine_published === 1 ? { machine_publish_audit_id: AUDIT_ID } : {}),
       ...over,
     }) as ExistingQmi;
 
@@ -226,11 +231,15 @@ describe('the cross-run schedule no freshness rule can close', () => {
       2
     );
 
-    const un = messages.find((m) => m.kind === 'qmi.unpublish');
+    // Round 4 split this out of qmi.unpublish: the sold/removed path stays unconditional,
+    // the drift retraction carries what it needs to re-verify itself at delivery.
+    const un = messages.find((m) => m.kind === 'qmi.retract');
     expect(un).toBeDefined();
-    expect(un!.kind === 'qmi.unpublish' && un!.qmiId).toBe(QMI_ID);
-    expect(un!.kind === 'qmi.unpublish' && un!.runSeq).toBe(2); // sequenced, like every intent
-    expect(un!.kind === 'qmi.unpublish' && un!.reason).toMatch(/readiness drift/);
+    expect(un!.kind === 'qmi.retract' && un!.qmiId).toBe(QMI_ID);
+    expect(un!.kind === 'qmi.retract' && un!.runSeq).toBe(2); // sequenced, like every intent
+    expect(un!.kind === 'qmi.retract' && un!.publishAuditId).toBe(AUDIT_ID);
+    expect(un!.kind === 'qmi.retract' && un!.expect).toEqual({ stage: 'Build Pad', moveIn: null });
+    expect(messages.find((m) => m.kind === 'qmi.unpublish')).toBeUndefined();
     expect(stats.qmisDriftUnpublished).toBe(1);
     expect(stats.qmisPublishedDrifted).toBe(0); // not merely reported — acted on
   });
@@ -250,7 +259,7 @@ describe('the cross-run schedule no freshness rule can close', () => {
       2
     );
 
-    expect(messages.find((m) => m.kind === 'qmi.unpublish')).toBeUndefined();
+    expect(messages.find((m) => m.kind === 'qmi.retract')).toBeUndefined();
     expect(stats.qmisDriftUnpublished).toBe(0);
     expect(stats.qmisPublishedDrifted).toBe(1);
     expect(stats.driftedPublishedIds).toEqual([QMI_ID]);
@@ -271,7 +280,7 @@ describe('the cross-run schedule no freshness rule can close', () => {
       2
     );
 
-    expect(messages.find((m) => m.kind === 'qmi.unpublish')).toBeUndefined();
+    expect(messages.find((m) => m.kind === 'qmi.retract')).toBeUndefined();
     expect(stats.qmisDriftUnpublished).toBe(0);
     expect(stats.qmisPublishedDrifted).toBe(0);
   });
@@ -279,19 +288,22 @@ describe('the cross-run schedule no freshness rule can close', () => {
   it('the retraction actually lands, and is attributed to ingest', async () => {
     const db = seed({ published: 1, stage: 'Build Pad' });
     setRunSeq(db, 2);
+    // The flip being retracted has to exist for the consumer to compare against it.
+    const publishAuditId = seedIngestPublish(db, QMI_ID);
     const env = { DB: d1(db) } as unknown as ConsumerEnv;
 
     await applyMessage(env, {
-      kind: 'qmi.unpublish',
+      kind: 'qmi.retract',
       snowflakeKey: KEY,
       qmiId: QMI_ID,
       runSeq: 2,
-      reason: 'readiness drift on a home ingest published — no longer inside the horizon',
+      expect: { stage: 'Build Pad', moveIn: null },
+      publishAuditId,
     });
 
     expect(publishedOf(db)).toBe(0);
     const row = db
-      .prepare(`SELECT actor, action, new_value FROM audit_log WHERE entity_id = ?`)
+      .prepare(`SELECT actor, action, new_value FROM audit_log WHERE entity_id = ? AND action = 'unpublish'`)
       .get(QMI_ID) as { actor: string; action: string; new_value: string };
     expect(row).toEqual({ actor: INGEST_ACTOR, action: 'unpublish', new_value: '0' });
     db.close();
@@ -329,6 +341,15 @@ describe('machine_published provenance', () => {
     expect(by.get(QMI_ID)).toBe(1);
     expect(by.get('recHUMAN')).toBe(0);
     expect(by.get('recBACKLOG')).toBe(0);
+
+    // The audit id travels with the flag, from the SAME row, so the consumer can
+    // re-verify ownership against the exact flip the producer judged (round 4).
+    const ids = new Map(rows.map((r) => [r.id, r.machine_publish_audit_id ?? null]));
+    const ingestFlip = db
+      .prepare(`SELECT id FROM audit_log WHERE entity_id = ? AND action = 'publish'`)
+      .get(QMI_ID) as { id: number };
+    expect(Number(ids.get(QMI_ID))).toBe(ingestFlip.id);
+    expect(ids.get('recBACKLOG')).toBeNull(); // nothing to point at → nothing to retract
     db.close();
   });
 });

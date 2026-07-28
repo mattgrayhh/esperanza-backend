@@ -80,17 +80,35 @@ export async function loadExistingQmis(db: D1Like): Promise<ExistingQmi[]> {
               synced_city_id, synced_city_name, synced_community_id,
               synced_floor_plan_id, synced_floor_plan_name,
               synced_price, last_synced_price, mark_job_number, image_url,
-              -- PROVENANCE for the readiness-drift retraction leg (see diff.ts). 1 when
-              -- the most recent published-flip on this row was written by ingest itself.
-              -- Correlated MAX(at) rather than a join, so a human unpublish/republish
-              -- AFTER a machine publish correctly reads as human-owned and is left alone.
-              -- Rows published before attribution existed have no such audit row at all
-              -- and come back 0 — which is exactly why the ~101-home cleanup backlog is
-              -- untouched by that leg and stays a reviewed, human-run script.
+              -- PROVENANCE for the readiness-drift retraction leg (see diff.ts). Both
+              -- columns come from THE SAME ROW: the most recent flip that put this home
+              -- live. Rows published before attribution existed have no such audit row
+              -- and come back NULL/0 — which is exactly why the ~102-home cleanup backlog
+              -- is untouched by that leg and stays a reviewed, human-run script.
+              --
+              -- action = 'publish', not every field = 'published' row: the question is
+              -- "who put this home LIVE", and the newest row overall may be an unpublish.
+              -- It also keeps the consumer's compare-and-set from tripping over the
+              -- retraction's OWN audit insert, which is an 'unpublish' written in the same
+              -- transaction as the flip it guards. togglePublished (admin/lib/actions.ts)
+              -- is the only path that writes published by hand and it always audits, so
+              -- a human republish always leaves a newer publish row here.
+              --
+              -- ORDER BY id, not at: id is AUTOINCREMENT and strictly monotonic, while
+              -- at is a text clock that can tie inside a millisecond. The consumer picks
+              -- the newest publish row by the same rule and the two must agree on which
+              -- row that is — see ExistingQmi.machine_publish_audit_id.
+              (SELECT a.id
+                 FROM audit_log a
+                WHERE a.entity = 'qmi' AND a.entity_id = qmi.id
+                  AND a.field = 'published' AND a.action = 'publish'
+                ORDER BY a.id DESC
+                LIMIT 1) AS machine_publish_audit_id,
               (SELECT CASE WHEN a.actor = ? THEN 1 ELSE 0 END
                  FROM audit_log a
-                WHERE a.entity = 'qmi' AND a.entity_id = qmi.id AND a.field = 'published'
-                ORDER BY a.at DESC, a.rowid DESC
+                WHERE a.entity = 'qmi' AND a.entity_id = qmi.id
+                  AND a.field = 'published' AND a.action = 'publish'
+                ORDER BY a.id DESC
                 LIMIT 1) AS machine_published
        FROM qmi`
     )

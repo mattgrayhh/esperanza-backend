@@ -6,6 +6,8 @@
 // Message shapes the queue carries (one per changed record):
 //   { kind: 'qmi.upsert',  ... }   new spec OR changed existing
 //   { kind: 'qmi.unpublish', ... } sold/removed → force published=0 (NEVER =1)
+//   { kind: 'qmi.retract', ... }   readiness drift on a home INGEST published → =0
+//   { kind: 'qmi.publish', ... }   re-available + imaged + ready → published=1
 //   { kind: 'community.upsert', ... } square_footage_range changed
 //
 // Link resolution (Decision #11): the producer resolves Floor Plan / Community /
@@ -55,17 +57,64 @@ export interface QmiUpsertMessage extends RunStamped {
   ratifiedSalesPrice: number | null;
 }
 
+/**
+ * SOLD/REMOVED: the home has left the Snowflake available set. Forces published = 0.
+ *
+ * Deliberately carries no readiness or provenance conditions, and the consumer applies
+ * it with no predicate beyond `published = 1` + run freshness. Absence from the feed is
+ * not a judgement that can be wrong at delivery time the way a readiness assessment
+ * can: the home is not for sale. A home wrongly taken down here is re-published by the
+ * next run's publish leg, which is the cheap direction. Review round 4 was explicit that
+ * this path should stay unconditional — the drift retraction is what needed guarding,
+ * and it is now a SEPARATE kind (QmiRetractMessage) so hardening one cannot weaken the
+ * other by accident.
+ */
 export interface QmiUnpublishMessage extends RunStamped {
   kind: 'qmi.unpublish';
   snowflakeKey: string;
   qmiId: string;
+}
+
+/**
+ * READINESS-DRIFT RETRACTION: a home that INGEST published has since fallen out of the
+ * readiness horizon, so the pipeline takes back its own publication. Split out of
+ * `qmi.unpublish` in review round 4 — see the drift block in diff() for the policy
+ * (retract what the machine published, report what a human did).
+ *
+ * This is the only leg in the pipeline that can take a LIVE home down on a judgement
+ * rather than on a fact, so every input to that judgement is re-validated at delivery
+ * and compare-and-set inside the mutating statement. Round 4 reproduced both schedules
+ * that a producer-side provenance check cannot cover, because both happen AFTER the
+ * snapshot and INSIDE the same run (so the run sequence is identical and blind to them):
+ *
+ *   * HUMAN_REPUBLISH_RACE — a human unpublishes and republishes the home before this
+ *     intent lands. The row is live again, but a PERSON put it there. Retracting it
+ *     crosses the exact ownership boundary the policy promises never to cross.
+ *   * ADMIN_READY_OVERRIDE_RACE — an admin sets a ready-stage override before this
+ *     intent lands. The home is publish-ready at delivery; taking it down is simply wrong.
+ */
+export interface QmiRetractMessage extends RunStamped {
+  kind: 'qmi.retract';
+  snowflakeKey: string;
+  qmiId: string;
   /**
-   * Why this home is coming down, recorded in audit_log. Absence from the Snowflake
-   * available set is the default and stays unset; the readiness-drift leg sets it, so
-   * an operator reading audit_log can tell "sold/removed" from "the machine retracted
-   * its own publish". Never a free-text field from outside the producer.
+   * The EFFECTIVE stage / move-in date the producer judged UNREADY, normalised exactly
+   * as firstFilled() does. The consumer re-runs isPublishReady on the row as it stands
+   * and compare-and-sets on these values, so a home that has since become ready — or
+   * moved at all — is left alone.
    */
-  reason?: string;
+  expect: { stage: string | null; moveIn: string | null };
+  /**
+   * `audit_log.id` of the ingest publish flip being retracted — the durable identity of
+   * the decision this message is undoing.
+   *
+   * The consumer requires this to STILL be the newest `action = 'publish'` audit row for
+   * the home. `audit_log.id` is INTEGER PRIMARY KEY AUTOINCREMENT, so any republish
+   * inserts a strictly higher id and the predicate stops matching; there is no clock and
+   * no tie to reason about. That is what makes HUMAN_REPUBLISH_RACE detectable at
+   * delivery, which a snapshot-time actor check structurally cannot be.
+   */
+  publishAuditId: number;
 }
 
 /** Re-publish: a home that IS in the current available Snowflake set, is currently
@@ -111,6 +160,7 @@ export interface FloorPlanUpsertMessage {
 export type SyncMessage =
   | QmiUpsertMessage
   | QmiUnpublishMessage
+  | QmiRetractMessage
   | QmiPublishMessage
   | CommunityUpsertMessage
   | FloorPlanUpsertMessage;
@@ -152,8 +202,23 @@ export interface ExistingQmi {
    * Retracting one a HUMAN made is not: sales may be showing a slipped home on purpose,
    * and nothing records that intent. So the drift leg unpublishes only its own work and
    * reports the rest. See the drift block in diff().
+   *
+   * SNAPSHOT-TIME ONLY. This says who owned the publication when the producer read D1,
+   * and review round 4 reproduced a human unpublish+republish landing between that read
+   * and delivery. The retraction therefore re-checks ownership at delivery against
+   * machine_publish_audit_id; this flag only decides whether to emit at all.
    */
   machine_published?: number | null;
+  /**
+   * `audit_log.id` of the publish flip machine_published was derived from — the durable
+   * identity carried to the consumer so ownership can be re-verified inside the write.
+   *
+   * Ordered by `id`, NOT by `at`: id is AUTOINCREMENT and therefore strictly monotonic in
+   * insertion order, while `at` is a text clock that can tie within a millisecond or skew
+   * backwards. The consumer's compare-and-set picks the newest publish row by the same
+   * rule, and the two MUST agree on which row that is — so both order by id.
+   */
+  machine_publish_audit_id?: number | null;
   synced_lot_number: string | null;
   synced_elevation_type: string | null;
   synced_material_type: string | null;
@@ -728,8 +793,19 @@ export function diff(
   // attribution, so no audit_log row names ingest as their publisher and this leg will
   // not touch a single one. That cleanup stays a reviewed, human-run script. Verified
   // rather than assumed — see the machine_published field on ExistingQmi.
+  // PROVENANCE IS RE-CHECKED AT DELIVERY, NOT JUST HERE (review round 4). What follows
+  // decides only whether to EMIT. Between this snapshot and the message landing, a human
+  // can unpublish and republish the home, or an admin can override the stage back into
+  // readiness — both inside the same run, so the run sequence sees nothing. The intent
+  // therefore carries the values judged and the id of the publish flip being retracted,
+  // and the consumer compare-and-sets on both. See QmiRetractMessage.
   const drifted: string[] = [];
-  const driftUnpublish: { id: string; key: string }[] = [];
+  const driftUnpublish: {
+    id: string;
+    key: string;
+    publishAuditId: number;
+    expect: { stage: string | null; moveIn: string | null };
+  }[] = [];
   for (const e of existingQmis) {
     if (e.published !== 1) continue;
     const k = snowflakeKey(e.eci_key);
@@ -744,8 +820,19 @@ export function diff(
     );
     const moveIn = firstFilled(e.override_move_in_date, incoming?.moveInDate, e.synced_move_in_date);
     if (isPublishReady(stage, moveIn, todayIso)) continue;
-    if (Number(e.machine_published) === 1) driftUnpublish.push({ id: e.id, key: k });
-    else drifted.push(e.id);
+    // Retract only with a concrete publish flip to point at. machine_published === 1
+    // implies such a row exists (the flag is derived FROM it), but a missing id would
+    // leave the consumer with nothing to compare-and-set against, so fall through to
+    // report-only rather than emit an intent that cannot prove what it is undoing.
+    const auditId = Number(e.machine_publish_audit_id);
+    if (Number(e.machine_published) === 1 && Number.isFinite(auditId) && auditId > 0) {
+      driftUnpublish.push({
+        id: e.id,
+        key: k,
+        publishAuditId: auditId,
+        expect: { stage, moveIn },
+      });
+    } else drifted.push(e.id);
   }
 
   // Capped for the same reason the publish leg is: a sudden mass of drift is far more
@@ -755,11 +842,12 @@ export function diff(
   const driftRelease = driftUnpublish.slice(0, DRIFT_UNPUBLISH_MAX_PER_RUN);
   for (const d of driftRelease) {
     messages.push({
-      kind: 'qmi.unpublish',
+      kind: 'qmi.retract',
       snowflakeKey: d.key,
       qmiId: d.id,
       runSeq,
-      reason: 'readiness drift on a home ingest published — no longer inside the horizon',
+      expect: d.expect,
+      publishAuditId: d.publishAuditId,
     });
   }
   stats.qmisDriftUnpublished = driftRelease.length;
