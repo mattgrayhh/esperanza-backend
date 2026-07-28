@@ -49,6 +49,64 @@ export function isReadyConstructionStage(stage: string | null | undefined): bool
   return READY_STAGES.has(String(stage ?? '').trim().toLowerCase());
 }
 
+// ── Auto-publish horizon ─────────────────────────────────────────────────────
+// How far out a still-under-construction home may be and still be worth showing
+// as available inventory.
+//
+// Derived from the legacy O'Neill listing rather than assumed. Scrape of
+// www.esperanzahomes.com/new-homes/available/ on 2026-07-28 (121 homes):
+//   Available Now 44 · JUL/AUG 20 · AUG/SEP 23 · SEP/OCT 15 · OCT/NOV 13 ·
+//   NOV/DEC 4 · MAY/JUN + JUN/JUL 2 · nothing in 2027 at all.
+// The envelope stops dead at NOV/DEC 2026 — ~120 days out from that date. So 120
+// days reproduces the business rule the sales side has been running for years.
+//
+// Without this gate the auto-publish leg (diff.ts) published on presence-in-Snowflake
+// + has-an-image alone, which put graded pads and "Preliminary Plan Review" rows on
+// the site with move-in dates as far out as 2027-02-26 (2026-07-28 incident: published
+// QMIs went 112 → 262).
+export const PUBLISH_HORIZON_DAYS = 120;
+
+/** todayIso + days, as a YYYY-MM-DD string. UTC calendar space, same as D1 dates. */
+export function addDays(todayIso: string, days: number): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(todayIso.trim());
+  if (!m) return todayIso;
+  const t = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) + days * 86_400_000;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+/**
+ * True when an effective move-in date is inside the publish horizon. A missing or
+ * unparseable date is NOT within the horizon — we refuse to publish a home whose
+ * timing we cannot establish, since the availability badge would have nothing to say.
+ */
+export function isWithinPublishHorizon(
+  isoDate: string | null | undefined,
+  todayIso: string = todayIsoDate(),
+  horizonDays: number = PUBLISH_HORIZON_DAYS
+): boolean {
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec((isoDate ?? '').trim());
+  const day = m?.[1];
+  if (!day) return false;
+  return day <= addDays(todayIso, horizonDays);
+}
+
+/**
+ * The auto-publish readiness gate: a home may be published unattended only when it
+ * is finished, or is due inside the horizon.
+ *
+ * `effectiveMoveInDate` must be override_move_in_date ?? synced/Snowflake move-in date —
+ * the same COALESCE the public views apply, so the gate judges what a visitor would see.
+ */
+export function isPublishReady(
+  constructionStage: string | null | undefined,
+  effectiveMoveInDate: string | null | undefined,
+  todayIso: string = todayIsoDate(),
+  horizonDays: number = PUBLISH_HORIZON_DAYS
+): boolean {
+  if (isReadyConstructionStage(constructionStage)) return true;
+  return isWithinPublishHorizon(effectiveMoveInDate, todayIso, horizonDays);
+}
+
 export function deriveAvailabilityText(
   isoDate: string | null | undefined,
   todayIso: string = todayIsoDate(),

@@ -15,6 +15,11 @@ import { describe, it, expect } from 'vitest';
 import { diff, type ExistingQmi, type Lookups } from '../src/diff.js';
 import type { SnowflakeQmiRow } from '../src/snowflake.js';
 
+// Pinned "today" — the publish leg now applies a readiness horizon, so these fixtures
+// must sit inside it deliberately rather than by accident of the wall clock.
+const TODAY = '2026-07-28';
+const SOON = '2026-08-15'; // ~18 days out: comfortably inside the 120-day horizon
+
 function emptyLookups(): Lookups {
   return {
     cityByName: new Map(),
@@ -52,7 +57,7 @@ function sfRow(i: number): SnowflakeQmiRow {
     isModelHome: 0,
     startType: null,
     constructionStageIndex: null,
-    moveInDate: null,
+    moveInDate: SOON,
     estimatedSettlementDate: null,
     lotNumber: null,
   };
@@ -76,7 +81,7 @@ function existing(i: number, opts: { published: number; image?: string | null })
     synced_total_square_footage: 1573,
     synced_elevation: '',
     synced_construction_stage: 'Spec Home Inventory',
-    synced_move_in_date: null,
+    synced_move_in_date: SOON,
     synced_lot_number: null,
     synced_elevation_type: null,
     synced_material_type: null,
@@ -103,7 +108,7 @@ describe('ingest publish direction', () => {
     // rec1 is in the available set, hidden, and imaged → publish. rec2 is already live.
     const snowflake = [sfRow(1), sfRow(2)];
     const existingRows = [existing(1, { published: 0 }), existing(2, { published: 1 })];
-    const { messages, stats } = diff(snowflake, [], existingRows, emptyLookups());
+    const { messages, stats } = diff(snowflake, [], existingRows, emptyLookups(), [], [], [], new Map(), false, TODAY);
     expect(publishIds(messages)).toEqual(['rec1']);
     expect(stats.qmisPublished).toBe(1);
   });
@@ -111,7 +116,7 @@ describe('ingest publish direction', () => {
   it('does NOT publish an imageless home (avoids un-curated draft cards)', () => {
     const snowflake = [sfRow(1)];
     const existingRows = [existing(1, { published: 0, image: null })];
-    const { messages, stats } = diff(snowflake, [], existingRows, emptyLookups());
+    const { messages, stats } = diff(snowflake, [], existingRows, emptyLookups(), [], [], [], new Map(), false, TODAY);
     expect(publishIds(messages)).toEqual([]);
     expect(stats.qmisPublished).toBe(0);
   });
@@ -121,7 +126,7 @@ describe('ingest publish direction', () => {
     // upstream) → must stay hidden. Our site is correct; O'Neill would be the stale one.
     const snowflake = [sfRow(1)];
     const existingRows = [existing(1, { published: 1 }), existing(9, { published: 0 })];
-    const { messages, stats } = diff(snowflake, [], existingRows, emptyLookups());
+    const { messages, stats } = diff(snowflake, [], existingRows, emptyLookups(), [], [], [], new Map(), false, TODAY);
     expect(publishIds(messages)).toEqual([]);
     expect(stats.qmisPublished).toBe(0);
   });
@@ -130,7 +135,7 @@ describe('ingest publish direction', () => {
     // 20 hidden+imaged available homes → publish the first 15, hold 5 for review.
     const existingRows = Array.from({ length: 20 }, (_, k) => existing(k + 1, { published: 0 }));
     const snowflake = Array.from({ length: 20 }, (_, k) => sfRow(k + 1));
-    const { messages, stats } = diff(snowflake, [], existingRows, emptyLookups());
+    const { messages, stats } = diff(snowflake, [], existingRows, emptyLookups(), [], [], [], new Map(), false, TODAY);
     expect(stats.qmisPublished).toBe(15);
     expect(stats.qmisPublishHeld).toBe(5);
     expect(messages.filter((m) => m.kind === 'qmi.publish')).toHaveLength(15);
@@ -139,7 +144,7 @@ describe('ingest publish direction', () => {
   it('operator force releases the whole batch past the cap', () => {
     const existingRows = Array.from({ length: 20 }, (_, k) => existing(k + 1, { published: 0 }));
     const snowflake = Array.from({ length: 20 }, (_, k) => sfRow(k + 1));
-    const { stats } = diff(snowflake, [], existingRows, emptyLookups(), [], [], [], new Map(), true);
+    const { stats } = diff(snowflake, [], existingRows, emptyLookups(), [], [], [], new Map(), true, TODAY);
     expect(stats.qmisPublished).toBe(20);
     expect(stats.qmisPublishHeld).toBe(0);
   });
@@ -149,7 +154,7 @@ describe('ingest publish direction', () => {
     // result (the 2026-06-11 incident shape). Publishing is suppressed just like unpublish.
     const existingRows = Array.from({ length: 10 }, (_, k) => existing(k + 1, { published: 0 }));
     const snowflake = [sfRow(1), sfRow(2), sfRow(3)];
-    const { messages, stats } = diff(snowflake, [], existingRows, emptyLookups());
+    const { messages, stats } = diff(snowflake, [], existingRows, emptyLookups(), [], [], [], new Map(), false, TODAY);
     expect(publishIds(messages)).toEqual([]);
     expect(stats.qmisPublished).toBe(0);
   });

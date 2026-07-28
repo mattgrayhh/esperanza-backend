@@ -354,17 +354,67 @@ async function applyQmiUpsert(env: ConsumerEnv, msg: QmiUpsertMessage): Promise<
   return result;
 }
 
+// ── Attribution for machine publish/unpublish ────────────────────────────────
+// The ingest writes sync_log; the admin's own edit history reads audit_log. Until
+// 2026-07-28 a sync-driven publish therefore left NO actor and NO row anywhere the
+// admin surfaces, so ~150 auto-published homes looked like anonymous edits and the
+// marketing team could not tell who had put them live ("shows published, but this was
+// not published by me"). Every machine flip of `published` now records itself with a
+// machine actor, so the admin can answer "why is this home live?".
+//
+// Best-effort: an audit write must never fail the sync itself — the publish has
+// already been applied by the time we get here.
+export const INGEST_ACTOR = 'ingest-autopublish';
+
+async function auditPublishFlip(
+  env: ConsumerEnv,
+  qmiId: string,
+  action: 'publish' | 'unpublish',
+  reason: string
+): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `INSERT INTO audit_log (entity, entity_id, field, action, old_value, new_value, actor)
+       VALUES ('qmi', ?, 'published', ?, ?, ?, ?)`
+    )
+      .bind(
+        qmiId,
+        action,
+        action === 'publish' ? '0' : '1',
+        action === 'publish' ? '1' : '0',
+        INGEST_ACTOR
+      )
+      .run();
+  } catch (err) {
+    console.error(
+      `[ingest:audit] ${action} ${qmiId} (${reason}) failed:`,
+      err instanceof Error ? err.message : err
+    );
+  }
+}
+
 async function applyQmiUnpublish(env: ConsumerEnv, msg: QmiUnpublishMessage): Promise<ApplyResult> {
   const result = emptyResult();
   // SOLD/REMOVED: force published = 0 ONLY. The query guards published=1 so an
   // already-unpublished row is a no-op, and there is NO branch that sets =1.
-  await env.DB.prepare(
+  const res = await env.DB.prepare(
     `UPDATE qmi SET published = 0, updated_at = ? WHERE id = ? AND published = 1`
   )
     .bind(nowIso(), msg.qmiId)
     .run();
   result.unpublished = 1;
+  // Only audit a real flip — the guarded UPDATE is a no-op when already unpublished,
+  // and an audit row for a no-op would be a lie in the edit history.
+  if (changedRows(res) > 0) {
+    await auditPublishFlip(env, msg.qmiId, 'unpublish', 'no longer in the Snowflake available set');
+  }
   return result;
+}
+
+/** D1 reports writes under meta.changes; better-sqlite3 (tests) under changes. */
+function changedRows(res: unknown): number {
+  const r = res as { meta?: { changes?: number }; changes?: number } | null;
+  return r?.meta?.changes ?? r?.changes ?? 0;
 }
 
 async function applyQmiPublish(env: ConsumerEnv, msg: QmiPublishMessage): Promise<ApplyResult> {
@@ -374,12 +424,17 @@ async function applyQmiPublish(env: ConsumerEnv, msg: QmiPublishMessage): Promis
   // The diff only emits this for homes in the current available Snowflake set that carry
   // an image — the sale-gate + image precondition are enforced upstream. Mirror of
   // applyQmiUnpublish in the opposite direction (the direction ingest previously lacked).
-  await env.DB.prepare(
+  // The diff also enforces the readiness gate (isPublishReady) before emitting this, so a
+  // home that is still a pad never reaches here.
+  const res = await env.DB.prepare(
     `UPDATE qmi SET published = 1, updated_at = ? WHERE id = ? AND published = 0`
   )
     .bind(nowIso(), msg.qmiId)
     .run();
   result.published = 1;
+  if (changedRows(res) > 0) {
+    await auditPublishFlip(env, msg.qmiId, 'publish', 'available in Snowflake, imaged, inside the readiness horizon');
+  }
   return result;
 }
 

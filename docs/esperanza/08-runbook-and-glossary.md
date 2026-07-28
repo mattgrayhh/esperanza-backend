@@ -172,6 +172,19 @@ now both show a red "sync is behind" banner past 12 h (three missed cron slots),
 monitor at `/health/sync`, not `/health`** — `/health` is a hard-coded `{ ok: true }` and
 was green throughout the outage.
 
+### "A home shows published in the admin but nobody on the team published it"
+The **ingest can publish**, not just unpublish. Check Activity — machine flips now record
+an `audit_log` row with actor **"Snowflake sync (auto-publish)"**. If the home is unbuilt
+or its move-in date is far out, that is the bug the readiness gate closes; check
+`sync_log` for a "withheld by readiness gate" count, and see
+[doc 02](./02-module-ingest.md).
+
+Homes published before the gate existed (2026-07-26 → 07-28) can be cleaned up with:
+```bash
+cd packages/db && npx tsx scripts/reconcile-published-readiness.ts --remote   # dry-run
+```
+Read the printed list, then re-run with `--apply`.
+
 ### "My remote migration failed but local passed"
 You likely hit the **D1 100-column limit** (or another remote-only limit) that local SQLite
 doesn't enforce. Split the table / move columns into a view. Always `--local` first. See

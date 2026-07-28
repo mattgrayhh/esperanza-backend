@@ -129,6 +129,29 @@ availability onto it in both directions; see the publish/unpublish bullets below
   the parity WARN for a human). Publishing is **suppressed on a truncated run** (same
   `< 50%` Snowflake-shrink signal as the unpublish guard), so a partial result can never
   mass-flip visibility. See `packages/ingest/test/republish.test.ts`.
+- **Readiness gate on auto-publish (★, 2026-07-28):** presence in Snowflake plus an image
+  is **not** enough. Snowflake lists a home from the moment it is a graded pad, so those
+  two conditions alone published `Build Pad` and `Preliminary Plan Review` rows with
+  move-in dates out to 2027-02-26 — published QMIs went 112 → 262 and marketing reported
+  homes going live that nobody published. A home is auto-publishable only when it is
+  **finished** (`isReadyConstructionStage`, i.e. `Buyer Sign Off`) **or due within
+  `PUBLISH_HORIZON_DAYS` (120)**. The horizon is not arbitrary: a scrape of the legacy
+  O'Neill listing on 2026-07-28 showed 121 homes whose availability envelope stopped dead
+  at NOV/DEC 2026, ~120 days out. The gate judges the **incoming** Snowflake stage/date
+  with `override_move_in_date` winning — the same COALESCE `v_public_qmi` applies, so it
+  decides on what a visitor would actually see. A missing date is never publishable.
+  `?force=1` releases the staging **cap**, NOT the readiness gate. Rejections are counted
+  separately in `sync_log` as "withheld by readiness gate" so they are never mistaken for
+  a reviewable backlog. See `packages/ingest/test/publish-readiness-gate.test.ts`.
+  To retro-apply the rule to already-published homes:
+  `npx tsx scripts/reconcile-published-readiness.ts --remote` (dry-run; `--apply` writes).
+- **Machine publishes are attributed (2026-07-28):** every ingest flip of `published`
+  writes an `audit_log` row (`actor = ingest-autopublish`, action `publish`/`unpublish`)
+  in addition to `sync_log`. Before this, the ingest wrote only `sync_log` while the
+  admin's edit history reads `audit_log`, so ~150 auto-published homes appeared with no
+  actor and editors could not tell who had published them. No-op flips write no row.
+  The admin renders the actor as "Snowflake sync (auto-publish)". See
+  `packages/ingest/test/machine-publish-audit.test.ts`.
 - **Availability text** (e.g. "Available JUN 2026" / "Available Now") is auto-derived from
   the move-in date (`src/availability.ts`) — but only if marketing hasn't written custom
   copy. Hand-authored availability text survives.

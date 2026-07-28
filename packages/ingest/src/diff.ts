@@ -22,6 +22,7 @@ import type {
   SnowflakeFloorPlanRow,
 } from './snowflake.js';
 import { squareFootageRange, countRange } from './snowflake.js';
+import { isPublishReady, todayIsoDate } from './availability.js';
 import type { SyncedQmiValues, SyncedCommunityValues, SyncedFloorPlanValues } from './synced.js';
 import { snowflakeKey } from './synced.js';
 
@@ -102,6 +103,9 @@ export interface ExistingQmi {
   synced_elevation: string | null;
   synced_construction_stage: string | null;
   synced_move_in_date: string | null;
+  /** Admin override of the move-in date. The publish gate judges the EFFECTIVE date
+   *  (override ?? synced), matching what v_public_qmi shows a visitor. */
+  override_move_in_date?: string | null;
   synced_lot_number: string | null;
   synced_elevation_type: string | null;
   synced_material_type: string | null;
@@ -159,6 +163,9 @@ export interface DiffResult {
     qmisUnpublished: number;
     qmisPublished: number;
     qmisPublishHeld: number;
+    /** Candidates rejected by the readiness gate (unbuilt or beyond the horizon). Not a
+     *  backlog — these should NOT be released by ?force=1 either. */
+    qmisPublishNotReady: number;
     qmisInSnowflake: number;
     communitiesUpdated: number;
     floorPlansUpdated: number;
@@ -422,7 +429,9 @@ export function diff(
   existingFloorPlans: ExistingFloorPlan[] = [],
   communityPriceFrom: Map<string, number> = new Map(),
   /** Operator force: bypass the over-published fraction heuristic (see evaluateUnpublishGuard). */
-  forceUnpublish = false
+  forceUnpublish = false,
+  /** Injectable "today" (YYYY-MM-DD) for the publish readiness horizon. Tests pin it. */
+  todayIso: string = todayIsoDate()
 ): DiffResult {
   const messages: SyncMessage[] = [];
   const stats = {
@@ -431,6 +440,8 @@ export function diff(
     qmisUnpublished: 0,
     qmisPublished: 0,
     qmisPublishHeld: 0,
+    /** Withheld by the readiness gate (unbuilt / too far out) — NOT a backlog. */
+    qmisPublishNotReady: 0,
     qmisInSnowflake: snowflakeQmis.length,
     communitiesUpdated: 0,
     floorPlansUpdated: 0,
@@ -453,10 +464,16 @@ export function diff(
   }
 
   const snowflakeEcis = new Set<string>();
+  // Keyed Snowflake rows, so the publish gate can judge the INCOMING stage/move-in
+  // date rather than the possibly-stale D1 copy it is about to overwrite.
+  const snowflakeByEci = new Map<string, SnowflakeQmiRow>();
 
   for (const row of snowflakeQmis) {
     const key = snowflakeKey(row.eciKey);
-    if (key) snowflakeEcis.add(key);
+    if (key) {
+      snowflakeEcis.add(key);
+      snowflakeByEci.set(key, row);
+    }
 
     const { values, unresolved } = buildQmiSyncedValues(row, lookups);
     stats.unresolvedLinks += unresolved;
@@ -537,13 +554,32 @@ export function diff(
   // mass-publish; we still refuse to act on a shrunk run, matching the unpublish guard's
   // truncation signal. No batch cap — a large legit backlog SHOULD publish (that is the
   // fix), and a human still reviews via the parity WARN for any left un-imaged.
+  //
+  // READINESS GATE (2026-07-28). Presence-in-Snowflake + has-an-image is NOT sufficient:
+  // Snowflake lists a home from the moment it is a graded pad, so those two conditions
+  // alone published "Build Pad" and "Preliminary Plan Review" rows with move-in dates out
+  // to 2027-02-26 (published QMIs went 112 → 262, reported by the marketing team as homes
+  // going live that nobody published). A home is only auto-publishable when it is
+  // finished, or due inside PUBLISH_HORIZON_DAYS. See availability.ts for how the horizon
+  // was derived from the legacy listing. A human can still publish anything by hand —
+  // this gate governs the UNATTENDED path only.
   const publishCandidates: QmiPublishMessage[] = [];
   for (const e of existingQmis) {
     const k = snowflakeKey(e.eci_key);
     if (!k) continue;
-    if (snowflakeEcis.has(k) && e.published === 0 && (e.image_url ?? '').trim() !== '') {
-      publishCandidates.push({ kind: 'qmi.publish', snowflakeKey: k, qmiId: e.id });
+    if (!(snowflakeEcis.has(k) && e.published === 0 && (e.image_url ?? '').trim() !== '')) {
+      continue;
     }
+    // Judge the incoming Snowflake values (this run may be updating them), with the
+    // admin's date override winning — the same COALESCE v_public_qmi applies.
+    const incoming = snowflakeByEci.get(k);
+    const stage = incoming?.constructionStage ?? e.synced_construction_stage;
+    const moveIn = e.override_move_in_date ?? incoming?.moveInDate ?? e.synced_move_in_date;
+    if (!isPublishReady(stage, moveIn, todayIso)) {
+      stats.qmisPublishNotReady++;
+      continue;
+    }
+    publishCandidates.push({ kind: 'qmi.publish', snowflakeKey: k, qmiId: e.id });
   }
   const snowflakeShrunk =
     eciKeyedCount > 0 && snowflakeQmis.length < UNPUBLISH_GUARD_MIN_SNOWFLAKE_RATIO * eciKeyedCount;
