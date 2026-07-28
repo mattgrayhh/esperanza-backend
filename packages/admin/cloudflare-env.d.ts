@@ -36,6 +36,7 @@ declare global {
     API_PUBLIC_URL?: string;
     /** Public origin of esperanza-frontend (proxy cache purge target). */
     FRONTEND_PUBLIC_URL?: string;
+    FRONTEND_STAGING_PUBLIC_URL?: string;
     MAILLAYER_API_URL?: string;
 
     // --- secrets (wrangler secret put) ---

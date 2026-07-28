@@ -90,11 +90,12 @@ of commands. Part 3 is the glossary of every name and identifier in the system.
    the live page. That's an operator config issue.
 6. Is the page driven by a **live fetch island** (maps, settings, QMI card grid reconcile)
    rather than baked HTML? Those read `/api/public/<entity>` through the frontend worker
-   proxy, which caches ~60s independently — admin purges both layers when
-   `FRONTEND_PUBLIC_URL` is set. Promotions edits also purge `communities`/`cities`/`qmi`
-   because the resolved promo is flattened onto those. If a fetch-driven surface still lags,
-   the purge is best-effort and the TTL (≤5 min) is the backstop — wait it out or hit
-   `GET {API_PUBLIC_URL}/api/public/<entity>?purge=1` with `X-Purge-Key`.
+   proxy, which caches ~60s independently — admin purges both `esperanzahomes.hazardhouse.ai`
+   and (when set) `FRONTEND_STAGING_PUBLIC_URL` (`esperanzahomes-staging.*.workers.dev`).
+   Promotions edits also purge `communities`/`cities`/`qmi` because the resolved promo is
+   flattened onto those. **Deleted promotions:** live islands drop the promo once purge +
+   API reflect D1; **baked** incentive index/detail HTML needs a frontend redeploy (admin
+   triggers `staging` + `main` when `GITHUB_DISPATCH_TOKEN` is set).
 
 ### "4.99% promo banners show gold/tan instead of green on the live site"
 1. **Confirm the API first:** `GET /api/public/qmi` must return `promo_banner_style: "green"`

@@ -115,6 +115,8 @@ API_PUBLIC_URL = "https://esperanza-api.round-base-ed8c.workers.dev"
 # Static frontend worker — postWrite() also purges this origin's /api/public/* proxy
 # cache (separate from esperanza-api's own edge cache).
 FRONTEND_PUBLIC_URL = "https://esperanzahomes.hazardhouse.ai"
+# Staging frontend worker — purge its /api/public/* proxy cache on admin writes too.
+FRONTEND_STAGING_PUBLIC_URL = "https://esperanzahomes-staging.round-base-ed8c.workers.dev"
 # Publish → rebuild: postWrite() triggers a frontend redeploy so baked HTML (copy,
 # galleries, list grids, community/floor-plan pages) reflects the edit — live islands
 # already update via the cache purge above. The frontend deploys via GitHub Actions

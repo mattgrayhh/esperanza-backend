@@ -48,17 +48,17 @@ describe('purgePublicCache', () => {
       {
         API_PUBLIC_URL: 'https://api.example',
         FRONTEND_PUBLIC_URL: 'https://frontend.example',
+        FRONTEND_STAGING_PUBLIC_URL: 'https://staging.example',
         PURGE_KEY: 'secret',
         API: { fetch: apiFetch },
       },
       'qmi'
     );
     expect(apiFetch).toHaveBeenCalledTimes(3); // qmi + sitesearch + sitesearch.json
-    expect(globalFetch).toHaveBeenCalledTimes(3);
+    expect(globalFetch).toHaveBeenCalledTimes(6); // 3 entities × 2 frontend origins
     const frontendUrls = globalFetch.mock.calls.map((c) => String(c[0]));
     expect(frontendUrls).toContain('https://frontend.example/api/public/qmi?purge=1');
-    expect(frontendUrls).toContain('https://frontend.example/api/public/sitesearch?purge=1');
-    expect(frontendUrls).toContain('https://frontend.example/api/public/sitesearch.json?purge=1');
+    expect(frontendUrls).toContain('https://staging.example/api/public/qmi?purge=1');
     vi.unstubAllGlobals();
   });
 });

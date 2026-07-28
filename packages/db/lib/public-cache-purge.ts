@@ -33,6 +33,8 @@ export interface PublicCachePurgeEnv {
   PURGE_KEY?: string;
   /** Public origin of the esperanza-frontend worker (also caches /api/public/*). */
   FRONTEND_PUBLIC_URL?: string;
+  /** Staging frontend worker origin — same proxy cache as FRONTEND_PUBLIC_URL (optional). */
+  FRONTEND_STAGING_PUBLIC_URL?: string;
   /** Cloudflare service binding to esperanza-api (preferred over the public URL). */
   API?: { fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> };
 }
@@ -55,7 +57,10 @@ export async function purgePublicCacheEntities(
   }
 
   const headers = { 'X-Purge-Key': env.PURGE_KEY };
-  const frontendBase = (env.FRONTEND_PUBLIC_URL ?? '').replace(/\/+$/, '');
+  const frontendOrigins = [
+    (env.FRONTEND_PUBLIC_URL ?? '').replace(/\/+$/, ''),
+    (env.FRONTEND_STAGING_PUBLIC_URL ?? '').replace(/\/+$/, ''),
+  ].filter((o, i, arr) => o && arr.indexOf(o) === i);
 
   async function purgeOne(label: string, fetcher: () => Promise<Response>): Promise<void> {
     try {
@@ -82,10 +87,10 @@ export async function purgePublicCacheEntities(
               : fetch(`${base}${path}`, { method: 'GET', headers }),
         },
       ];
-      if (frontendBase) {
+      for (const origin of frontendOrigins) {
         targets.push({
-          label: `${entity} (frontend proxy)`,
-          fetcher: () => fetch(`${frontendBase}${path}`, { method: 'GET', headers }),
+          label: `${entity} (frontend proxy ${origin})`,
+          fetcher: () => fetch(`${origin}${path}`, { method: 'GET', headers }),
         });
       }
       return targets.map(({ label, fetcher }) => purgeOne(label, fetcher));
