@@ -109,6 +109,14 @@ export function toDrizzlePatch(
   return out;
 }
 
+/** Read a value from a Drizzle row by physical column name (snake_case or camelCase). */
+export function readRowColumn(row: Record<string, unknown>, physicalColumn: string): unknown {
+  const direct = row[physicalColumn];
+  if (direct !== undefined) return direct;
+  const camel = physicalColumn.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
+  return row[camel];
+}
+
 function dataTypeOf(col: Column): ColumnInfo['dataType'] {
   // Drizzle columns expose `.dataType` ('string' | 'number' | 'boolean' | 'json' | ...)
   // and SQLite-specific `.columnType`. Booleans are integer({mode:'boolean'}).

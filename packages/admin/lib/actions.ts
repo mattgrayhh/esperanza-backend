@@ -51,7 +51,7 @@ import type { PromoTargetType } from '@esperanza/db/promo';
 import { getDb, idColumn, type Db } from './db';
 import { getCurrentUser, isAdmin } from './auth';
 import { getEntity, isOverrideField, asOverridableEntity, type EntityKey } from './entities';
-import { columnMapForEntity, coerceForColumn, toDrizzlePatch } from './fields';
+import { columnMapForEntity, coerceForColumn, toDrizzlePatch, readRowColumn } from './fields';
 import { publishGateColumn } from './field-config';
 import { statusGate, statusPatch, deriveStatus } from './status';
 import { resolveCustomFieldDefs, type CustomFieldDef } from './field-config-source';
@@ -333,7 +333,7 @@ export async function saveEntity(
     if (overridableEntity && isOverrideField(def.key, field)) {
       const ofield = field;
       const value = rawValue === '' ? null : coerceForColumn(def.key, ofield, rawValue);
-      const prevOverride = row[`override_${ofield}`];
+      const prevOverride = readRowColumn(row, `override_${ofield}`);
       const writePatch = buildOverrideWrite(ofield, value, { actor, at });
       Object.assign(patch, writePatch);
       const auditRow = buildOverrideAudit(id, ofield, prevOverride, value, { actor, at }, overridableEntity);
@@ -365,7 +365,7 @@ export async function saveEntity(
         ? sanitizeRichHtml(rawValue)
         : rawValue;
     const coerced = cleanValue === '' ? null : coerceForColumn(def.key, field, cleanValue);
-    const oldValue = row[col.column];
+    const oldValue = readRowColumn(row, col.column);
     // Skip no-op writes so we don't spam audit_log.
     if (toStr(oldValue) === toStr(coerced)) continue;
     patch[col.column] = coerced;
@@ -1072,7 +1072,7 @@ export async function uploadImage(
     .where(eq(idColumn(def.table), id))
     .limit(1)) as Array<Record<string, unknown>>;
   if (current.length === 0) return { ok: false, error: `${def.label} ${id} not found` };
-  const oldValue = current[0]![col.column];
+  const oldValue = readRowColumn(current[0]! as Record<string, unknown>, col.column);
 
   await db
     .update(def.table)

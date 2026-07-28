@@ -84,10 +84,16 @@ export function ImageUploader({
   const [err, setErr] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const hiddenRef = useRef<HTMLInputElement>(null);
 
   function setStoredUrl(next: string) {
     setUrl(next);
     onUrlChange?.(next);
+  }
+
+  function syncHiddenInput(next: string) {
+    setStoredUrl(next);
+    setErr(null);
   }
 
   function onPick(file: File | undefined) {
@@ -173,7 +179,7 @@ export function ImageUploader({
     <div className="grid gap-1.5 text-sm">
       <FieldLabel label={label} help={help} />
 
-      <input type="hidden" name={field} value={isAirtable ? '' : url} />
+      <input ref={hiddenRef} type="hidden" name={field} value={isAirtable ? '' : url} />
 
       <div
         onDragOver={(e) => {
@@ -231,8 +237,8 @@ export function ImageUploader({
                 aria-label={`Remove ${title}`}
                 disabled={pending}
                 onClick={() => {
-                  setStoredUrl('');
-                  setErr(null);
+                  syncHiddenInput('');
+                  hiddenRef.current?.dispatchEvent(new Event('input', { bubbles: true }));
                 }}
               >
                 <XIcon />
