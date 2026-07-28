@@ -21,6 +21,7 @@ import { freshDb, d1, setRunSeq, seedIngestPublish, seedPublishAudit } from './h
 import { applyMessage, INGEST_ACTOR, type ConsumerEnv } from '../src/consumer.js';
 import { diff, type ExistingQmi, type Lookups } from '../src/diff.js';
 import type { SnowflakeQmiRow } from '../src/snowflake.js';
+import { addDays, todayIsoDate } from '../src/availability.js';
 
 const QMI_ID = 'recR4';
 const KEY = '002PG00000292';
@@ -29,13 +30,23 @@ const HUMAN = 'matt@hazard.house';
 const RUN = 7;
 
 /** A live home whose stage has regressed out of the horizon — the drift shape. */
-function seedDrifted(over: { stage?: string | null; override?: string | null } = {}) {
+function seedDrifted(
+  over: { stage?: string | null; override?: string | null; moveIn?: string | null } = {}
+) {
   const db = freshDb();
   db.prepare(
     `INSERT INTO qmi (id, eci_key, housenumber, synced_address, published,
-                      synced_construction_stage, override_construction_stage, image_url)
-     VALUES (?, ?, '2133', '2133 Sand Lane', 1, ?, ?, ?)`
-  ).run(QMI_ID, KEY, over.stage === undefined ? 'Build Pad' : over.stage, over.override ?? null, IMAGE);
+                      synced_construction_stage, override_construction_stage,
+                      synced_move_in_date, image_url)
+     VALUES (?, ?, '2133', '2133 Sand Lane', 1, ?, ?, ?, ?)`
+  ).run(
+    QMI_ID,
+    KEY,
+    over.stage === undefined ? 'Build Pad' : over.stage,
+    over.override ?? null,
+    over.moveIn ?? null,
+    IMAGE
+  );
   setRunSeq(db, RUN);
   return db;
 }
@@ -51,7 +62,10 @@ const unpublishAudits = (db: Database.Database) =>
   ).n;
 
 /** The retraction the producer would have emitted for this home. */
-const retract = (publishAuditId: number, expect_ = { stage: 'Build Pad', moveIn: null }) =>
+const retract = (
+  publishAuditId: number,
+  expect_: { stage: string | null; moveIn: string | null } = { stage: 'Build Pad', moveIn: null }
+) =>
   ({
     kind: 'qmi.retract' as const,
     snowflakeKey: KEY,
@@ -126,6 +140,27 @@ describe('ADMIN_READY_OVERRIDE_RACE — an admin makes the home ready before del
     db.close();
   });
 
+  it('refuses when the CLOCK alone made the home ready, with the values unchanged', async () => {
+    // The one case the compare-and-set structurally cannot see. isPublishReady is
+    // `moveIn <= today + 120 days`, so a home beyond the horizon drifts INTO readiness as
+    // time passes — no column changes, so every value predicate still matches. The
+    // producer judged this unready when the date was further out than the horizon; by
+    // delivery it is inside it. Only re-running the readiness rule at delivery refuses it,
+    // which is why that check is not merely a nicer log line.
+    const moveIn = addDays(todayIsoDate(), 60); // comfortably inside the 120-day horizon
+    const db = seedDrifted({ stage: 'Build Pad', moveIn });
+    const machineFlip = seedIngestPublish(db, QMI_ID);
+
+    await applyMessage(
+      { DB: d1(db) } as unknown as ConsumerEnv,
+      retract(machineFlip, { stage: 'Build Pad', moveIn })
+    );
+
+    expect(publishedOf(db)).toBe(1);
+    expect(unpublishAudits(db)).toBe(0);
+    db.close();
+  });
+
   it('refuses when the effective stage moved to another UNREADY value', async () => {
     // Readiness alone is not the test — the row must still hold what was judged. A stage
     // that moved 'Build Pad' → 'EPO Review Meeting' is still unready, but it is a
@@ -135,6 +170,58 @@ describe('ADMIN_READY_OVERRIDE_RACE — an admin makes the home ready before del
     const machineFlip = seedIngestPublish(db, QMI_ID);
 
     await applyMessage({ DB: d1(db) } as unknown as ConsumerEnv, retract(machineFlip));
+
+    expect(publishedOf(db)).toBe(1);
+    expect(unpublishAudits(db)).toBe(0);
+    db.close();
+  });
+});
+
+// ── The same two races, but landing INSIDE the write window ──────────────────────
+// The tests above stage their interference BEFORE delivery, so the consumer's reads see
+// it and return early. That leaves the compare-and-set itself unproven: mutation-testing
+// retractCas showed every test above still passing with the state predicate disabled,
+// because the TypeScript re-check was doing the work.
+//
+// Which is the whole lesson of rounds 2 and 3 — a check in a preceding READ cannot close
+// a window that opens after it. So these two drive the change at batch time, i.e. after
+// every read the retraction path made, exactly as SEQ_BUMP_AFTER_READ does for publish.
+// Only a predicate on the mutating statement can refuse them.
+describe('the retraction re-decides INSIDE the write, not just before it', () => {
+  /** Run the change at batch submission — after every read, before the write commits. */
+  const racingDb = (db: Database.Database, duringWrite: () => void) => {
+    const base = d1(db);
+    return {
+      prepare: base.prepare.bind(base),
+      async batch(statements: unknown[]) {
+        duringWrite();
+        return base.batch(statements);
+      },
+    } as unknown as ConsumerEnv['DB'];
+  };
+
+  it('refuses when an admin makes the home ready between the read and the write', async () => {
+    const db = seedDrifted();
+    const machineFlip = seedIngestPublish(db, QMI_ID);
+    const DB = racingDb(db, () => {
+      db.prepare(`UPDATE qmi SET override_construction_stage = 'Buyer Sign Off' WHERE id = ?`).run(QMI_ID);
+    });
+
+    await applyMessage({ DB } as unknown as ConsumerEnv, retract(machineFlip));
+
+    expect(publishedOf(db)).toBe(1);
+    expect(unpublishAudits(db)).toBe(0); // and no audit row for a retraction that did not happen
+    db.close();
+  });
+
+  it('refuses when a human republishes between the read and the write', async () => {
+    const db = seedDrifted();
+    const machineFlip = seedIngestPublish(db, QMI_ID);
+    const DB = racingDb(db, () => {
+      seedPublishAudit(db, QMI_ID, { actor: HUMAN, action: 'publish', at: '2026-07-28T11:00:00.000Z' });
+    });
+
+    await applyMessage({ DB } as unknown as ConsumerEnv, retract(machineFlip));
 
     expect(publishedOf(db)).toBe(1);
     expect(unpublishAudits(db)).toBe(0);

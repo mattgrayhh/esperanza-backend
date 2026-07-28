@@ -679,12 +679,13 @@ async function applyQmiRetract(env: ConsumerEnv, msg: QmiRetractMessage): Promis
   const stage = firstFilled(row.override_construction_stage, row.synced_construction_stage);
   const moveIn = firstFilled(row.override_move_in_date, row.synced_move_in_date);
 
-  // READY AGAIN → leave it live. The CAS below also refuses this (the effective values
-  // must have changed for readiness to change), but the two need different words in the
-  // log: "an admin brought this home back inside the horizon" is a correct outcome worth
-  // seeing plainly, not a race. Evaluated with the CURRENT date, so a home that drifts
-  // back into the horizon purely because the run crossed midnight is also left alone —
-  // the safe direction for a leg that removes live listings.
+  // READY AGAIN → leave it live. NOT redundant with the CAS below, and I checked rather
+  // than assumed: mutation-testing this branch fails a test the value predicates cannot
+  // catch. isPublishReady is `moveIn <= today + PUBLISH_HORIZON_DAYS`, so a home beyond
+  // the horizon drifts INTO readiness as the clock advances, with every column unchanged —
+  // so every value predicate still matches and only re-running the RULE refuses it.
+  // Evaluated with the current date for exactly that reason, which is also the safe
+  // direction for a leg that removes live listings.
   if (isPublishReady(stage, moveIn)) {
     console.warn(
       `[ingest:retract] SKIPPED ${who}: publishable again at delivery — ` +
