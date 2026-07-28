@@ -413,6 +413,27 @@ describe('saveEntity community side widgets', () => {
   });
 });
 
+describe('saveEntity — community image columns', () => {
+  beforeEach(() => {
+    H.sqlite.exec(`
+      INSERT INTO communities (id, name, description_image_url)
+      VALUES ('sapphire', 'Sapphire', 'https://img.hazardhouse.ai/communities/sapphire/desc.jpg');
+    `);
+  });
+
+  it('clears description_image_url when the form submits a blank value', async () => {
+    const res = await saveEntity('communities', 'sapphire', form({ description_image_url: '' }));
+    expect(res).toEqual({ ok: true });
+    const row = H.sqlite
+      .prepare('SELECT description_image_url FROM communities WHERE id = ?')
+      .get('sapphire') as { description_image_url: string | null };
+    expect(row.description_image_url).toBeNull();
+    expect(auditRows('communities', 'sapphire').some((a) => a['field'] === 'description_image_url')).toBe(
+      true
+    );
+  });
+});
+
 // =============================================================================
 // deleteEntity — hard-delete a record.
 // =============================================================================
