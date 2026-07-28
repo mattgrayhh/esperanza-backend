@@ -28,7 +28,7 @@
 import { describe, it, expect } from 'vitest';
 import { freshDb, d1, setRunSeq } from './helpers.js';
 import { applyMessage, type ConsumerEnv, type D1Like } from '../src/consumer.js';
-import { nextRunSeq, currentRunSeq, isCurrentIntent } from '../src/run-seq.js';
+import { nextRunSeq, currentRunSeq, classifyIntent } from '../src/run-seq.js';
 import { diff, type ExistingQmi, type Lookups, type QmiPublishMessage } from '../src/diff.js';
 import type { SnowflakeQmiRow } from '../src/snowflake.js';
 
@@ -72,8 +72,11 @@ const intent = (over: Partial<QmiPublishMessage> = {}): QmiPublishMessage => ({
 describe('run sequence', () => {
   it('is monotonic and starts at 1 on a fresh database', async () => {
     const db = seed();
+    // freshDb() pre-seeds the counter so the other tests are not all asserting against a
+    // refused write. Clear it to get the genuine post-migration state back.
+    db.prepare(`DELETE FROM sync_run_seq`).run();
     const env = d1(db);
-    expect(await currentRunSeq(env)).toBe(0); // migration seeds 0; the producer bumps first
+    expect(await currentRunSeq(env)).toBe(null); // no row yet; the producer's bump creates it
     expect(await nextRunSeq(env)).toBe(1);
     expect(await nextRunSeq(env)).toBe(2);
     expect(await nextRunSeq(env)).toBe(3);
@@ -82,13 +85,15 @@ describe('run sequence', () => {
   });
 
   it('treats an older run, and an unstamped intent, as not current', () => {
-    expect(isCurrentIntent(2, 2)).toBe(true);
-    expect(isCurrentIntent(1, 2)).toBe(false);
-    expect(isCurrentIntent(undefined, 2)).toBe(false);
-    // Unknown current sequence: no freshness evidence either way → not current.
-    expect(isCurrentIntent(2, null)).toBe(false);
-    // Ahead of the counter is accepted rather than dropped (see run-seq.ts).
-    expect(isCurrentIntent(3, 2)).toBe(true);
+    expect(classifyIntent(2, 2)).toBe('current');
+    expect(classifyIntent(1, 2)).toBe('stale');
+    expect(classifyIntent(undefined, 2)).toBe('unstamped');
+    // Unknown current sequence is NOT stale — we know nothing. The caller retries on
+    // this rather than dropping real feed data on a transient D1 blip.
+    expect(classifyIntent(2, null)).toBe('indeterminate');
+    // FUTURE_SEQ (review round 3): a seq the counter never issued used to be accepted
+    // under `msgSeq >= currentSeq` and published a home. Equality is exact now.
+    expect(classifyIntent(3, 2)).toBe('ahead');
   });
 });
 
@@ -325,7 +330,13 @@ describe('the data paths', () => {
     db.close();
   });
 
-  it('an UNSTAMPED upsert is still applied — feed data is safe, and it cannot publish', async () => {
+  // REVERSED 2026-07-28 (review round 3). This test used to assert that an unstamped
+  // upsert IS applied, on the reasoning that feed data is harmless because the data paths
+  // cannot set published = 1. Both halves of that were wrong, and both were reproduced:
+  // UNSTAMPED_UPSERT overwrote a newer run's values (putting a home back to 'Build Pad'),
+  // and UNSTAMPED_UNPUBLISH took down a home a newer run had seen back in the available
+  // set. "It cannot publish" is not the same as "it cannot do damage".
+  it('an UNSTAMPED upsert is REFUSED — it carries no evidence that it is not stale', async () => {
     const db = seed({ stage: 'Under Roof' });
     setRunSeq(db, 5);
     const env = { DB: d1(db) } as unknown as ConsumerEnv;
@@ -340,9 +351,22 @@ describe('the data paths', () => {
       ratifiedSalesPrice: null,
     });
 
+    // Untouched. The next run re-derives this upsert from Snowflake, so the cost of
+    // refusing it is one cycle, not lost data.
     expect(
       db.prepare(`SELECT synced_construction_stage AS stage, published FROM qmi WHERE id = ?`).get(QMI_ID)
-    ).toEqual({ stage: 'Buyer Sign Off', published: 0 });
+    ).toEqual({ stage: 'Under Roof', published: 0 });
+    db.close();
+  });
+
+  it('an UNSTAMPED unpublish is REFUSED — it cannot take down a re-listed home', async () => {
+    const db = seed({ published: 1 });
+    setRunSeq(db, 5);
+    const env = { DB: d1(db) } as unknown as ConsumerEnv;
+
+    await applyMessage(env, { kind: 'qmi.unpublish', snowflakeKey: KEY, qmiId: QMI_ID });
+
+    expect(publishedOf(db)).toBe(1);
     db.close();
   });
 });

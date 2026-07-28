@@ -97,7 +97,7 @@ describe('machine publish/unpublish attribution', () => {
     const db = seedQmi(1);
     const env = { DB: d1(db) } as unknown as ConsumerEnv;
 
-    await applyMessage(env, { kind: 'qmi.unpublish', snowflakeKey: '002PG00000290', qmiId: QMI_ID });
+    await applyMessage(env, { kind: 'qmi.unpublish', snowflakeKey: '002PG00000290', qmiId: QMI_ID, runSeq: 1 });
 
     expect(db.prepare(`SELECT published FROM qmi WHERE id = ?`).get(QMI_ID)).toEqual({ published: 0 });
     const rows = audit(db);
@@ -120,7 +120,7 @@ describe('machine publish/unpublish attribution', () => {
     const db = seedQmi(0);
     const env = { DB: d1(db) } as unknown as ConsumerEnv;
 
-    await applyMessage(env, { kind: 'qmi.unpublish', snowflakeKey: '002PG00000290', qmiId: QMI_ID });
+    await applyMessage(env, { kind: 'qmi.unpublish', snowflakeKey: '002PG00000290', qmiId: QMI_ID, runSeq: 1 });
 
     expect(audit(db)).toEqual([]);
     db.close();
@@ -213,7 +213,7 @@ describe('machine publish/unpublish attribution', () => {
       db.exec('DROP TABLE audit_log');
 
       await expect(
-        applyMessage(env, { kind: 'qmi.unpublish', snowflakeKey: '002PG00000290', qmiId: QMI_ID })
+        applyMessage(env, { kind: 'qmi.unpublish', snowflakeKey: '002PG00000290', qmiId: QMI_ID, runSeq: 1 })
       ).rejects.toThrow();
       // An unattributed disappearance is the same confusion in the other direction.
       expect(db.prepare(`SELECT published FROM qmi WHERE id = ?`).get(QMI_ID)).toEqual({ published: 1 });

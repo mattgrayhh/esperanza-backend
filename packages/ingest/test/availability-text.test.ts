@@ -88,6 +88,7 @@ describe('isAutoAvailabilityText', () => {
 function upsertMsg(over: Partial<QmiUpsertMessage>): QmiUpsertMessage {
   return {
     kind: 'qmi.upsert',
+    runSeq: 1,
     snowflakeKey: '006LP00000051',
     qmiId: null,
     values: { eciKey: '006LP00000051' },

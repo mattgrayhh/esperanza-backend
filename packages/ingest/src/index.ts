@@ -44,7 +44,14 @@ import {
   type Lookups,
   type SyncMessage,
 } from './diff.js';
-import { handleQueueBatch, handleDlqBatch, writeSyncLog, type ConsumerEnv, type D1Like } from './consumer.js';
+import {
+  handleQueueBatch,
+  handleDlqBatch,
+  writeSyncLog,
+  INGEST_ACTOR,
+  type ConsumerEnv,
+  type D1Like,
+} from './consumer.js';
 import { nextRunSeq } from './run-seq.js';
 
 export interface Env extends SnowflakeEnv, ConsumerEnv {
@@ -56,7 +63,9 @@ export interface Env extends SnowflakeEnv, ConsumerEnv {
 
 // -- D1 reads for the diff --
 
-async function loadExistingQmis(db: D1Like): Promise<ExistingQmi[]> {
+/** Exported so the provenance subquery below can be tested against the real schema
+ *  rather than a copy of its SQL that could drift from it. */
+export async function loadExistingQmis(db: D1Like): Promise<ExistingQmi[]> {
   const { results } = await db
     .prepare(
       `SELECT id, eci_key, housenumber, synced_community_name, published,
@@ -70,10 +79,22 @@ async function loadExistingQmis(db: D1Like): Promise<ExistingQmi[]> {
               synced_construction_stage_index, synced_estimated_settlement_date,
               synced_city_id, synced_city_name, synced_community_id,
               synced_floor_plan_id, synced_floor_plan_name,
-              synced_price, last_synced_price, mark_job_number, image_url
+              synced_price, last_synced_price, mark_job_number, image_url,
+              -- PROVENANCE for the readiness-drift retraction leg (see diff.ts). 1 when
+              -- the most recent published-flip on this row was written by ingest itself.
+              -- Correlated MAX(at) rather than a join, so a human unpublish/republish
+              -- AFTER a machine publish correctly reads as human-owned and is left alone.
+              -- Rows published before attribution existed have no such audit row at all
+              -- and come back 0 — which is exactly why the ~101-home cleanup backlog is
+              -- untouched by that leg and stays a reviewed, human-run script.
+              (SELECT CASE WHEN a.actor = ? THEN 1 ELSE 0 END
+                 FROM audit_log a
+                WHERE a.entity = 'qmi' AND a.entity_id = qmi.id AND a.field = 'published'
+                ORDER BY a.at DESC, a.rowid DESC
+                LIMIT 1) AS machine_published
        FROM qmi`
     )
-    .bind()
+    .bind(INGEST_ACTOR)
     .all<ExistingQmi>();
   return results;
 }

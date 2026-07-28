@@ -24,10 +24,24 @@
 //
 // THE RULE
 // A single monotonic counter, bumped by the producer under sync_lock before it
-// enqueues anything, stamped on every QMI intent. The consumer applies an intent
-// only while its run is still the current one. Schedules 1 and 2 both require the
-// stale intent to execute after a newer run has started, so both are refused here;
-// schedule 3 is closed by the compare-and-set in the consumer's publish path.
+// enqueues anything, stamped on every QMI intent. A QMI mutation applies only while
+// its run is still the current one, and that equality is evaluated INSIDE the
+// mutating statement (runSeqCas below), not in a preceding read.
+//
+// WHAT THIS COUNTER CANNOT DO — read this before trusting it (review round 3).
+// It refuses intents that arrive LATE. It cannot retract one that arrived on time.
+// Schedule 1 above has a second ordering the counter is blind to:
+//
+//   run N publishes home X validly and COMMITS, and only then does run N+1 report X
+//   as unready.
+//
+// Nothing here is stale in that sequence — the publish was correct when it ran — so
+// no freshness rule can reject it, and the home is left live and unready. Closing it
+// requires the newer decision to actively retract: see the machine-published drift
+// leg in diff.ts, which emits a sequenced qmi.unpublish for inventory this pipeline
+// published itself. The counter and that leg are complementary, not alternatives.
+//
+// Schedule 3 is closed by the compare-and-set in the consumer's publish path.
 //
 // Losing an intent this way costs nothing: publish candidates are re-derived from
 // D1 on every run, so a dropped intent that is still true comes back next cycle.
@@ -90,19 +104,56 @@ export async function currentRunSeq(db: D1Like): Promise<number | null> {
 }
 
 /**
- * Is an intent stamped `msgSeq` still current, given `currentSeq`?
+ * How an intent stamped `msgSeq` relates to the counter — the input to every QMI
+ * mutation's freshness decision.
  *
- *  - An intent from an OLDER run is stale — a newer run has already re-decided.
- *  - An UNSTAMPED intent (pre-0031 message in flight across a deploy) carries no
- *    freshness evidence. Callers on the publish path treat that as stale; the data
- *    paths accept it, since applying a slightly-old upsert is what the next run
- *    would do anyway.
- *  - A seq AHEAD of the counter cannot happen (the producer bumps before it
- *    enqueues) but is accepted rather than dropped: refusing it would strand real
- *    work if the counter were ever restored from a backup.
+ *  - `current`       — stamped with exactly the run that is still in progress.
+ *  - `stale`         — an OLDER run already superseded by a newer one.
+ *  - `ahead`         — a seq the counter has never issued. The producer bumps before
+ *                      it enqueues, so this cannot happen in a healthy system; it can
+ *                      appear if the counter is restored from a backup or rolled back.
+ *                      Round 3 reproduced FUTURE_SEQ publishing a home under the old
+ *                      `msgSeq >= currentSeq` rule, so equality is now exact.
+ *  - `unstamped`     — pre-0031 message in flight across a deploy. No freshness
+ *                      evidence at all.
+ *  - `indeterminate` — the counter itself could not be read. NOT the same as stale:
+ *                      we know nothing, rather than knowing the intent is old.
+ *
+ * Only `current` may mutate a QMI. `stale`, `ahead` and `unstamped` are DROPPED (the
+ * next run re-derives them from D1); `indeterminate` must be RETRIED, because dropping
+ * on a transient D1 blip would silently discard real feed data. Callers distinguish
+ * those two outcomes — see consumer.ts.
  */
-export function isCurrentIntent(msgSeq: number | undefined, currentSeq: number | null): boolean {
-  if (msgSeq == null) return false;
-  if (currentSeq == null) return false;
-  return msgSeq >= currentSeq;
+export type IntentVerdict = 'current' | 'stale' | 'ahead' | 'unstamped' | 'indeterminate';
+
+export function classifyIntent(msgSeq: number | undefined, currentSeq: number | null): IntentVerdict {
+  // Unstamped is decided WITHOUT the counter, and deliberately before the
+  // indeterminate check: a message carrying no sequence has no freshness evidence no
+  // matter what the counter says, so it is droppable on its own terms. Ordering it
+  // after `indeterminate` would turn every pre-0031 message in flight across the
+  // deploy into a retry→DLQ instead of a clean one-cycle drop.
+  if (msgSeq == null) return 'unstamped';
+  if (currentSeq == null) return 'indeterminate';
+  if (msgSeq === currentSeq) return 'current';
+  return msgSeq < currentSeq ? 'stale' : 'ahead';
+}
+
+/**
+ * The sequence half of every QMI mutation's compare-and-set.
+ *
+ * Round 3's SEQ_BUMP_AFTER_READ and CACHED_DATA_SEQ both exploited the same shape: the
+ * consumer read the counter, then wrote in a SEPARATE statement, so a producer run that
+ * bumped in between was invisible to the write. Reading more often narrows that window
+ * but cannot close it — there is always a gap between a read and a later write.
+ *
+ * So the equality moves INTO the mutation. `(SELECT seq FROM sync_run_seq WHERE name=?)`
+ * is evaluated by SQLite as part of the statement that changes the row, which means a
+ * concurrent bump makes the UPDATE match zero rows instead of racing it. The preceding
+ * classifyIntent() read stays only to produce a specific log line and to skip work early.
+ */
+export function runSeqCas(seq: number): { sql: string; binds: unknown[] } {
+  return {
+    sql: ` AND (SELECT seq FROM sync_run_seq WHERE name = ?) = ?`,
+    binds: [SYNC_RUN_NAME, seq],
+  };
 }

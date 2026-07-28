@@ -96,7 +96,7 @@ describe('published precedence (ingest may force =0 only, never =1)', () => {
 
   it('flips published 1 → 0 when a published QMI leaves the Snowflake spec set', async () => {
     // Snowflake now only contains the LIVE one; SOLD has settled (gone).
-    const { messages, stats } = diff([liveRow()], [], readExistingQmis(db), emptyLookups());
+    const { messages, stats } = diff([liveRow()], [], readExistingQmis(db), emptyLookups(), [], [], [], new Map(), false, undefined, 1);
 
     expect(stats.qmisUnpublished).toBe(1);
     const un = messages.find((m) => m.kind === 'qmi.unpublish');
@@ -122,7 +122,7 @@ describe('published precedence (ingest may force =0 only, never =1)', () => {
     db.prepare(`UPDATE qmi SET published = 0 WHERE id = 'recLIVE'`).run();
     const soldRow: SnowflakeQmiRow = { ...liveRow(), eciKey: ECI_SOLD, housenumber: '99' };
 
-    const { messages } = diff([liveRow(), soldRow], [], readExistingQmis(db), emptyLookups());
+    const { messages } = diff([liveRow(), soldRow], [], readExistingQmis(db), emptyLookups(), [], [], [], new Map(), false, undefined, 1);
 
     // STRUCTURAL: no message kind can set published=1 (the union has no such op).
     // recLIVE is in Snowflake, so it must NOT be targeted by an unpublish either.
@@ -138,7 +138,7 @@ describe('published precedence (ingest may force =0 only, never =1)', () => {
 
   it('new spec is inserted at published=0 (ingest never creates a live row)', async () => {
     const newSpec: SnowflakeQmiRow = { ...liveRow(), eciKey: '006LP00000200', housenumber: '200' };
-    const { messages, stats } = diff([liveRow(), newSpec], [], readExistingQmis(db), emptyLookups());
+    const { messages, stats } = diff([liveRow(), newSpec], [], readExistingQmis(db), emptyLookups(), [], [], [], new Map(), false, undefined, 1);
 
     expect(stats.qmisCreated).toBe(1);
     for (const m of messages) await applyMessage(env, m);
@@ -154,7 +154,7 @@ describe('published precedence (ingest may force =0 only, never =1)', () => {
   it('an already-unpublished, sold row is not re-touched (no spurious unpublish churn)', async () => {
     // recSOLD already unpublished; it's gone from Snowflake.
     db.prepare(`UPDATE qmi SET published = 0 WHERE id = 'recSOLD'`).run();
-    const { messages, stats } = diff([liveRow()], [], readExistingQmis(db), emptyLookups());
+    const { messages, stats } = diff([liveRow()], [], readExistingQmis(db), emptyLookups(), [], [], [], new Map(), false, undefined, 1);
     expect(stats.qmisUnpublished).toBe(0); // guard: only published===1 rows unpublish
     expect(messages.find((m) => m.kind === 'qmi.unpublish')).toBeUndefined();
   });

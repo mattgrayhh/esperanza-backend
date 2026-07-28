@@ -18,6 +18,7 @@ const ECI = '003HC00000046';
 function createMsg(over: Partial<QmiUpsertMessage> = {}): QmiUpsertMessage {
   return {
     kind: 'qmi.upsert',
+    runSeq: 1,
     snowflakeKey: ECI,
     qmiId: null,
     values: { eciKey: ECI, address: '4122 Westway Court' },

@@ -164,17 +164,34 @@ availability onto it in both directions; see the publish/unpublish bullets below
   `qmi.upsert` has not landed yet the publish is skipped and the next cycle does it — a
   one-cycle delay is the right trade against publishing a pad. It also means an admin hold
   placed *after* the message was queued still wins.
-- **Readiness drift is reported, never auto-corrected (2026-07-28 review):** the gate
-  governs the *moment of publication* only. A home published while it sat inside the
-  horizon can slip out later (the builder pushes the move-in date, or the stage regresses),
-  and the unpublish leg would not notice because it triggers on **absence from Snowflake**,
-  not on readiness. Each run counts those homes and names the first 20 in `sync_log`
-  (`⚠ N published home(s) no longer pass the readiness gate (NOT auto-unpublished —
-  review needed)`). **This is a flag, not an action, by design:** silently pulling live
-  listings unattended is the same class of mistake as silently publishing them. Sales may
-  have reason to keep a slipped home visible, so a human decides. Expect the first run
-  after deploy to report roughly the size of the reconciliation backlog (~106 on
-  2026-07-28), falling to near zero once that script has been run.
+- **Readiness drift: the machine retracts its own publishes, and reports everyone else's
+  (2026-07-28, reviews 1 and 3):** the gate governs the *moment of publication* only. A
+  home published while it sat inside the horizon can slip out later (the builder pushes
+  the move-in date, or the stage regresses), and the unpublish leg would not notice
+  because it triggers on **absence from Snowflake**, not on readiness.
+
+  This is also the one ordering no freshness rule can close. Run *N* publishes a home
+  validly and commits; run *N+1* then reports it unready. Nothing was stale, so rejecting
+  late messages cannot help — the newer decision has to actively retract. Round 3 of
+  review was right to keep pressing on this.
+
+  The split is by **provenance**, read from `audit_log`:
+
+  | last `published` flip | drift behaviour |
+  |---|---|
+  | `actor = ingest-autopublish` | sequenced `qmi.unpublish`, capped at `DRIFT_UNPUBLISH_MAX_PER_RUN` (15)/run |
+  | a human, or no audit row at all | counted and named in `sync_log`, never touched |
+
+  Retracting a machine publish is symmetric — same actor, same rule, and the retraction is
+  itself attributed, so "why did this home disappear" has an answer. Retracting a *human's*
+  publish is not: sales may be showing a slipped home deliberately and nothing records that
+  intent, and pulling live listings unattended is the same class of mistake as publishing
+  them unattended, which is the incident that started this.
+
+  **The ~101-home cleanup backlog is entirely in the second bucket** — those rows predate
+  attribution, so no `audit_log` row names ingest as their publisher and this leg does not
+  touch one of them. That cleanup remains the reviewed, human-run
+  `reconcile-published-readiness.ts`.
 - **Machine publishes are attributed (2026-07-28):** every ingest flip of `published`
   writes an `audit_log` row (`actor = ingest-autopublish`, action `publish`/`unpublish`)
   in addition to `sync_log`. Before this, the ingest wrote only `sync_log` while the
