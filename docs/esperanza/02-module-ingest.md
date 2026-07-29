@@ -129,17 +129,21 @@ availability onto it in both directions; see the publish/unpublish bullets below
   the parity WARN for a human). Publishing is **suppressed on a truncated run** (same
   `< 50%` Snowflake-shrink signal as the unpublish guard), so a partial result can never
   mass-flip visibility. See `packages/ingest/test/republish.test.ts`.
-- **Readiness gate on auto-publish (★, 2026-07-28):** presence in Snowflake plus an image
-  is **not** enough. Snowflake lists a home from the moment it is a graded pad, so those
-  two conditions alone published `Build Pad` and `Preliminary Plan Review` rows with
-  move-in dates out to 2027-02-26 — published QMIs went 112 → 262 and marketing reported
-  homes going live that nobody published. A home is auto-publishable only when it is
-  **finished** (`isReadyConstructionStage`, i.e. `Buyer Sign Off`) **or due within
-  `PUBLISH_HORIZON_DAYS` (120)**. The horizon is not arbitrary: a scrape of the legacy
-  O'Neill listing on 2026-07-28 showed 121 homes whose availability envelope stopped dead
-  at NOV/DEC 2026, ~120 days out. The gate judges the **incoming** Snowflake stage/date
-  with `override_move_in_date` winning — the same COALESCE `v_public_qmi` applies, so it
-  decides on what a visitor would actually see. A missing date is never publishable.
+- **Readiness gate on auto-publish (★, 2026-07-28; stage floor added 2026-07-29):**
+  presence in Snowflake plus an image is **not** enough. Snowflake lists a home from the
+  moment it is a graded pad, so those conditions published `Build Pad` and `Preliminary
+  Plan Review` rows months early. Auto-publish now requires **both**:
+  1. construction has reached **Pour Foundation or later** (stage index ≥8, with known
+     milestone names authoritative because valid `Buyer Sign Off` rows can have NULL index);
+  2. the home is **finished** (`Buyer Sign Off`) **or due within
+     `PUBLISH_HORIZON_DAYS` (120)**.
+
+  The stage floor is necessary: the horizon advances daily, so date-only eligibility made
+  manually-unpublished pads republish themselves as their dates entered the rolling window.
+  The floor was derived from the legacy sales roster on 2026-07-29: it listed no homes below
+  Pour Foundation, while listing Pour Foundation, Frame Labor 1, Hang Drywall, Tile Labor,
+  Install Countertops, Paint Final, and Buyer Sign Off. The timing horizon comes from the
+  same roster's 2026-07-28 envelope, which stopped at NOV/DEC 2026 (~120 days).
   `?force=1` releases the staging **cap**, NOT the readiness gate. Rejections are counted
   separately in `sync_log` as "withheld by readiness gate" so they are never mistaken for
   a reviewable backlog. See `packages/ingest/test/publish-readiness-gate.test.ts`.

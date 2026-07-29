@@ -151,9 +151,38 @@ export function isWithinPublishHorizon(
   return parsed.iso <= addDays(todayIso, horizonDays);
 }
 
+// The earliest construction milestone the legacy sales roster exposes. The numeric
+// sequence comes from DM_HOUSE.CONSTRUCTION_STAGE_INDEX; index 8 is Pour Foundation.
+// Names are authoritative because some valid finished homes arrive with a NULL index.
+export const PUBLISH_STAGE_FLOOR_INDEX = 8;
+const PUBLISHABLE_STAGES = new Set([
+  'pour foundation',
+  'frame labor 1',
+  'hang drywall',
+  'tile labor',
+  'install countertops',
+  'paint final',
+  'buyer sign off',
+]);
+
+export function isAtOrAbovePublishStageFloor(
+  stage: string | null | undefined,
+  stageIndex: number | null | undefined
+): boolean {
+  const normalized = String(stage ?? '').trim().toLowerCase();
+  if (PUBLISHABLE_STAGES.has(normalized)) return true;
+  return Number.isFinite(stageIndex) && Number(stageIndex) >= PUBLISH_STAGE_FLOOR_INDEX;
+}
+
 /**
  * The auto-publish readiness gate: a home may be published unattended only when it
- * is finished, or is due inside the horizon.
+ * has physically reached Pour Foundation (or later) AND is finished or due inside
+ * the horizon. Requiring both prevents early-stage inventory from rolling back onto
+ * the site merely because the 120-day date window advances.
+ *
+ * `constructionStageIndex` is optional for compatibility with older queued callers.
+ * Known milestone names are authoritative: Snowflake has emitted NULL indexes for
+ * valid Buyer Sign Off homes, which must remain publishable.
  *
  * `effectiveMoveInDate` must be override_move_in_date ?? synced/Snowflake move-in date —
  * the same COALESCE the public views apply, so the gate judges what a visitor would see.
@@ -162,8 +191,10 @@ export function isPublishReady(
   constructionStage: string | null | undefined,
   effectiveMoveInDate: string | null | undefined,
   todayIso: string = todayIsoDate(),
-  horizonDays: number = PUBLISH_HORIZON_DAYS
+  horizonDays: number = PUBLISH_HORIZON_DAYS,
+  constructionStageIndex: number | null | undefined = null
 ): boolean {
+  if (!isAtOrAbovePublishStageFloor(constructionStage, constructionStageIndex)) return false;
   if (isReadyConstructionStage(constructionStage)) return true;
   return isWithinPublishHorizon(effectiveMoveInDate, todayIso, horizonDays);
 }
