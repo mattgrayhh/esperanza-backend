@@ -164,34 +164,46 @@ availability onto it in both directions; see the publish/unpublish bullets below
   `qmi.upsert` has not landed yet the publish is skipped and the next cycle does it — a
   one-cycle delay is the right trade against publishing a pad. It also means an admin hold
   placed *after* the message was queued still wins.
-- **Readiness drift: the machine retracts its own publishes, and reports everyone else's
-  (2026-07-28, reviews 1 and 3):** the gate governs the *moment of publication* only. A
-  home published while it sat inside the horizon can slip out later (the builder pushes
-  the move-in date, or the stage regresses), and the unpublish leg would not notice
-  because it triggers on **absence from Snowflake**, not on readiness.
+- **Readiness drift is REPORTED, never auto-unpublished (2026-07-28, reviews 1 and 3-6):**
+  the gate governs the *moment of publication* only. A home published while it sat inside
+  the horizon can slip out later (the builder pushes the move-in date, or the stage
+  regresses), and the unpublish leg would not notice because it triggers on **absence from
+  Snowflake**, not on readiness.
 
   This is also the one ordering no freshness rule can close. Run *N* publishes a home
   validly and commits; run *N+1* then reports it unready. Nothing was stale, so rejecting
-  late messages cannot help — the newer decision has to actively retract. Round 3 of
-  review was right to keep pressing on this.
+  late messages cannot help — closing it needs the newer decision to actively retract.
+  Round 3 of review was right to keep pressing on this.
 
-  The split is by **provenance**, read from `audit_log`:
-
-  | last `published` flip | drift behaviour |
-  |---|---|
-  | `actor = ingest-autopublish` | sequenced `qmi.unpublish`, capped at `DRIFT_UNPUBLISH_MAX_PER_RUN` (15)/run |
-  | a human, or no audit row at all | counted and named in `sync_log`, never touched |
-
-  Retracting a machine publish is symmetric — same actor, same rule, and the retraction is
-  itself attributed, so "why did this home disappear" has an answer. Retracting a *human's*
-  publish is not: sales may be showing a slipped home deliberately and nothing records that
-  intent, and pulling live listings unattended is the same class of mistake as publishing
-  them unattended, which is the incident that started this.
-
-  **The ~101-home cleanup backlog is entirely in the second bucket** — those rows predate
-  attribution, so no `audit_log` row names ingest as their publisher and this leg does not
-  touch one of them. That cleanup remains the reviewed, human-run
+  **Every drifted home — machine-published or human-published — is counted and named in
+  `sync_log` and left live.** There is no provenance split and no per-run retraction cap;
+  `DRIFT_UNPUBLISH_MAX_PER_RUN` no longer exists. **Nothing in this leg can take a live
+  listing down.** Acting on drift is a human decision, run through the reviewed
   `reconcile-published-readiness.ts`.
+
+  Auto-retraction was built (review round 3) and **withdrawn (round 5)**. Retracting only
+  "what the machine published" requires knowing who owns a live home's publication *at the
+  moment the retraction lands*, and that signal does not exist today:
+
+  - `audit_log` cannot supply it. The real QMI admin control is `gate="status"` →
+    `setStatus`, which changes `published` but audits `field='status'`, so any provenance
+    query over `field='published'` is blind to the actual human path. And both
+    `togglePublished` and `setStatus` insert their audit row **after** the flip commits
+    (`postWrite`, `actions.ts`), leaving a window where a home is live with no row naming
+    its owner — a duplicate delivery inside that window retracts a human's publication.
+  - No existing column can stand in. `updated_at` is the only one every writer sets
+    atomically with `published`, but ingest churns it with its own upserts in the same run,
+    so compare-and-setting on it would refuse every retraction.
+
+  Closing it properly means a publication-owner marker written in the **same statement** as
+  every `published` change, by all four writers (`setStatus`, `togglePublished`, ingest,
+  `scripts/reconcile-published-readiness.ts`). That is a schema decision — `qmi` sits at 99
+  of D1's 100-column cap, so it is the last column or a side table plus an atomic admin
+  batch — and it is **deferred to its own reviewed change**. See
+  `packages/ingest/src/diff.ts` (`READINESS DRIFT` block) for the full reasoning.
+
+  **The cleanup backlog is untouched by this leg** either way — those rows predate
+  attribution and nothing here unpublishes anything.
 - **Machine publishes are attributed (2026-07-28):** every ingest flip of `published`
   writes an `audit_log` row (`actor = ingest-autopublish`, action `publish`/`unpublish`)
   in addition to `sync_log`. Before this, the ingest wrote only `sync_log` while the

@@ -209,9 +209,9 @@ export interface DiffResult {
     qmisPublishNotReady: number;
     /** ALREADY-published homes that no longer pass the readiness gate — the builder
      *  pushed the move-in date out, or the stage regressed, after the home went live.
-     *  HUMAN-published only — reported, never auto-unpublished (see the drift block). */
+     *  ALL of them, whoever published them: this leg is report-only and emits no
+     *  publication mutation (see the READINESS DRIFT block in diff()). */
     qmisPublishedDrifted: number;
-    /** Machine-published homes that drifted out of readiness and were RETRACTED this run. */
     /** First few drifted ids, so /sync-status names them instead of only counting. */
     driftedPublishedIds: string[];
     qmisInSnowflake: number;

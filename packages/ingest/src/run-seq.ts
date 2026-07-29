@@ -37,9 +37,11 @@
 //
 // Nothing here is stale in that sequence — the publish was correct when it ran — so
 // no freshness rule can reject it, and the home is left live and unready. Closing it
-// requires the newer decision to actively retract: see the machine-published drift
-// leg in diff.ts, which emits a sequenced qmi.unpublish for inventory this pipeline
-// published itself. The counter and that leg are complementary, not alternatives.
+// would require the newer decision to actively retract, and THIS PIPELINE DOES NOT DO
+// THAT: the drift leg in diff.ts is report-only, so it emits no publication mutation at
+// all. Auto-retraction was withdrawn in review round 5 and is deferred pending an atomic
+// publication owner/revision marker — see the READINESS DRIFT block in diff.ts. Do not
+// read this counter as one half of a retraction mechanism; there is no other half.
 //
 // Schedule 3 is closed by the compare-and-set in the consumer's publish path.
 //
