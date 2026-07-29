@@ -50,7 +50,7 @@ import {
 import type { PromoTargetType } from '@esperanza/db/promo';
 import { getDb, idColumn, type Db } from './db';
 import { getCurrentUser, isAdmin } from './auth';
-import { getEntity, resolveEntity, type EntityKey } from './entities';
+import { getEntity, resolveEntity, isOverrideField, asOverridableEntity, type EntityKey } from './entities';
 import { columnMapForEntity, coerceForColumn, toDrizzlePatch, readRowColumn } from './fields';
 import { publishGateColumn } from './field-config';
 import { statusGate, statusPatch, deriveStatus } from './status';
