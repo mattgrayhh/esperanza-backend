@@ -174,6 +174,36 @@ now both show a red "sync is behind" banner past 12 h (three missed cron slots),
 monitor at `/health/sync`, not `/health`** — `/health` is a hard-coded `{ ok: true }` and
 was green throughout the outage.
 
+### "I merged the fix and CI went green, but the Worker is still running the old code"
+**A green deploy does not mean YOUR worker shipped.** `deploy.yml` deploys only the
+packages that changed (everything if `packages/db/`, the root lockfile/manifest, or
+tsconfig changed). The Deploy step loops `admin api ingest pdf ops` under
+`set -euo pipefail`, and **`admin` is first** — so an admin build failure aborts the loop
+and the four Workers behind it never ship. There is no separate red signal for them.
+
+This bit us on 2026-07-29. PR #188 (`cf04295`) correctly targeted all five Workers, but
+died on an admin type error, so `esperanza-ingest` never shipped. The follow-up PR that
+fixed the admin build then diffed against the previous branch head — which is what
+`github.event.before` means, **succeeded or not** — saw only `packages/admin/` had
+changed, deployed `admin` alone, and went green. `esperanza-ingest` sat three days stale
+on pre-gate code while `master` looked correct.
+
+The workflow now **fails closed**: if the previous deploy on the branch did not conclude
+`success` (or its conclusion can't be read), it redeploys everything rather than trust an
+incremental diff. Deploying too much is a no-op; deploying too little is silent drift.
+
+Verify which Workers actually shipped, rather than trusting the checkmark:
+```bash
+gh run list --workflow deploy.yml --limit 5 \
+  --json databaseId,headSha,conclusion --jq '.[]|"\(.databaseId) \(.headSha[0:7]) \(.conclusion)"'
+gh run view <run-id> --log | grep -m1 'Deploying:'   # the authoritative list
+```
+To force every Worker out regardless of the diff, run the **Deploy (Cloudflare)** workflow
+manually with `deploy_all=true` (Actions → Run workflow), or:
+```bash
+gh workflow run deploy.yml --ref master -f deploy_all=true
+```
+
 ### "A home shows published in the admin but nobody on the team published it"
 The **ingest can publish**, not just unpublish. Check Activity — machine flips now record
 an `audit_log` row with actor **"Snowflake sync (auto-publish)"**. If the home is unbuilt

@@ -21,6 +21,11 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # `actions: read` lets "Determine changed workers" ask whether the PREVIOUS deploy
+    # succeeded. See the fail-closed note in that step.
+    permissions:
+      contents: read
+      actions: read
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -42,11 +47,39 @@ jobs:
       # whose own package changed. First push / missing base SHA → deploy everything.
       - name: Determine changed workers
         id: changes
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           ALL="admin api ingest pdf ops"
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.deploy_all }}" = "true" ]; then
+            echo "pkgs=$ALL" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+
+          # ── FAIL CLOSED AFTER A FAILED DEPLOY ─────────────────────────────
+          # 2026-07-29: PR #188 merged as cf04295 and correctly targeted all five
+          # workers, but the Deploy loop dies on the first failure and `admin` is
+          # first — so api/ingest/pdf/ops never shipped. The NEXT push (#191, the fix
+          # for that very failure) then diffed against `github.event.before`, which is
+          # the previous branch head REGARDLESS of whether its deploy succeeded. Only
+          # packages/admin had changed since cf04295, so the run deployed `admin`
+          # alone and went green. Result: esperanza-ingest sat three days stale on
+          # pre-gate code while master looked correct and CI looked green.
+          #
+          # A skipped worker is invisible: nothing re-deploys it until someone happens
+          # to touch its package. So if the previous deploy did not fully succeed, we
+          # cannot trust an incremental diff — redeploy everything. Deploying too much
+          # is a no-op; deploying too little is silent production drift.
+          PREV="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy.yml/runs?branch=${GITHUB_REF_NAME}&status=completed&per_page=1&exclude_pull_requests=true" \
+            --jq '.workflow_runs[0].conclusion // ""' 2>/dev/null || echo "")"
+          if [ -n "$PREV" ] && [ "$PREV" != "success" ]; then
+            echo "Previous deploy on ${GITHUB_REF_NAME} concluded '$PREV' — workers it skipped may never have shipped. Deploying everything."
+            echo "pkgs=$ALL" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ -z "$PREV" ]; then
+            echo "Could not read the previous deploy's conclusion — deploying everything rather than risk an incremental diff off a failed run."
             echo "pkgs=$ALL" >> "$GITHUB_OUTPUT"; exit 0
           fi
 
