@@ -12,10 +12,21 @@ import {
   triggerFrontendRebuild,
   triggerFrontendRebuildDebounced,
   type SiteRebuildEnv,
+  type FrontendRebuildResult,
 } from '@esperanza/db/site-rebuild';
 import type { EntityKey } from './entities';
 
 export type RebuildMode = 'immediate' | 'debounced' | 'skip';
+
+export async function scheduleFrontendRebuild(
+  env: SiteRebuildEnv & { DB?: D1Database },
+  rebuild: RebuildMode
+): Promise<FrontendRebuildResult | null> {
+  if (rebuild === 'skip') return null;
+  return rebuild === 'immediate'
+    ? triggerFrontendRebuild(env)
+    : triggerFrontendRebuildDebounced(env, env.DB);
+}
 
 /** Rebuild static HTML + enqueue PDF work (cache purge runs in postWrite before this). */
 export async function runPostWriteSideEffects(
@@ -29,20 +40,6 @@ export async function runPostWriteSideEffects(
   id: string,
   rebuild: RebuildMode
 ): Promise<void> {
-  if (rebuild === 'immediate') {
-    try {
-      await triggerFrontendRebuild(env);
-    } catch {
-      /* manual redeploy */
-    }
-  } else if (rebuild === 'debounced') {
-    try {
-      await triggerFrontendRebuildDebounced(env, env.DB);
-    } catch {
-      /* manual redeploy */
-    }
-  }
-
   try {
     const d1 = env.DB;
     if (!d1) return;

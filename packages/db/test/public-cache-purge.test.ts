@@ -25,11 +25,14 @@ describe('purgePublicCache', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await purgePublicCache({ API_PUBLIC_URL: 'https://api.example' }, 'qmi');
     expect(warn).toHaveBeenCalled();
+    await expect(triggerFrontendRebuild({})).resolves.toMatchObject({ status: 'not_configured' });
     warn.mockRestore();
   });
 
   it('sends X-Purge-Key and checks X-Purge-Applied', async () => {
-    const fetch = vi.fn(async () => new Response('{}', { headers: { 'X-Purge-Applied': '1' } }));
+    const fetch = vi.fn<(input: Request | URL, init?: RequestInit) => Promise<Response>>(
+      async () => new Response('{}', { headers: { 'X-Purge-Applied': '1' } })
+    );
     await purgePublicCache(
       { API_PUBLIC_URL: 'https://api.example', PURGE_KEY: 'secret', API: { fetch } },
       'qmi'
@@ -41,9 +44,13 @@ describe('purgePublicCache', () => {
   });
 
   it('also purges the frontend proxy when FRONTEND_PUBLIC_URL is set', async () => {
-    const globalFetch = vi.fn(async () => new Response('{}', { headers: { 'X-Purge-Applied': '1' } }));
+    const globalFetch = vi.fn<(input: Request | URL, init?: RequestInit) => Promise<Response>>(
+      async () => new Response('{}', { headers: { 'X-Purge-Applied': '1' } })
+    );
     vi.stubGlobal('fetch', globalFetch);
-    const apiFetch = vi.fn(async () => new Response('{}', { headers: { 'X-Purge-Applied': '1' } }));
+    const apiFetch = vi.fn<(input: Request | URL, init?: RequestInit) => Promise<Response>>(
+      async () => new Response('{}', { headers: { 'X-Purge-Applied': '1' } })
+    );
     await purgePublicCache(
       {
         API_PUBLIC_URL: 'https://api.example',
@@ -68,14 +75,30 @@ describe('triggerFrontendRebuild', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await triggerFrontendRebuild({});
     expect(warn).toHaveBeenCalled();
+    await expect(triggerFrontendRebuild({})).resolves.toMatchObject({ status: 'not_configured' });
     warn.mockRestore();
   });
 
   it('POSTs to the deploy hook', async () => {
-    const fetch = vi.fn(async () => new Response('', { status: 200 }));
+    const fetch = vi.fn(async () => new Response('', { status: 200 })) as unknown as typeof globalThis.fetch;
     vi.stubGlobal('fetch', fetch);
     await triggerFrontendRebuild({ FRONTEND_DEPLOY_HOOK_URL: 'https://hooks.example/deploy' });
     expect(fetch).toHaveBeenCalledWith('https://hooks.example/deploy', { method: 'POST' });
+    await expect(triggerFrontendRebuild({ FRONTEND_DEPLOY_HOOK_URL: 'https://hooks.example/deploy' })).resolves.toMatchObject({ status: 'scheduled' });
+    vi.unstubAllGlobals();
+  });
+});
+
+
+describe('triggerFrontendRebuild failure outcomes', () => {
+  it('returns a failed GitHub dispatch result instead of silently succeeding', async () => {
+    const fetch = vi.fn(async () => new Response('Bad credentials', { status: 401 })) as unknown as typeof globalThis.fetch;
+    vi.stubGlobal('fetch', fetch);
+    await expect(triggerFrontendRebuild({ GITHUB_DISPATCH_TOKEN: 'token', FRONTEND_DEPLOY_REFS: 'main,staging' }))
+      .resolves.toEqual({
+        status: 'failed', transport: 'github', refs: ['main', 'staging'],
+        detail: 'main: HTTP 401 Bad credentials; staging: HTTP 401 Bad credentials',
+      });
     vi.unstubAllGlobals();
   });
 });

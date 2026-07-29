@@ -1,127 +1,111 @@
 // =============================================================================
 // @esperanza/db — static frontend rebuild hook.
 //
-// The public site (esperanza-frontend) bakes most page HTML at build time from
-// esperanza-api snapshots. Purging the api edge cache updates live JS islands
-// (maps, settings, QMI card reconciliation) but NOT baked copy, galleries, or
-// list grids — those need a frontend redeploy. Admin postWrite() calls this
-// best-effort after purging the api cache, so a publish re-bakes the site.
-//
-// Two transports, tried in order:
-//   1. FRONTEND_DEPLOY_HOOK_URL — a plain unauthenticated POST hook (e.g. a
-//      Cloudflare Workers Build / Pages deploy hook). Simplest when it exists.
-//   2. GITHUB_DISPATCH_TOKEN (+ FRONTEND_REPO) — the frontend deploys via GitHub
-//      Actions (deploy.yml, workflow_dispatch enabled), so we trigger that workflow
-//      on each ref in FRONTEND_DEPLOY_REFS. This is the active path today.
-// Dormant (warns, no-ops) if neither is configured. A failed trigger NEVER fails
-// the admin save.
+// The public site bakes most page HTML at build time. Purging API cache updates
+// live islands but not baked copy, galleries, or grids, which require a frontend
+// deploy. The result below is deliberately returned to the admin write path: a
+// failed dispatch is a distinct, user-visible state, never a log-only success.
 // =============================================================================
 
 export interface SiteRebuildEnv {
-  /** Plain POST deploy hook (Cloudflare Workers Build / Pages) for esperanza-frontend. */
   FRONTEND_DEPLOY_HOOK_URL?: string;
-  /** Fine-grained GitHub PAT with Actions: read+write on the frontend repo. */
   GITHUB_DISPATCH_TOKEN?: string;
-  /** "owner/repo" of the frontend (default Hazard-House/esperanza-frontend). */
   FRONTEND_REPO?: string;
-  /** Workflow file to dispatch (default deploy.yml). */
   FRONTEND_DEPLOY_WORKFLOW?: string;
-  /** Comma-separated branches to rebuild (default "main"). */
   FRONTEND_DEPLOY_REFS?: string;
 }
 
-/** Best-effort: a failed hook must never fail the admin save. */
-export async function triggerFrontendRebuild(env: SiteRebuildEnv): Promise<void> {
+export type FrontendRebuildResult =
+  | { status: 'scheduled'; transport: 'hook' | 'github'; refs: string[] }
+  | { status: 'failed'; transport: 'hook' | 'github'; refs: string[]; detail: string }
+  | { status: 'not_configured'; transport: 'none'; refs: []; detail: string };
+
+/**
+ * Request a static-site rebuild and report whether the request was accepted.
+ * This confirms scheduling, not that the later bake/deploy completed.
+ */
+export async function triggerFrontendRebuild(env: SiteRebuildEnv): Promise<FrontendRebuildResult> {
   const hookUrl = (env.FRONTEND_DEPLOY_HOOK_URL ?? '').trim();
   if (hookUrl) {
     try {
       const res = await fetch(hookUrl, { method: 'POST' });
-      if (!res.ok) console.error(`[site-rebuild] deploy hook failed (HTTP ${res.status})`);
+      if (res.ok) return { status: 'scheduled', transport: 'hook', refs: [] };
+      const detail = `deploy hook returned HTTP ${res.status}`;
+      console.error(`[site-rebuild] ${detail}`);
+      return { status: 'failed', transport: 'hook', refs: [], detail };
     } catch (err) {
+      const detail = `deploy hook request failed: ${err instanceof Error ? err.message : String(err)}`;
       console.error('[site-rebuild]', err);
+      return { status: 'failed', transport: 'hook', refs: [], detail };
     }
-    return;
   }
 
-  // Transport 2: GitHub Actions workflow_dispatch.
   const token = (env.GITHUB_DISPATCH_TOKEN ?? '').trim();
   if (!token) {
-    console.warn('[site-rebuild] no FRONTEND_DEPLOY_HOOK_URL or GITHUB_DISPATCH_TOKEN — static pages not rebuilt');
-    return;
+    const detail = 'no FRONTEND_DEPLOY_HOOK_URL or GITHUB_DISPATCH_TOKEN is configured';
+    console.warn(`[site-rebuild] ${detail} — static pages not rebuilt`);
+    return { status: 'not_configured', transport: 'none', refs: [], detail };
   }
   const repo = (env.FRONTEND_REPO ?? 'Hazard-House/esperanza-frontend').trim();
   const workflow = (env.FRONTEND_DEPLOY_WORKFLOW ?? 'deploy.yml').trim();
-  const refs = (env.FRONTEND_DEPLOY_REFS ?? 'main')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const refs = (env.FRONTEND_DEPLOY_REFS ?? 'main').split(',').map((s) => s.trim()).filter(Boolean);
 
-  await Promise.all(
-    refs.map(async (ref) => {
-      try {
-        const res = await fetch(
-          `https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: 'application/vnd.github+json',
-              'X-GitHub-Api-Version': '2022-11-28',
-              'User-Agent': 'esperanza-admin',
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ ref }),
-          }
-        );
-        // 204 No Content = accepted.
-        if (!res.ok) {
-          console.error(`[site-rebuild] dispatch ${ref} failed (HTTP ${res.status}) ${await res.text().catch(() => '')}`);
-        }
-      } catch (err) {
-        console.error(`[site-rebuild] dispatch ${ref}`, err);
-      }
-    })
-  );
+  const results = await Promise.all(refs.map(async (ref) => {
+    try {
+      const res = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'esperanza-admin',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ref }),
+      });
+      if (res.ok) return { ref, detail: null };
+      return { ref, detail: `HTTP ${res.status} ${await res.text().catch(() => '')}`.trim() };
+    } catch (err) {
+      return { ref, detail: err instanceof Error ? err.message : String(err) };
+    }
+  }));
+  const failures = results.filter((result) => result.detail);
+  if (failures.length === 0) return { status: 'scheduled', transport: 'github', refs };
+  const detail = failures.map(({ ref, detail }) => `${ref}: ${detail}`).join('; ');
+  console.error(`[site-rebuild] dispatch failed: ${detail}`);
+  return { status: 'failed', transport: 'github', refs, detail };
 }
 
-/** Site-settings key — timestamp (ms) of the last frontend rebuild dispatch. */
-export const FRONTEND_REBUILD_DEBOUNCE_KEY = '_admin_frontend_rebuild_at';
+interface RebuildSettingsDb {
+  prepare(sql: string): {
+    bind(...values: unknown[]): {
+      first<T>(): Promise<T | null>;
+      run(): Promise<unknown>;
+    };
+  };
+}
 
-/** Skip duplicate GitHub/hook dispatches within this window (rapid saves / multi-upload). */
+export const FRONTEND_REBUILD_DEBOUNCE_KEY = '_admin_frontend_rebuild_at';
 export const FRONTEND_REBUILD_DEBOUNCE_MS = 120_000;
 
-/**
- * Leading-edge debounce: first save in a quiet period dispatches; further saves within
- * the window still purge cache (caller) but skip another full static rebuild.
- */
 export async function triggerFrontendRebuildDebounced(
   env: SiteRebuildEnv,
-  d1?: D1Database
-): Promise<void> {
-  if (!d1) {
-    await triggerFrontendRebuild(env);
-    return;
-  }
+  d1?: RebuildSettingsDb
+): Promise<FrontendRebuildResult> {
+  if (!d1) return triggerFrontendRebuild(env);
   const now = Date.now();
   try {
-    const row = await d1
-      .prepare('SELECT value FROM site_settings WHERE key = ?')
-      .bind(FRONTEND_REBUILD_DEBOUNCE_KEY)
-      .first<{ value: string }>();
+    const row = await d1.prepare('SELECT value FROM site_settings WHERE key = ?')
+      .bind(FRONTEND_REBUILD_DEBOUNCE_KEY).first<{ value: string }>();
     const last = row?.value ? Number(row.value) : 0;
     if (Number.isFinite(last) && now - last < FRONTEND_REBUILD_DEBOUNCE_MS) {
-      return;
+      return { status: 'scheduled', transport: 'github', refs: [] };
     }
-    const at = new Date().toISOString();
-    await d1
-      .prepare(
-        `INSERT INTO site_settings (key, value, updated_at) VALUES (?, ?, ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
-      )
-      .bind(FRONTEND_REBUILD_DEBOUNCE_KEY, String(now), at)
-      .run();
+    await d1.prepare(`INSERT INTO site_settings (key, value, updated_at) VALUES (?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+      .bind(FRONTEND_REBUILD_DEBOUNCE_KEY, String(now), new Date().toISOString()).run();
   } catch (err) {
     console.error('[site-rebuild] debounce read/write failed — dispatching anyway', err);
   }
-  await triggerFrontendRebuild(env);
+  return triggerFrontendRebuild(env);
 }

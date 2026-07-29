@@ -29,7 +29,7 @@ Editors never run them; once configured, every Save handles publish for the team
 | Secret | Purpose |
 |--------|---------|
 | `PURGE_KEY` | Must **match** `esperanza-api`. Busts edge cache so live fetches see fresh D1. |
-| `GITHUB_DISPATCH_TOKEN` | Fine-grained GitHub PAT (`Actions: read and write` on `esperanza-frontend`). Triggers `deploy.yml` after saves so baked HTML updates (~5–15 min). |
+| `GITHUB_DISPATCH_TOKEN` | Fine-grained GitHub PAT (`Actions: read and write` on `esperanza-frontend`). Triggers `deploy.yml` after saves so baked HTML usually updates in about 2 minutes; allow up to 7 minutes for a cached page. |
 | `INGEST_TRIGGER_TOKEN` | Must **match** `esperanza-ingest`. Powers **Sync now** on the Dashboard. |
 
 Optional: `FRONTEND_DEPLOY_HOOK_URL` instead of `GITHUB_DISPATCH_TOKEN` (POST deploy hook).
@@ -57,8 +57,9 @@ admin and ingest — a Full Admin must align both secrets.
    only the teaser page.
 2. **Hard-refresh** the page (Cmd+Shift+R) — your browser may be showing its
    own cached copy.
-3. **Wait one minute** for live islands, or **~10–15 minutes** after a save if the
-   change is in baked HTML (wait for the automatic frontend deploy to finish).
+3. **Wait one minute** for live islands, or **usually about 2 minutes; allow up to 7 minutes**
+   after a save if the change is in baked HTML (for the automatic frontend deploy and any
+   cached page to expire).
 4. **Is the field synced (locked)?** If you edited upstream in MarkSystems,
    it appears after the next 4-hour sync. If you need it now, hit **Sync now**
    on the Dashboard, or use `Unlock to override`.
