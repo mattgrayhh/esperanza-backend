@@ -129,6 +129,125 @@ availability onto it in both directions; see the publish/unpublish bullets below
   the parity WARN for a human). Publishing is **suppressed on a truncated run** (same
   `< 50%` Snowflake-shrink signal as the unpublish guard), so a partial result can never
   mass-flip visibility. See `packages/ingest/test/republish.test.ts`.
+- **Readiness gate on auto-publish (★, 2026-07-28):** presence in Snowflake plus an image
+  is **not** enough. Snowflake lists a home from the moment it is a graded pad, so those
+  two conditions alone published `Build Pad` and `Preliminary Plan Review` rows with
+  move-in dates out to 2027-02-26 — published QMIs went 112 → 262 and marketing reported
+  homes going live that nobody published. A home is auto-publishable only when it is
+  **finished** (`isReadyConstructionStage`, i.e. `Buyer Sign Off`) **or due within
+  `PUBLISH_HORIZON_DAYS` (120)**. The horizon is not arbitrary: a scrape of the legacy
+  O'Neill listing on 2026-07-28 showed 121 homes whose availability envelope stopped dead
+  at NOV/DEC 2026, ~120 days out. The gate judges the **incoming** Snowflake stage/date
+  with `override_move_in_date` winning — the same COALESCE `v_public_qmi` applies, so it
+  decides on what a visitor would actually see. A missing date is never publishable.
+  `?force=1` releases the staging **cap**, NOT the readiness gate. Rejections are counted
+  separately in `sync_log` as "withheld by readiness gate" so they are never mistaken for
+  a reviewable backlog. See `packages/ingest/test/publish-readiness-gate.test.ts`.
+  The gate reads **effective** values — `override_construction_stage` and
+  `override_move_in_date` win over the incoming Snowflake value, which wins over the D1
+  copy — so an admin hold on the stage is honoured instead of being overruled by the raw
+  feed on the next cycle, and an admin *correcting* a stale feed stage does get the home
+  published. A blank incoming stage falls back to D1 rather than reading as "not ready"
+  (Snowflake coerces null text to `''`, which `??` would not skip).
+  To retro-apply the rule to already-published homes:
+  `npx tsx scripts/reconcile-published-readiness.ts --remote` (dry-run; `--apply` writes).
+  It holds **model homes** out of the unpublish set and lists them separately — they are
+  deliberately marketed early, and nothing records who published a row, so tearing one
+  down automatically is the more expensive mistake. Model-home status is read as
+  `COALESCE(override_is_model_home, synced_is_model_home, 0)`, matching the views.
+- **The gate is re-checked at apply time, not just at diff time (2026-07-28 review):** a
+  queue message carries only a qmi id, so it is an *intent* recorded when the diff ran, and
+  Queues may deliver it late or retry it. `applyQmiPublish` therefore re-evaluates
+  `isPublishReady` against the row as it stands **now** (override → D1 synced) and skips
+  with a `[ingest:publish] SKIPPED` warning if the home stopped qualifying. This is
+  deliberately fail-closed: queue ordering is not guaranteed, so if this run's
+  `qmi.upsert` has not landed yet the publish is skipped and the next cycle does it — a
+  one-cycle delay is the right trade against publishing a pad. It also means an admin hold
+  placed *after* the message was queued still wins.
+- **Readiness drift is REPORTED, never auto-unpublished (2026-07-28, reviews 1 and 3-6):**
+  the gate governs the *moment of publication* only. A home published while it sat inside
+  the horizon can slip out later (the builder pushes the move-in date, or the stage
+  regresses), and the unpublish leg would not notice because it triggers on **absence from
+  Snowflake**, not on readiness.
+
+  This is also the one ordering no freshness rule can close. Run *N* publishes a home
+  validly and commits; run *N+1* then reports it unready. Nothing was stale, so rejecting
+  late messages cannot help — closing it needs the newer decision to actively retract.
+  Round 3 of review was right to keep pressing on this.
+
+  **Every drifted home — machine-published or human-published — is counted and named in
+  `sync_log` and left live.** There is no provenance split and no per-run retraction cap;
+  `DRIFT_UNPUBLISH_MAX_PER_RUN` no longer exists. **Nothing in this leg can take a live
+  listing down.** Acting on drift is a human decision, run through the reviewed
+  `reconcile-published-readiness.ts`.
+
+  Auto-retraction was built (review round 3) and **withdrawn (round 5)**. Retracting only
+  "what the machine published" requires knowing who owns a live home's publication *at the
+  moment the retraction lands*, and that signal does not exist today:
+
+  - `audit_log` cannot supply it. The real QMI admin control is `gate="status"` →
+    `setStatus`, which changes `published` but audits `field='status'`, so any provenance
+    query over `field='published'` is blind to the actual human path. And both
+    `togglePublished` and `setStatus` insert their audit row **after** the flip commits
+    (`postWrite`, `actions.ts`), leaving a window where a home is live with no row naming
+    its owner — a duplicate delivery inside that window retracts a human's publication.
+  - No existing column can stand in. `updated_at` is the only one every writer sets
+    atomically with `published`, but ingest churns it with its own upserts in the same run,
+    so compare-and-setting on it would refuse every retraction.
+
+  Closing it properly means a publication-owner marker written in the **same statement** as
+  every `published` change, by all four writers (`setStatus`, `togglePublished`, ingest,
+  `scripts/reconcile-published-readiness.ts`). That is a schema decision — `qmi` sits at 99
+  of D1's 100-column cap, so it is the last column or a side table plus an atomic admin
+  batch — and it is **deferred to its own reviewed change**. See
+  `packages/ingest/src/diff.ts` (`READINESS DRIFT` block) for the full reasoning.
+
+  **The cleanup backlog is untouched by this leg** either way — those rows predate
+  attribution and nothing here unpublishes anything.
+- **Machine publishes are attributed (2026-07-28):** every ingest flip of `published`
+  writes an `audit_log` row (`actor = ingest-autopublish`, action `publish`/`unpublish`)
+  in addition to `sync_log`. Before this, the ingest wrote only `sync_log` while the
+  admin's edit history reads `audit_log`, so ~150 auto-published homes appeared with no
+  actor and editors could not tell who had published them. No-op flips write no row.
+  The admin renders the actor as "Snowflake sync (auto-publish)". See
+  `packages/ingest/test/machine-publish-audit.test.ts`.
+  **Atomic, not best-effort (2026-07-28 review):** the flip and its `audit_log` row go out
+  as one `DB.batch` — a single D1 transaction — so a home never changes state without a row
+  saying who changed it. If the audit write fails the flip rolls back and the queue message
+  is rejected: it retries independently and lands in the DLQ (visible in `sync_log`) after
+  `max_retries`. That is the deliberate trade — a publish deferred a cycle is recoverable,
+  a silently unattributed live home is the bug this feature exists to end.
+- **The consumer re-checks the producer's preconditions (2026-07-28 review):** stage,
+  move-in date **and** `image_url`, all override-first from current D1 state.
+- **Queue intents carry a producer run sequence, and the publish flip is a compare-and-set
+  (★, 2026-07-28 review round 2, migration `0031_sync_run_seq`):** re-reading current D1
+  state is **not sufficient on its own**, because Queues delivery is unordered and
+  retryable. Three schedules were reproduced against the previous head:
+  1. an older `qmi.publish` executes, passes against its own run's data, and is then
+     overtaken by a newer unready `qmi.upsert` → home live at `Build Pad`;
+  2. the home leaves the Snowflake available set; the newer run emits no unpublish because
+     the row was still hidden when it took its snapshot, so a delayed publish revives it;
+  3. an admin override lands between the readiness `SELECT` and the write, which guarded
+     only `published = 0` → published over the hold.
+
+  `runIngest` now bumps a single monotonic counter (`sync_run_seq`, under `sync_lock`)
+  **before** it enqueues anything and stamps every QMI intent with it. The consumer refuses
+  any intent whose run has been superseded — that closes (1) and (2), which both require
+  the stale intent to run after a newer run began. An **unstamped** publish intent (a
+  pre-0031 message in flight across a deploy) is refused too; the cost is one cycle,
+  because publish candidates are re-derived from D1 every run. Schedule (3) happens inside
+  a single run and no sequence number can see it, so the publish message additionally
+  carries the **effective stage / move-in date it was decided on**, and the flip is a
+  compare-and-set on those values plus `image_url` in the same statement as the `audit_log`
+  insert. Anything that moves in that window changes nothing and writes no audit row.
+  A consequence worth knowing: a publish intent that arrives **before its own run's**
+  upsert sees pre-run values, mismatches, and waits a cycle. That is the fail-closed
+  direction, and it is why the counter is bumped before the enqueue rather than after.
+  See `packages/ingest/src/run-seq.ts` and
+  `packages/ingest/test/publish-intent-freshness.test.ts`.
+
+  **`sync_log` names the run** (`producer run N enqueued …`, `… (producer run N)` on the
+  consumer row), so a stale-intent skip can be traced to the run that emitted it.
 - **Availability text** (e.g. "Available JUN 2026" / "Available Now") is auto-derived from
   the move-in date (`src/availability.ts`) — but only if marketing hasn't written custom
   copy. Hand-authored availability text survives.

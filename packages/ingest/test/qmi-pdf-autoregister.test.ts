@@ -24,6 +24,7 @@ const BASE = 'https://esperanza-pdf.example.workers.dev';
 function upsertMsg(over: Partial<QmiUpsertMessage>): QmiUpsertMessage {
   return {
     kind: 'qmi.upsert',
+    runSeq: 1,
     snowflakeKey: '006LP00000099',
     qmiId: null,
     values: { eciKey: '006LP00000099' },

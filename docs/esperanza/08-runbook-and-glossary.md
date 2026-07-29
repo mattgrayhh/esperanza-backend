@@ -158,7 +158,9 @@ Activity page keeps showing the old `success` at the top of the list.
 
 This is exactly what happened 2026-07-19 → 07-26: `0029_sync_lock.sql` shipped to code but
 not to remote D1, so every cron threw `no such table: sync_lock` for six days while the
-admin showed green.
+admin showed green. `0031_sync_run_seq.sql` is the same shape of dependency — the producer
+claims its run sequence before it touches Snowflake, so a missing table fails the run
+loudly (an `error` row in `sync_log`, not silence). Apply migrations before deploying.
 
 Diagnose by **age**, not status:
 ```bash
@@ -171,6 +173,28 @@ now both show a red "sync is behind" banner past 12 h (three missed cron slots),
 `/health/sync` returns 503 so an external monitor can page someone. **Point the uptime
 monitor at `/health/sync`, not `/health`** — `/health` is a hard-coded `{ ok: true }` and
 was green throughout the outage.
+
+### "A home shows published in the admin but nobody on the team published it"
+The **ingest can publish**, not just unpublish. Check Activity — machine flips now record
+an `audit_log` row with actor **"Snowflake sync (auto-publish)"**. If the home is unbuilt
+or its move-in date is far out, that is the bug the readiness gate closes; check
+`sync_log` for a "withheld by readiness gate" count, and see
+[doc 02](./02-module-ingest.md).
+
+Homes published before the gate existed (2026-07-26 → 07-28) can be cleaned up with:
+```bash
+cd packages/db && npx tsx scripts/reconcile-published-readiness.ts --remote   # dry-run
+```
+Read the printed list, then re-run with `--apply`.
+
+If a home went live with **no** `audit_log` row at all, look for a
+`[ingest:publish] SKIPPED … stale publish intent` in Workers Logs and compare the run
+numbers: the counter in `sync_run_seq` is the current run, and the producer's `sync_log`
+note names the run that emitted each batch.
+```bash
+npx wrangler d1 execute esperanza --remote --command \
+  "SELECT seq, at FROM sync_run_seq WHERE name = 'ingest';"
+```
 
 ### "My remote migration failed but local passed"
 You likely hit the **D1 100-column limit** (or another remote-only limit) that local SQLite

@@ -108,7 +108,7 @@ describe('override survival across a full ingest cycle', () => {
     };
 
     const existing = readExistingQmis(db);
-    const { messages, stats } = diff([sfRow], [], existing, emptyLookups());
+    const { messages, stats } = diff([sfRow], [], existing, emptyLookups(), [], [], [], new Map(), false, undefined, 1);
 
     // exactly one upsert for the matched existing row (not a create)
     expect(stats.qmisCreated).toBe(0);
@@ -172,7 +172,7 @@ describe('override survival across a full ingest cycle', () => {
       lotNumber: null,
 
     };
-    const { messages } = diff([sfRow], [], readExistingQmis(db), emptyLookups());
+    const { messages } = diff([sfRow], [], readExistingQmis(db), emptyLookups(), [], [], [], new Map(), false, undefined, 1);
     for (const m of messages) await applyMessage(env, m);
 
     const eff = db.prepare(`SELECT bedroom_count FROM v_public_qmi WHERE id = 'recQMI1'`).get() as {

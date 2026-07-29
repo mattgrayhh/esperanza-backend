@@ -6,6 +6,7 @@
 // Message shapes the queue carries (one per changed record):
 //   { kind: 'qmi.upsert',  ... }   new spec OR changed existing
 //   { kind: 'qmi.unpublish', ... } sold/removed → force published=0 (NEVER =1)
+//   { kind: 'qmi.publish', ... }   re-available + imaged + ready → published=1
 //   { kind: 'community.upsert', ... } square_footage_range changed
 //
 // Link resolution (Decision #11): the producer resolves Floor Plan / Community /
@@ -22,12 +23,24 @@ import type {
   SnowflakeFloorPlanRow,
 } from './snowflake.js';
 import { squareFootageRange, countRange } from './snowflake.js';
+import { firstFilled, isPublishReady, todayIsoDate } from './availability.js';
 import type { SyncedQmiValues, SyncedCommunityValues, SyncedFloorPlanValues } from './synced.js';
 import { snowflakeKey } from './synced.js';
 
 // -- queue message contract --
 
-export interface QmiUpsertMessage {
+/**
+ * Producer run stamp carried by every QMI intent (migration 0031). The consumer
+ * refuses an intent whose run is no longer the current one — see run-seq.ts for the
+ * three delivery schedules that made a consumer-side state re-check insufficient on
+ * its own. Optional only so pre-0031 messages in flight across a deploy still type;
+ * an unstamped publish intent is treated as stale.
+ */
+export interface RunStamped {
+  runSeq?: number;
+}
+
+export interface QmiUpsertMessage extends RunStamped {
   kind: 'qmi.upsert';
   /** DM_HOUSE natural key (eci_key) — diff match key & importer coordination. */
   snowflakeKey: string;
@@ -43,7 +56,18 @@ export interface QmiUpsertMessage {
   ratifiedSalesPrice: number | null;
 }
 
-export interface QmiUnpublishMessage {
+/**
+ * SOLD/REMOVED: the home has left the Snowflake available set. Forces published = 0.
+ *
+ * Deliberately carries no readiness or provenance conditions, and the consumer applies
+ * it with no predicate beyond `published = 1` + run freshness. Absence from the feed is
+ * not a judgement that can be wrong at delivery time the way a readiness assessment
+ * can: the home is not for sale. A home wrongly taken down here is re-published by the
+ * next run's publish leg, which is the cheap direction. Review round 4 was explicit that
+ * this path should stay unconditional, and it is the ONLY path that forces published = 0
+ * unattended — readiness drift is reported for a human, never retracted (see diff()).
+ */
+export interface QmiUnpublishMessage extends RunStamped {
   kind: 'qmi.unpublish';
   snowflakeKey: string;
   qmiId: string;
@@ -54,10 +78,25 @@ export interface QmiUnpublishMessage {
  *  (guarded WHERE published=0). This is the PUBLISH direction ingest never had — a
  *  new/relisted available home used to stay invisible until a manual admin flip, which
  *  is why each parity audit re-found a different missing home (audit 2026-07-21). */
-export interface QmiPublishMessage {
+export interface QmiPublishMessage extends RunStamped {
   kind: 'qmi.publish';
   snowflakeKey: string;
   qmiId: string;
+  /**
+   * The EFFECTIVE stage / move-in date this publish decision was made on (override
+   * first, then this run's incoming Snowflake value, then D1 — see the publish leg).
+   * The consumer compare-and-sets on exactly these values, so the flip lands only
+   * while the row still says what the producer judged:
+   *
+   *   * the row has NOT yet received this run's upsert  → values differ → no publish
+   *     (the home waits one cycle rather than going live on pre-run data);
+   *   * an admin placed an override hold after the decision → differ → no publish;
+   *   * a newer run moved the stage or date → differ → no publish.
+   *
+   * Trimmed, and null for absent/blank — the same normalisation firstFilled applies,
+   * so the SQL comparison and the TypeScript predicate cannot disagree.
+   */
+  expect?: { stage: string | null; moveIn: string | null };
 }
 
 export interface CommunityUpsertMessage {
@@ -102,6 +141,12 @@ export interface ExistingQmi {
   synced_elevation: string | null;
   synced_construction_stage: string | null;
   synced_move_in_date: string | null;
+  /** Admin overrides. The publish gate judges the EFFECTIVE values (override wins),
+   *  matching the COALESCE v_public_qmi / v_preview_qmi apply (views.sql:33,125) — so it
+   *  decides on what a visitor would actually see, and an explicit admin hold on the
+   *  stage is honoured rather than overridden by the raw Snowflake feed. */
+  override_move_in_date?: string | null;
+  override_construction_stage?: string | null;
   synced_lot_number: string | null;
   synced_elevation_type: string | null;
   synced_material_type: string | null;
@@ -159,6 +204,16 @@ export interface DiffResult {
     qmisUnpublished: number;
     qmisPublished: number;
     qmisPublishHeld: number;
+    /** Candidates rejected by the readiness gate (unbuilt or beyond the horizon). Not a
+     *  backlog — these should NOT be released by ?force=1 either. */
+    qmisPublishNotReady: number;
+    /** ALREADY-published homes that no longer pass the readiness gate — the builder
+     *  pushed the move-in date out, or the stage regressed, after the home went live.
+     *  ALL of them, whoever published them: this leg is report-only and emits no
+     *  publication mutation (see the READINESS DRIFT block in diff()). */
+    qmisPublishedDrifted: number;
+    /** First few drifted ids, so /sync-status names them instead of only counting. */
+    driftedPublishedIds: string[];
     qmisInSnowflake: number;
     communitiesUpdated: number;
     floorPlansUpdated: number;
@@ -422,7 +477,21 @@ export function diff(
   existingFloorPlans: ExistingFloorPlan[] = [],
   communityPriceFrom: Map<string, number> = new Map(),
   /** Operator force: bypass the over-published fraction heuristic (see evaluateUnpublishGuard). */
-  forceUnpublish = false
+  forceUnpublish = false,
+  /** Injectable "today" (YYYY-MM-DD) for the publish readiness horizon. Tests pin it. */
+  todayIso: string = todayIsoDate(),
+  /**
+   * This run's sequence from sync_run_seq (migration 0031), stamped on every QMI intent
+   * so the consumer can refuse one that a later run has already superseded.
+   *
+   * Undefined leaves intents UNSTAMPED, and since review round 3 the consumer refuses
+   * every unstamped QMI mutation, not just publishes. So a caller that forgets this
+   * applies NOTHING to qmi rather than merely under-publishing. That is the safe
+   * direction — the next run re-derives every intent from D1 — but it is a bigger
+   * blast radius than the old wording implied, and tests that drive diff() → consumer
+   * end to end must pass it.
+   */
+  runSeq?: number
 ): DiffResult {
   const messages: SyncMessage[] = [];
   const stats = {
@@ -431,6 +500,10 @@ export function diff(
     qmisUnpublished: 0,
     qmisPublished: 0,
     qmisPublishHeld: 0,
+    qmisPublishedDrifted: 0,
+    driftedPublishedIds: [] as string[],
+    /** Withheld by the readiness gate (unbuilt / too far out) — NOT a backlog. */
+    qmisPublishNotReady: 0,
     qmisInSnowflake: snowflakeQmis.length,
     communitiesUpdated: 0,
     floorPlansUpdated: 0,
@@ -453,10 +526,16 @@ export function diff(
   }
 
   const snowflakeEcis = new Set<string>();
+  // Keyed Snowflake rows, so the publish gate can judge the INCOMING stage/move-in
+  // date rather than the possibly-stale D1 copy it is about to overwrite.
+  const snowflakeByEci = new Map<string, SnowflakeQmiRow>();
 
   for (const row of snowflakeQmis) {
     const key = snowflakeKey(row.eciKey);
-    if (key) snowflakeEcis.add(key);
+    if (key) {
+      snowflakeEcis.add(key);
+      snowflakeByEci.set(key, row);
+    }
 
     const { values, unresolved } = buildQmiSyncedValues(row, lookups);
     stats.unresolvedLinks += unresolved;
@@ -478,6 +557,7 @@ export function diff(
         isNew: true,
         slugSource: row.address || null,
         ratifiedSalesPrice: row.ratifiedSalesPrice,
+        runSeq,
       });
       stats.qmisCreated++;
     } else if (
@@ -493,6 +573,7 @@ export function diff(
         isNew: false,
         slugSource: null,
         ratifiedSalesPrice: row.ratifiedSalesPrice,
+        runSeq,
       });
       stats.qmisUpdated++;
     }
@@ -512,7 +593,7 @@ export function diff(
     eciKeyedCount++;
     if (e.published === 1) publishedEciCount++;
     if (!snowflakeEcis.has(k) && e.published === 1) {
-      unpublishCandidates.push({ kind: 'qmi.unpublish', snowflakeKey: k, qmiId: e.id });
+      unpublishCandidates.push({ kind: 'qmi.unpublish', snowflakeKey: k, qmiId: e.id, runSeq });
     }
   }
   const unpublishGuard = evaluateUnpublishGuard(
@@ -537,13 +618,54 @@ export function diff(
   // mass-publish; we still refuse to act on a shrunk run, matching the unpublish guard's
   // truncation signal. No batch cap — a large legit backlog SHOULD publish (that is the
   // fix), and a human still reviews via the parity WARN for any left un-imaged.
+  //
+  // READINESS GATE (2026-07-28). Presence-in-Snowflake + has-an-image is NOT sufficient:
+  // Snowflake lists a home from the moment it is a graded pad, so those two conditions
+  // alone published "Build Pad" and "Preliminary Plan Review" rows with move-in dates out
+  // to 2027-02-26 (published QMIs went 112 → 262, reported by the marketing team as homes
+  // going live that nobody published). A home is only auto-publishable when it is
+  // finished, or due inside PUBLISH_HORIZON_DAYS. See availability.ts for how the horizon
+  // was derived from the legacy listing. A human can still publish anything by hand —
+  // this gate governs the UNATTENDED path only.
   const publishCandidates: QmiPublishMessage[] = [];
   for (const e of existingQmis) {
     const k = snowflakeKey(e.eci_key);
     if (!k) continue;
-    if (snowflakeEcis.has(k) && e.published === 0 && (e.image_url ?? '').trim() !== '') {
-      publishCandidates.push({ kind: 'qmi.publish', snowflakeKey: k, qmiId: e.id });
+    if (!(snowflakeEcis.has(k) && e.published === 0 && (e.image_url ?? '').trim() !== '')) {
+      continue;
     }
+    // Judge the EFFECTIVE values a visitor would see: admin override first (the same
+    // COALESCE v_public_qmi applies), then this run's incoming Snowflake value — the run
+    // may be updating it — then the last-known-good D1 copy.
+    //
+    // Overrides must win. An admin who overrides the stage to hold a home back would
+    // otherwise be silently overruled by the raw feed on the next 4-hour cycle; and an
+    // admin correcting a stale Snowflake stage would never get the home published.
+    //
+    // firstFilled, not ??: snowflake.ts coerces a null CONSTRUCTION_STAGE to '' (String(x
+    // ?? '').trim()), and '' ?? fallback yields '', so a momentarily blank stage would be
+    // read as "not ready" instead of falling back to D1. moveInDate is properly nullable,
+    // but treat both the same way so the two lines cannot drift apart again.
+    const incoming = snowflakeByEci.get(k);
+    const stage = firstFilled(
+      e.override_construction_stage,
+      incoming?.constructionStage,
+      e.synced_construction_stage
+    );
+    const moveIn = firstFilled(e.override_move_in_date, incoming?.moveInDate, e.synced_move_in_date);
+    if (!isPublishReady(stage, moveIn, todayIso)) {
+      stats.qmisPublishNotReady++;
+      continue;
+    }
+    // Carry the values the decision was made on. The consumer compare-and-sets on them,
+    // so the flip cannot land on a row that has moved since — see QmiPublishMessage.
+    publishCandidates.push({
+      kind: 'qmi.publish',
+      snowflakeKey: k,
+      qmiId: e.id,
+      runSeq,
+      expect: { stage, moveIn },
+    });
   }
   const snowflakeShrunk =
     eciKeyedCount > 0 && snowflakeQmis.length < UNPUBLISH_GUARD_MIN_SNOWFLAKE_RATIO * eciKeyedCount;
@@ -557,6 +679,67 @@ export function diff(
     stats.qmisPublished = release.length;
     stats.qmisPublishHeld = publishCandidates.length - release.length;
   }
+
+  // ── READINESS DRIFT on already-live homes — REPORTED, NEVER RETRACTED ────────────
+  // The publish gate governs the MOMENT OF PUBLICATION and nothing else. A home that was
+  // legitimately published while it sat inside the horizon can later fall outside it —
+  // the builder pushes the move-in date, or the construction stage regresses — and the
+  // unpublish leg would not notice, because it triggers on ABSENCE from Snowflake, not on
+  // readiness. So this leg exists to SURFACE that condition for a human.
+  //
+  // IT DELIBERATELY DOES NOT AUTO-UNPUBLISH, and the history is worth keeping because the
+  // reasoning is not obvious (reviews rounds 3-5, 2026-07-28):
+  //
+  // Round 3 correctly observed that this is the one ordering no freshness rule can close —
+  // run N publishes home X validly and commits, run N+1 then reports X unready, nothing is
+  // stale, so no late-message rule can help. It offered two remedies: a durable per-QMI
+  // publication owner/revision, or a sequenced unpublish for machine-published inventory.
+  //
+  // Rounds 4 and 5 then took the second remedy apart. Retracting only "what the machine
+  // published" requires knowing WHO owns a live home's publication at the moment the
+  // retraction lands, and that ownership signal does not exist:
+  //
+  //   * `audit_log` cannot supply it. The real QMI admin control is gate="status" →
+  //     setStatus, which changes `published` but audits `field='status'`, so any
+  //     provenance query over `field='published'` is blind to the actual human path
+  //     (round 5). And `togglePublished`/`setStatus` both insert their audit row AFTER
+  //     the flip commits (postWrite, actions.ts), leaving a window in which a home is
+  //     live with no row yet naming its owner — a duplicate delivery inside that window
+  //     retracts a human's publication (round 5).
+  //   * No existing column can stand in. `updated_at` is the only one every writer sets
+  //     atomically with `published`, but ingest churns it with its own upserts in the
+  //     same run, so compare-and-setting on it would refuse every retraction.
+  //
+  // Closing it properly means a publication-owner marker written in the SAME statement as
+  // every `published` change, by all four writers (setStatus, togglePublished, ingest, and
+  // scripts/reconcile-published-readiness.ts). That is a schema decision — `qmi` sits at
+  // 99 of D1's 100-column cap, so it is the last column or a side table plus an atomic
+  // admin batch — and it belongs in its own reviewed change, not bolted onto this gate.
+  //
+  // Until then the honest posture is the one this PR started with: count it, name the
+  // homes in sync_log, and let a human decide. Nothing here can take a live listing down.
+  const drifted: string[] = [];
+  for (const e of existingQmis) {
+    if (e.published !== 1) continue;
+    const k = snowflakeKey(e.eci_key);
+    // Not in the available set → the unpublish leg already owns this row; flagging it
+    // here too would double-report the same home.
+    if (!k || !snowflakeEcis.has(k)) continue;
+    const incoming = snowflakeByEci.get(k);
+    const stage = firstFilled(
+      e.override_construction_stage,
+      incoming?.constructionStage,
+      e.synced_construction_stage
+    );
+    const moveIn = firstFilled(e.override_move_in_date, incoming?.moveInDate, e.synced_move_in_date);
+    if (isPublishReady(stage, moveIn, todayIso)) continue;
+    drifted.push(e.id);
+  }
+
+  stats.qmisPublishedDrifted = drifted.length;
+  // Capped: this string lands in a sync_log message, and naming 100+ ids would bury the
+  // rest of the run's summary. The count is the signal; the ids are a starting point.
+  stats.driftedPublishedIds = drifted.slice(0, 20);
 
   // Communities: sqft range + bed/bath ranges + price_from (0007), with change
   // detection so an unchanged community emits NO message (no needless queue churn).

@@ -28,6 +28,62 @@ export function todayIsoDate(): string {
 }
 
 /**
+ * First value that is neither null/undefined nor blank-after-trim, TRIMMED. Unlike `??`,
+ * this skips the empty strings the Snowflake parser produces for null text columns
+ * (String(x ?? '').trim()), where `'' ?? fallback` would yield '' and read as a real
+ * value. Lives here, beside the gate, because BOTH the producer (diff.ts) and the queue
+ * consumer resolve effective override→feed→D1 values with it and the two must not drift.
+ *
+ * The result is trimmed because it is also the value the publish intent carries and the
+ * consumer compare-and-sets on in SQL (`COALESCE(NULLIF(TRIM(override),''), …) IS ?`).
+ * Returning the raw value would let a padded ' Buyer Sign Off ' from the feed compare
+ * unequal to its own trimmed column expression and silently refuse to publish.
+ */
+export function firstFilled(...vals: Array<string | null | undefined>): string | null {
+  for (const v of vals) {
+    const s = v == null ? '' : String(v).trim();
+    if (s !== '') return s;
+  }
+  return null;
+}
+
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
+
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+/**
+ * Parse an EXACT YYYY-MM-DD string that is also a real day on the calendar.
+ * Returns null for a wrong-length/shape string, a trailing suffix of any kind, a
+ * month outside 1-12, or a day past that month's real length (Feb 29 honours the
+ * Gregorian leap rule; Feb 30, Apr 31, Jun 31, Sep 31, Nov 31 are all rejected).
+ *
+ * Exists because a shape-only check plus a lexicographic `<=` treats an impossible
+ * date as a valid one: '2026-02-31' sorts inside any horizon ending later in the
+ * year, so the publish gate would accept a home whose move-in date does not exist.
+ * Every one of the 375 non-null synced_move_in_date and 41 override_move_in_date
+ * values in production is exactly 10 chars and a real calendar day (checked
+ * 2026-07-28), so demanding the exact shape rejects nothing that is live today —
+ * it closes the door on a corrupt feed value, which is the only way one arrives.
+ */
+export function parseIsoCalendarDate(
+  value: string | null | undefined
+): { year: number; month: number; day: number; iso: string } | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? '').trim());
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (month < 1 || month > 12) return null;
+  // month is already proven 1-12, so the ?? branch is unreachable; it satisfies
+  // noUncheckedIndexedAccess and fails closed (rejects the date) if it ever were not.
+  const maxDay = month === 2 && isLeapYear(year) ? 29 : (DAYS_IN_MONTH[month - 1] ?? 0);
+  if (day < 1 || day > maxDay) return null;
+  return { year, month, day, iso: `${m[1]}-${m[2]}-${m[3]}` };
+}
+
+/**
  * Derive the canonical availability text from an effective move-in date
  * (YYYY-MM-DD, as stored in synced_move_in_date / override_move_in_date).
  *
@@ -49,6 +105,85 @@ export function isReadyConstructionStage(stage: string | null | undefined): bool
   return READY_STAGES.has(String(stage ?? '').trim().toLowerCase());
 }
 
+// ── Auto-publish horizon ─────────────────────────────────────────────────────
+// How far out a still-under-construction home may be and still be worth showing
+// as available inventory.
+//
+// Derived from the legacy O'Neill listing rather than assumed. Scrape of
+// www.esperanzahomes.com/new-homes/available/ on 2026-07-28 (121 homes):
+//   Available Now 44 · JUL/AUG 20 · AUG/SEP 23 · SEP/OCT 15 · OCT/NOV 13 ·
+//   NOV/DEC 4 · MAY/JUN + JUN/JUL 2 · nothing in 2027 at all.
+// The envelope stops dead at NOV/DEC 2026 — ~120 days out from that date. So 120
+// days reproduces the business rule the sales side has been running for years.
+//
+// Without this gate the auto-publish leg (diff.ts) published on presence-in-Snowflake
+// + has-an-image alone, which put graded pads and "Preliminary Plan Review" rows on
+// the site with move-in dates as far out as 2027-02-26 (2026-07-28 incident: published
+// QMIs went 112 → 262).
+export const PUBLISH_HORIZON_DAYS = 120;
+
+/** todayIso + days, as a YYYY-MM-DD string. UTC calendar space, same as D1 dates. */
+export function addDays(todayIso: string, days: number): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(todayIso.trim());
+  if (!m) return todayIso;
+  const t = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) + days * 86_400_000;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+/**
+ * True when an effective move-in date is inside the publish horizon. A missing date,
+ * a malformed one, or one that is not a real calendar day is NOT within the horizon —
+ * we refuse to publish a home whose timing we cannot establish, since the availability
+ * badge would have nothing honest to say.
+ *
+ * Strict (parseIsoCalendarDate) rather than shape-only on purpose: this comparison is
+ * lexicographic, so an impossible date like '2026-02-31' would otherwise sort inside
+ * the horizon and publish. The gate is the fail-closed side of this module — see
+ * deriveAvailabilityText for why *rendering* is deliberately more forgiving.
+ */
+export function isWithinPublishHorizon(
+  isoDate: string | null | undefined,
+  todayIso: string = todayIsoDate(),
+  horizonDays: number = PUBLISH_HORIZON_DAYS
+): boolean {
+  const parsed = parseIsoCalendarDate(isoDate);
+  if (!parsed) return false;
+  return parsed.iso <= addDays(todayIso, horizonDays);
+}
+
+/**
+ * The auto-publish readiness gate: a home may be published unattended only when it
+ * is finished, or is due inside the horizon.
+ *
+ * `effectiveMoveInDate` must be override_move_in_date ?? synced/Snowflake move-in date —
+ * the same COALESCE the public views apply, so the gate judges what a visitor would see.
+ */
+export function isPublishReady(
+  constructionStage: string | null | undefined,
+  effectiveMoveInDate: string | null | undefined,
+  todayIso: string = todayIsoDate(),
+  horizonDays: number = PUBLISH_HORIZON_DAYS
+): boolean {
+  if (isReadyConstructionStage(constructionStage)) return true;
+  return isWithinPublishHorizon(effectiveMoveInDate, todayIso, horizonDays);
+}
+
+/**
+ * NOTE ON STRICTNESS — deliberately NOT the gate's strict parser.
+ *
+ * The output here is month-granular ("Available FEB/MAR 2026"), so the day-of-month is
+ * not an input to it at all: a corrupt '2026-02-31' still yields exactly the right
+ * window. Rejecting it would return null, which leaves availability_text absent, and an
+ * absent availability_text makes the badge fall back to the raw ISO date — putting the
+ * literal string "2026-02-31" in front of a visitor. That is strictly worse output than
+ * the correct month window, so this stays prefix-tolerant.
+ *
+ * The asymmetry is the point, and it runs in the safe direction: the GATE fails closed
+ * (a date it cannot fully trust never publishes a home), while RENDERING degrades
+ * gracefully (given a date, say the most sensible true thing about it). A corrupt date
+ * therefore cannot put a home on the site, and if a human publishes one by hand anyway,
+ * the badge still reads sensibly.
+ */
 export function deriveAvailabilityText(
   isoDate: string | null | undefined,
   todayIso: string = todayIsoDate(),
