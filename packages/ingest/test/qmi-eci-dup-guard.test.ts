@@ -68,12 +68,18 @@ describe('qmi eci_key duplicate guard', () => {
     const legacy = new Database(':memory:');
     legacy.exec(PRE_0032_SQL);
     legacy.prepare(
-      `INSERT INTO qmi (id, eci_key, synced_construction_stage, synced_move_in_date, published, slug, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 1, ?, ?, ?)`
-    ).run('older', ECI, 'No Schedule Assigned', null, '4122-westway-court', '2026-07-27T12:00:00Z', '2026-07-27T12:00:01Z');
+      `INSERT INTO qmi (
+         id, eci_key, synced_construction_stage, synced_move_in_date, published, slug,
+         override_price, override_address, preferred_promotion_id, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      'older', ECI, 'No Schedule Assigned', null, '4122-westway-court',
+      415000, '4122 Westway Court Apt B', 'promo-abc',
+      '2026-07-27T12:00:00Z', '2026-07-27T12:00:01Z'
+    );
     legacy.prepare(
       `INSERT INTO qmi (id, eci_key, synced_construction_stage, synced_move_in_date, published, slug, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 1, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, 0, ?, ?, ?)`
     ).run('newer', ECI, 'Final Design Review Meeting', '2027-01-13', '4122-westway-court', '2026-07-27T12:00:00Z', '2026-07-27T12:00:02Z');
     legacy.prepare(
       `INSERT INTO audit_log (entity, entity_id, field, action) VALUES ('qmi', 'older', 'published', 'publish')`
@@ -84,12 +90,37 @@ describe('qmi eci_key duplicate guard', () => {
 
     legacy.exec(MIGRATION_SQL);
 
-    expect(legacy.prepare(`SELECT id FROM qmi WHERE eci_key = ?`).all(ECI)).toEqual([{ id: 'newer' }]);
+    expect(
+      legacy.prepare(
+        `SELECT id, published, override_price, override_address, preferred_promotion_id
+           FROM qmi WHERE eci_key = ?`
+      ).all(ECI)
+    ).toEqual([{
+      id: 'newer',
+      published: 1,
+      override_price: 415000,
+      override_address: '4122 Westway Court Apt B',
+      preferred_promotion_id: 'promo-abc',
+    }]);
     expect(legacy.prepare(`SELECT entity_id FROM audit_log`).get()).toEqual({ entity_id: 'newer' });
     expect(legacy.prepare(`SELECT entity_id FROM pdf_renders`).get()).toEqual({ entity_id: 'newer' });
     expect(() =>
       legacy.prepare(`INSERT INTO qmi (id, eci_key) VALUES ('third', ?)`).run(ECI)
     ).toThrow(/UNIQUE constraint failed: qmi\.eci_key/);
+  });
+
+  it('normalizes multiple blank natural keys to NULL before creating the unique index', () => {
+    const legacy = new Database(':memory:');
+    legacy.exec(PRE_0032_SQL);
+    legacy.prepare(`INSERT INTO qmi (id, eci_key) VALUES ('blank-1', '')`).run();
+    legacy.prepare(`INSERT INTO qmi (id, eci_key) VALUES ('blank-2', '   ')`).run();
+
+    legacy.exec(MIGRATION_SQL);
+
+    expect(legacy.prepare(`SELECT id, eci_key FROM qmi ORDER BY id`).all()).toEqual([
+      { id: 'blank-1', eci_key: null },
+      { id: 'blank-2', eci_key: null },
+    ]);
   });
 
   it('the database boundary rejects a duplicate natural key', () => {
