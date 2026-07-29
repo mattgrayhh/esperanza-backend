@@ -67,9 +67,10 @@ export function actorName(actor: string | null): string {
   if (!actor) return 'System';
   if (actor === 'ingest') return 'Snowflake sync';
   // Machine flips of `published`. Before these existed the ingest wrote only sync_log,
-  // so an auto-published home showed no actor anywhere in the admin and editors could
-  // not tell who had put it live (2026-07-28). Label them plainly.
+  // so a machine-published or removed home showed no actor anywhere in the admin and
+  // editors could not tell why its publication state changed (2026-07-28).
   if (actor === 'ingest-autopublish') return 'Snowflake sync (auto-publish)';
+  if (actor === 'ingest-snowflake-departure') return 'Snowflake sync (removed from feed)';
   if (actor === 'readiness-reconcile') return 'Readiness cleanup';
   if (actor === 'cron') return 'Scheduled job';
   return actor.split('@')[0] ?? actor;

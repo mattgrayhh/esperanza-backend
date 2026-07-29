@@ -181,42 +181,31 @@ availability onto it in both directions; see the publish/unpublish bullets below
   listing down.** Acting on drift is a human decision, run through the reviewed
   `reconcile-published-readiness.ts`.
 
-  Auto-retraction was built (review round 3) and **withdrawn (round 5)**. Retracting only
-  "what the machine published" requires knowing who owns a live home's publication *at the
-  moment the retraction lands*, and that signal does not exist today:
-
-  - `audit_log` cannot supply it. The real QMI admin control is `gate="status"` →
-    `setStatus`, which changes `published` but audits `field='status'`, so any provenance
-    query over `field='published'` is blind to the actual human path. And both
-    `togglePublished` and `setStatus` insert their audit row **after** the flip commits
-    (`postWrite`, `actions.ts`), leaving a window where a home is live with no row naming
-    its owner — a duplicate delivery inside that window retracts a human's publication.
-  - No existing column can stand in. `updated_at` is the only one every writer sets
-    atomically with `published`, but ingest churns it with its own upserts in the same run,
-    so compare-and-setting on it would refuse every retraction.
-
-  Closing it properly means a publication-owner marker written in the **same statement** as
-  every `published` change, by all four writers (`setStatus`, `togglePublished`, ingest,
-  `scripts/reconcile-published-readiness.ts`). That is a schema decision — `qmi` sits at 99
-  of D1's 100-column cap, so it is the last column or a side table plus an atomic admin
-  batch — and it is **deferred to its own reviewed change**. See
-  `packages/ingest/src/diff.ts` (`READINESS DRIFT` block) for the full reasoning.
+  Auto-retraction was built (review round 3) and **withdrawn (round 5)**. Ownership-based
+  retraction is still unsafe because historical publication ownership is incomplete and the
+  QMI table has no atomic owner marker. The forward-looking audit trail was tightened on
+  2026-07-29 instead: all four publication writers now converge on `field='published'`,
+  with human `setStatus` writes recording that row only when the underlying bit changes.
+  Live ↔ Coming Soon therefore retains its separate `field='status'` history without
+  inventing a publish/unpublish event. This makes future flips reconstructible, but does
+  not backfill or infer actors for historical gaps.
 
   **The cleanup backlog is untouched by this leg** either way — those rows predate
   attribution and nothing here unpublishes anything.
-- **Machine publishes are attributed (2026-07-28):** every ingest flip of `published`
-  writes an `audit_log` row (`actor = ingest-autopublish`, action `publish`/`unpublish`)
-  in addition to `sync_log`. Before this, the ingest wrote only `sync_log` while the
-  admin's edit history reads `audit_log`, so ~150 auto-published homes appeared with no
-  actor and editors could not tell who had published them. No-op flips write no row.
-  The admin renders the actor as "Snowflake sync (auto-publish)". See
-  `packages/ingest/test/machine-publish-audit.test.ts`.
-  **Atomic, not best-effort (2026-07-28 review):** the flip and its `audit_log` row go out
-  as one `DB.batch` — a single D1 transaction — so a home never changes state without a row
-  saying who changed it. If the audit write fails the flip rolls back and the queue message
-  is rejected: it retries independently and lands in the DLQ (visible in `sync_log`) after
-  `max_retries`. That is the deliberate trade — a publish deferred a cycle is recoverable,
-  a silently unattributed live home is the bug this feature exists to end.
+- **Machine publication changes are attributed (2026-07-28, refined 2026-07-29):** every
+  ingest flip of `published` writes an `audit_log` row in the same transaction as the
+  state change. Publish uses `actor = ingest-autopublish`; removal after a home leaves the
+  Snowflake available set uses `actor = ingest-snowflake-departure`. No-op flips write no
+  row. The admin renders these actors as "Snowflake sync (auto-publish)" and
+  "Snowflake sync (removed from feed)" respectively. See
+  `packages/ingest/test/machine-publish-audit.test.ts` and
+  `packages/admin/test/activity-format.test.ts`.
+  **Atomic, not best-effort:** the flip and its `audit_log` row go out as one `DB.batch` —
+  a single D1 transaction — so a home never changes state without a row saying why. If
+  the audit write fails the flip rolls back and the queue message is rejected: it retries
+  independently and lands in the DLQ (visible in `sync_log`) after `max_retries`. That is
+  the deliberate trade — a change deferred a cycle is recoverable; a silently
+  unattributed publication change is the bug this feature exists to end.
 - **The consumer re-checks the producer's preconditions (2026-07-28 review):** stage,
   move-in date **and** `image_url`, all override-first from current D1 state.
 - **Queue intents carry a producer run sequence, and the publish flip is a compare-and-set
