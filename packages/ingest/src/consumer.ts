@@ -278,40 +278,23 @@ async function applyQmiUpsert(
   // Defense-in-depth: no forbidden column may be present.
   assertQmiPatchAllowed(patch);
 
-  // Dup guard (0025; real incident: 4122 Westway Court inserted twice with the same
-  // eci_key 003HC00000046 when the diff missed the existing row). eci_key is the
-  // DM_HOUSE natural key — if a row already carries this one, route the message to
-  // the UPDATE path against that row instead of inserting a duplicate.
-  if (msg.isNew && patch['eci_key'] != null) {
-    const dup = await env.DB.prepare('SELECT id FROM qmi WHERE eci_key = ?')
-      .bind(patch['eci_key'])
-      .first<{ id: string }>();
-    if (dup) msg = { ...msg, isNew: false, qmiId: dup.id };
-  }
-
   if (msg.isNew) {
-    // INSERT new spec: published=0, seed slug from address, plus the synced patch.
-    // availability_text (derived, NOT part of the synced allow-list — see header)
-    // is seeded from the move-in date so the availability badge never falls back
-    // to the raw ISO date. No date → leave it absent (NULL).
+    // Atomically insert-or-update on the Snowflake natural key. A former SELECT-then-
+    // INSERT duplicate guard left a race: two deliveries could both observe no row and
+    // both insert. The unique index plus ON CONFLICT makes the identity decision inside
+    // this statement. RETURNING tells us which path won without another racy lookup.
     const slug = msg.slugSource ? deriveSlug(msg.slugSource) : null;
-    const id = newQmiId();
+    const proposedId = newQmiId();
     const availabilityText = deriveAvailabilityText(
       msg.values.moveInDate,
       undefined,
       msg.values.constructionStage
     );
-    // Header image: a new housenumber usually already carries a floor plan, so seed
-    // qmi.image_url from that plan's rendering. image_url is admin-owned (NOT in the
-    // synced allow-list — see synced.ts), so the seed lives here outside applySynced,
-    // the same "derived, seed-on-insert, never-clobber-on-update" path availability_text
-    // uses. The marketing user can override it; with it set, the home renders on the
-    // /new-homes/available listing (which hides imageless cards). NULL → leave absent.
     const seedImageUrl = msg.values.floorPlanId
       ? await floorPlanImageUrl(env, msg.values.floorPlanId)
       : null;
     const cols = ['id', 'published', 'slug', 'created_at', 'updated_at', ...Object.keys(patch)];
-    const vals: unknown[] = [id, 0, slug, nowIso(), nowIso(), ...Object.values(patch)];
+    const vals: unknown[] = [proposedId, 0, slug, nowIso(), nowIso(), ...Object.values(patch)];
     if (availabilityText !== null) {
       cols.push('availability_text');
       vals.push(availabilityText);
@@ -321,28 +304,46 @@ async function applyQmiUpsert(
       vals.push(seedImageUrl);
     }
     const placeholders = cols.map(() => '?').join(', ');
-    // INSERT … SELECT … WHERE rather than INSERT … VALUES, so the run-sequence equality
-    // is evaluated by SQLite as part of the insert itself. A plain VALUES insert cannot
-    // carry a WHERE, which would leave the new-row path as the one QMI mutation with no
-    // compare-and-set — and a stale insert is how a duplicate home appears.
-    const inserted = await env.DB.prepare(
+    const updates = Object.keys(patch).map((c) => `${c} = excluded.${c}`);
+    // Never replace admin-authored availability/image values. These are the same
+    // ownership rules as the ordinary UPDATE path below, expressed inside the upsert.
+    if (availabilityText !== null) {
+      updates.push(
+        `availability_text = CASE
+           WHEN qmi.availability_text IS NULL
+             OR qmi.availability_text = 'Available Now'
+             OR qmi.availability_text GLOB 'Available [A-Z][A-Z][A-Z]/[A-Z][A-Z][A-Z] [0-9][0-9][0-9][0-9]'
+           THEN excluded.availability_text ELSE qmi.availability_text END`
+      );
+    }
+    if (seedImageUrl !== null) {
+      updates.push('image_url = COALESCE(qmi.image_url, excluded.image_url)');
+    }
+    updates.push('updated_at = excluded.updated_at');
+
+    const applied = await env.DB.prepare(
       `INSERT INTO qmi (${cols.join(', ')})
-       SELECT ${placeholders} WHERE (SELECT seq FROM sync_run_seq WHERE name = ?) = ?`
+       SELECT ${placeholders} WHERE (SELECT seq FROM sync_run_seq WHERE name = ?) = ?
+       ON CONFLICT(eci_key) DO UPDATE SET ${updates.join(', ')}
+       WHERE (SELECT seq FROM sync_run_seq WHERE name = ?) = ?
+       RETURNING id`
     )
-      .bind(...vals, ...freshness.binds)
-      .run();
-    if (changedRows(inserted) === 0) {
+      .bind(...vals, ...freshness.binds, ...freshness.binds)
+      .first<{ id: string }>();
+    if (!applied) {
       console.warn(
         `[ingest:upsert] SKIPPED new ${msg.snowflakeKey}: a newer producer run started ` +
-          `between the freshness check and the insert.`
+          `between the freshness check and the upsert.`
       );
       return result;
     }
-    result.created = 1;
-    // Self-register the Dynamic PDF: create a not_built pdf_renders row + backfill
-    // qmi.dynamic_pdf. The PDF renders on first fetch (serve.ts cold-render path),
-    // the same lazy mechanism seed-renders relies on — no render-queue binding here.
-    // Best-effort: a PDF hiccup must never fail the synced D1 write.
+
+    const appliedId = applied.id;
+    const inserted = appliedId === proposedId;
+    result.created = inserted ? 1 : 0;
+    result.updated = inserted ? 0 : 1;
+    // Self-register/refresh the Dynamic PDF for the row that actually won. The PDF
+    // work remains best-effort; identity and synced values are already committed.
     if (env.PDF_PUBLIC_BASE_URL) {
       try {
         const q = async (sql: string, binds: unknown[]) =>
@@ -350,11 +351,12 @@ async function applyQmiUpsert(
         const r = async (sql: string, binds: unknown[]) => {
           await env.DB.prepare(sql).bind(...binds).run();
         };
-        await ensurePdfRender(q, r, 'qmi', id, env.PDF_PUBLIC_BASE_URL);
+        await ensurePdfRender(q, r, 'qmi', appliedId, env.PDF_PUBLIC_BASE_URL);
       } catch (e) {
-        console.error('[ingest:ensurePdfRender]', id, e);
+        console.error('[ingest:ensurePdfRender]', appliedId, e);
       }
     }
+    if (!inserted) await markPdfStale(env, 'qmi', appliedId);
     return result;
   }
 
