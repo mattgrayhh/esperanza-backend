@@ -166,6 +166,9 @@ describe('saveEntity — QMI override routing (via @esperanza/db/override)', () 
     expect(audits[0]!.new_value).toBe('299000');
     expect(audits[0]!.actor).toBe(ACTOR); // who set it (audit_log, not a column stamp)
     expect(audits[0]!.at).toBeTruthy(); // when it was set
+    // Ordinary public-facing edits use the shared immediate rebuild contract too;
+    // this covers admin changes beyond status toggles (e.g. content and pricing).
+    expect(runPostWriteSideEffects).toHaveBeenLastCalledWith({}, 'qmi', 'q1', 'immediate');
 
   });
 
@@ -305,6 +308,9 @@ describe('setStatus — publication provenance', () => {
       new_value: '0',
       actor: ACTOR,
     });
+    // Draft is a public-safety removal: it cannot be skipped behind the 2-minute
+    // routine-edit debounce, or static list cards can survive after unpublish.
+    expect(runPostWriteSideEffects).toHaveBeenLastCalledWith({}, 'qmi', 'q1', 'immediate');
   });
 });
 

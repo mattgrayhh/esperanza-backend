@@ -86,7 +86,10 @@ interface AuditInput {
 interface PostWriteOpts {
   /** When false, skip cache purge / rebuild / PDF (draft create). */
   sync?: boolean;
-  /** immediate = publish; debounced = routine edit (default); skip = purge/PDF only, no rebuild. */
+  /**
+   * immediate = public-site edit (default); debounced is reserved for explicitly
+   * non-urgent bulk work; skip = purge/PDF only, no rebuild.
+   */
   rebuild?: RebuildMode;
 }
 
@@ -118,7 +121,11 @@ async function postWrite(
 
   if (opts?.sync === false) return;
 
-  const rebuild = opts?.rebuild ?? 'debounced';
+  // Every public-facing admin write must promptly update baked pages. A static
+  // site cannot treat a successful D1 write as a completed edit while its public
+  // HTML still shows old inventory, copy, or promotions. Bulk callers must opt in
+  // to debounce explicitly.
+  const rebuild = opts?.rebuild ?? 'immediate';
   const env = getCloudflareContext().env;
 
   // Purge before returning: live API islands (promos, QMI cards, settings) must not
@@ -804,7 +811,10 @@ export async function setStatus(
     });
   }
 
-  await postWrite(db, def.key, id, audits, { rebuild: status === 'Draft' ? 'debounced' : 'immediate' });
+  // A Draft transition removes content from the public site. It must receive the
+  // same leading-edge rebuild as publish: debouncing it can skip the only safety
+  // removal dispatch after a preceding edit, leaving a baked card visible.
+  await postWrite(db, def.key, id, audits, { rebuild: 'immediate' });
 
   revalidatePath(`/${def.segment}/${id}`);
   revalidatePath(`/${def.segment}`);
