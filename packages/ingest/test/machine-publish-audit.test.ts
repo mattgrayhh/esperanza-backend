@@ -7,8 +7,9 @@
 // not published by me" with no way to find out who did it.
 //
 // Every machine flip of `published` must now record itself in audit_log under a machine
-// actor — and must NOT record anything when the guarded UPDATE was a no-op, since an
-// audit row for a write that did not happen is a lie in the history.
+// actor specific enough to distinguish auto-publication from Snowflake departure — and
+// must NOT record anything when the guarded UPDATE was a no-op, since an audit row for a
+// write that did not happen is a lie in the history.
 //
 // The flip and the audit row are ONE D1 batch (one transaction), so attribution is a
 // guarantee rather than best-effort: see 'attribution is atomic' below for why a failed
@@ -17,7 +18,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { freshDb, d1, setRunSeq } from './helpers.js';
-import { applyMessage, INGEST_ACTOR, type ConsumerEnv } from '../src/consumer.js';
+import { applyMessage, INGEST_ACTOR, INGEST_UNPUBLISH_ACTOR, type ConsumerEnv } from '../src/consumer.js';
 import type { QmiPublishMessage } from '../src/diff.js';
 
 const QMI_ID = 'recAUDIT1';
@@ -102,7 +103,13 @@ describe('machine publish/unpublish attribution', () => {
     expect(db.prepare(`SELECT published FROM qmi WHERE id = ?`).get(QMI_ID)).toEqual({ published: 0 });
     const rows = audit(db);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ action: 'unpublish', actor: INGEST_ACTOR, old_value: '1', new_value: '0' });
+    expect(rows[0]).toMatchObject({
+      field: 'published',
+      action: 'unpublish',
+      actor: INGEST_UNPUBLISH_ACTOR,
+      old_value: '1',
+      new_value: '0',
+    });
     db.close();
   });
 

@@ -769,12 +769,15 @@ export async function setStatus(
     now: at,
   });
 
+  const patch = statusPatch(gate, status);
+  const willBePublished = Boolean(patch['published']);
+
   await db
     .update(def.table)
-    .set(toDrizzlePatch(def.key, { ...statusPatch(gate, status), updated_at: at }) as never)
+    .set(toDrizzlePatch(def.key, { ...patch, updated_at: at }) as never)
     .where(eq(idColumn(def.table), id));
 
-  await postWrite(db, def.key, id, [
+  const audits = [
     {
       entity: def.key,
       entityId: id,
@@ -784,7 +787,24 @@ export async function setStatus(
       newValue: status,
       actor,
     },
-  ], { rebuild: status === 'Draft' ? 'debounced' : 'immediate' });
+  ];
+  // Location/status controls are a real writer of the published bit. Record that bit
+  // under the same field used by togglePublished and ingest so one audit query can
+  // reconstruct publication ownership. Keep the status row as well: Coming Soon ↔ Live
+  // can change without changing publication and remains useful editorial history.
+  if (willBePublished !== Boolean(row['published'])) {
+    audits.push({
+      entity: def.key,
+      entityId: id,
+      field: 'published',
+      action: willBePublished ? 'publish' : 'unpublish',
+      oldValue: Boolean(row['published']) ? '1' : '0',
+      newValue: willBePublished ? '1' : '0',
+      actor,
+    });
+  }
+
+  await postWrite(db, def.key, id, audits, { rebuild: status === 'Draft' ? 'debounced' : 'immediate' });
 
   revalidatePath(`/${def.segment}/${id}`);
   revalidatePath(`/${def.segment}`);
