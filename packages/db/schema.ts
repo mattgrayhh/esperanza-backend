@@ -200,7 +200,7 @@ export const qmi = sqliteTable(
   },
   (t) => [
     index('idx_qmi_published').on(t.published),
-    index('idx_qmi_eci_key').on(t.eciKey),
+    uniqueIndex('idx_qmi_eci_key').on(t.eciKey),
     index('idx_qmi_synced_community').on(t.syncedCommunityId),
     index('idx_qmi_override_community').on(t.overrideCommunityId),
     index('idx_qmi_synced_city').on(t.syncedCityId),

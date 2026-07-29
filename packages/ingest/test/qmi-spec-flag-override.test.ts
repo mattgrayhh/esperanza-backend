@@ -57,7 +57,10 @@ describe('qmisSql active-sale exclusion (availability follows the sale lifecycle
     expect(sql).toContain('WHERE rn = 1');
   });
 
-  it('still seeds price from the Spec Home Inventory join (unchanged)', () => {
-    expect(sql).toContain("s.TRANSACTION_TYPE = 'Spec Home Inventory'");
+  it('seeds from exactly the latest Spec Home Inventory transaction per house', () => {
+    expect(sql).toContain("WHERE TRANSACTION_TYPE = 'Spec Home Inventory'");
+    expect(sql).toMatch(
+      /QUALIFY ROW_NUMBER\(\)\s+OVER\s*\(\s*PARTITION BY HOUSE_ID\s+ORDER BY TRANSACTION_DATE DESC/
+    );
   });
 });
