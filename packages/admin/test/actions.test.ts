@@ -98,6 +98,7 @@ vi.mock('@opennextjs/cloudflare', () => ({
 import {
   saveEntity,
   togglePublished,
+  setStatus,
   savePromotionTargets,
   saveCommunityFloorPlans,
   deleteEntity,
@@ -250,6 +251,60 @@ describe('togglePublished — the only path that sets published=1', () => {
     expect(row.published).toBe(0);
     const audits = auditRows('qmi', 'q1');
     expect(audits[audits.length - 1]!.action).toBe('unpublish');
+  });
+});
+
+// =============================================================================
+// setStatus is also a publication writer. Its audit must expose the underlying bit,
+// not only the human-facing tri-state label, so provenance queries see every writer.
+// =============================================================================
+describe('setStatus — publication provenance', () => {
+  beforeEach(() => {
+    H.sqlite.prepare(`INSERT INTO qmi (id, synced_price, published, coming_soon) VALUES ('q1', 100, 0, 0)`).run();
+  });
+
+  it('records both status and published when Draft becomes Live', async () => {
+    expect(await setStatus('qmi', 'q1', 'Live')).toEqual({ ok: true });
+
+    expect(H.sqlite.prepare('SELECT published, coming_soon FROM qmi WHERE id = ?').get('q1')).toEqual({
+      published: 1,
+      coming_soon: 0,
+    });
+    const audits = auditRows('qmi', 'q1');
+    expect(audits.map(({ field, action, old_value, new_value }) => ({ field, action, old_value, new_value }))).toEqual([
+      { field: 'status', action: 'publish', old_value: 'Draft', new_value: 'Live' },
+      { field: 'published', action: 'publish', old_value: '0', new_value: '1' },
+    ]);
+  });
+
+  it('does not claim another publication flip when Live becomes Coming Soon', async () => {
+    await setStatus('qmi', 'q1', 'Live');
+    expect(await setStatus('qmi', 'q1', 'Coming Soon')).toEqual({ ok: true });
+
+    const audits = auditRows('qmi', 'q1');
+    expect(audits.filter((row) => row.field === 'published')).toHaveLength(1);
+    expect(audits[audits.length - 1]).toMatchObject({
+      field: 'status',
+      old_value: 'Live',
+      new_value: 'Coming Soon',
+    });
+  });
+
+  it('records the published bit when a live home is drafted', async () => {
+    await setStatus('qmi', 'q1', 'Live');
+    expect(await setStatus('qmi', 'q1', 'Draft')).toEqual({ ok: true });
+
+    expect(H.sqlite.prepare('SELECT published, coming_soon FROM qmi WHERE id = ?').get('q1')).toEqual({
+      published: 0,
+      coming_soon: 0,
+    });
+    expect(auditRows('qmi', 'q1').at(-1)).toMatchObject({
+      field: 'published',
+      action: 'unpublish',
+      old_value: '1',
+      new_value: '0',
+      actor: ACTOR,
+    });
   });
 });
 

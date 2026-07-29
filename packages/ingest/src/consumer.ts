@@ -473,7 +473,9 @@ async function applyQmiUpsert(
 // admin surfaces, so ~150 auto-published homes looked like anonymous edits and the
 // marketing team could not tell who had put them live ("shows published, but this was
 // not published by me"). Every machine flip of `published` now records itself with a
-// machine actor, so the admin can answer "why is this home live?".
+// direction-specific actor: auto-publication and departure from Snowflake are separate
+// provenance events, so the admin can answer both "why is this home live?" and "why did
+// this home disappear?".
 //
 // GUARANTEED, not best-effort (2026-07-28 review). The flip and its audit row go out as
 // ONE D1 batch, which D1 runs in a single implicit transaction: either the home changes
@@ -484,7 +486,10 @@ async function applyQmiUpsert(
 // publish deferred to the next cycle is not. handleQueueBatch retries the message
 // independently and DLQs it after max_retries, so a persistent audit failure surfaces in
 // sync_log rather than quietly shedding attribution.
-export const INGEST_ACTOR = 'ingest-autopublish';
+export const INGEST_PUBLISH_ACTOR = 'ingest-autopublish';
+export const INGEST_UNPUBLISH_ACTOR = 'ingest-snowflake-departure';
+/** Backward-compatible name for callers/tests that mean the auto-publish actor. */
+export const INGEST_ACTOR = INGEST_PUBLISH_ACTOR;
 
 /**
  * Flip `published` and record who did it, atomically. Returns the number of rows the
@@ -511,13 +516,14 @@ async function flipPublishedWithAudit(
 ): Promise<number> {
   const from = to === 1 ? 0 : 1;
   const action = to === 1 ? 'publish' : 'unpublish';
+  const actor = to === 1 ? INGEST_PUBLISH_ACTOR : INGEST_UNPUBLISH_ACTOR;
   try {
     const results = await env.DB.batch([
       env.DB.prepare(
         `INSERT INTO audit_log (entity, entity_id, field, action, old_value, new_value, actor)
          SELECT 'qmi', id, 'published', ?, ?, ?, ?
            FROM qmi WHERE id = ? AND published = ?${cas.sql}`
-      ).bind(action, String(from), String(to), INGEST_ACTOR, qmiId, from, ...cas.binds),
+      ).bind(action, String(from), String(to), actor, qmiId, from, ...cas.binds),
       env.DB.prepare(
         `UPDATE qmi SET published = ?, updated_at = ? WHERE id = ? AND published = ?${cas.sql}`
       ).bind(to, nowIso(), qmiId, from, ...cas.binds),
