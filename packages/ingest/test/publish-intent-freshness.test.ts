@@ -37,17 +37,21 @@ const KEY = '002PG00000291';
 const IMAGE = 'https://img.hazardhouse.ai/qmi/2133-sand-lane.jpg';
 
 /** A ready, hidden, imaged home — the shape the publish leg acts on. */
-function seed(over: { published?: number; stage?: string | null; moveIn?: string | null } = {}) {
+function seed(
+  over: { published?: number; stage?: string | null; stageIndex?: number | null; moveIn?: string | null } = {}
+) {
   const db = freshDb();
   db.prepare(
     `INSERT INTO qmi (id, eci_key, housenumber, synced_address, published,
-                      synced_construction_stage, synced_move_in_date, image_url)
-     VALUES (?, ?, '2133', '2133 Sand Lane', ?, ?, ?, ?)`
+                      synced_construction_stage, synced_construction_stage_index,
+                      synced_move_in_date, image_url)
+     VALUES (?, ?, '2133', '2133 Sand Lane', ?, ?, ?, ?, ?)`
   ).run(
     QMI_ID,
     KEY,
     over.published ?? 0,
     over.stage === undefined ? 'Buyer Sign Off' : over.stage,
+    over.stageIndex ?? null,
     over.moveIn ?? null,
     IMAGE
   );
@@ -213,6 +217,36 @@ describe('ADMIN_HOLD_RACE — an override landing mid-flight', () => {
     db.close();
   });
 
+  it('does not publish when the stage index drops below the floor between read and write', async () => {
+    const db = seed({ stage: 'Unmapped Construction', stageIndex: 8, moveIn: '2026-08-15' });
+    setRunSeq(db, 1);
+    const inner = d1(db);
+    let regressed = false;
+    const racing: D1Like = {
+      prepare: inner.prepare.bind(inner),
+      async batch(statements: unknown[]) {
+        if (!regressed) {
+          regressed = true;
+          db.prepare(`UPDATE qmi SET synced_construction_stage_index = 7 WHERE id = ?`).run(QMI_ID);
+        }
+        return inner.batch(statements);
+      },
+    };
+    const env = { DB: racing } as unknown as ConsumerEnv;
+
+    await applyMessage(
+      env,
+      intent({
+        expect: { stage: 'Unmapped Construction', stageIndex: 8, moveIn: '2026-08-15' },
+      })
+    );
+
+    expect(regressed).toBe(true);
+    expect(publishedOf(db)).toBe(0);
+    expect(auditCount(db)).toBe(0);
+    db.close();
+  });
+
   it('does not publish over an image cleared between the readiness check and the write', async () => {
     const db = seed();
     setRunSeq(db, 1);
@@ -252,7 +286,7 @@ describe('the guards do not block legitimate publishing', () => {
     db.close();
   });
 
-  it('a home ready on its move-in date alone (no ready stage) publishes', async () => {
+  it('an early-stage home does not publish on its move-in date alone', async () => {
     const db = seed({ stage: 'Under Roof', moveIn: '2026-08-15' });
     setRunSeq(db, 1);
     const env = { DB: d1(db) } as unknown as ConsumerEnv;
@@ -262,7 +296,7 @@ describe('the guards do not block legitimate publishing', () => {
       intent({ expect: { stage: 'Under Roof', moveIn: '2026-08-15' } })
     );
 
-    expect(publishedOf(db)).toBe(1);
+    expect(publishedOf(db)).toBe(0);
     db.close();
   });
 
@@ -473,7 +507,7 @@ describe('the producer stamps its intents', () => {
     const publish = messages.find((m) => m.kind === 'qmi.publish') as QmiPublishMessage;
     expect(publish).toBeDefined();
     expect(publish.runSeq).toBe(7);
-    expect(publish.expect).toEqual({ stage: 'Buyer Sign Off', moveIn: null });
+    expect(publish.expect).toEqual({ stage: 'Buyer Sign Off', stageIndex: null, moveIn: null });
     for (const m of messages) {
       if (m.kind.startsWith('qmi.')) expect((m as { runSeq?: number }).runSeq).toBe(7);
     }
@@ -495,7 +529,7 @@ describe('the producer stamps its intents', () => {
       3
     );
     const publish = messages.find((m) => m.kind === 'qmi.publish') as QmiPublishMessage;
-    expect(publish.expect).toEqual({ stage: 'Buyer Sign Off', moveIn: '2026-08-15' });
+    expect(publish.expect).toEqual({ stage: 'Buyer Sign Off', stageIndex: undefined, moveIn: '2026-08-15' });
   });
 
   it('an unstamped diff produces intents the consumer will refuse to publish on', async () => {

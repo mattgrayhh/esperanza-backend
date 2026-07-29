@@ -7,9 +7,10 @@
 // Plan Review" rows with move-in dates as far out as 2027-02-26. Published QMIs went
 // 112 → 262 and the marketing team reported homes going live that nobody published.
 //
-// A home is now auto-publishable only when it is FINISHED (ready construction stage)
-// or DUE inside PUBLISH_HORIZON_DAYS. The horizon was derived from the legacy O'Neill
-// listing, whose envelope stopped at NOV/DEC 2026 as of 2026-07-28 (~120 days).
+// A home is now auto-publishable only when it has reached Pour Foundation (stage
+// index >= 8, with known milestone names covering NULL-index finished homes) AND is
+// either FINISHED or DUE inside PUBLISH_HORIZON_DAYS. The horizon was derived from
+// the legacy O'Neill listing, whose envelope stopped at NOV/DEC 2026 as of 2026-07-28.
 // =============================================================================
 
 import { describe, it, expect } from 'vitest';
@@ -39,7 +40,12 @@ function emptyLookups(): Lookups {
 
 const eci = (i: number) => `002PG${String(i).padStart(8, '0')}`;
 
-function sfRow(i: number, stage: string, moveIn: string | null): SnowflakeQmiRow {
+function sfRow(
+  i: number,
+  stage: string,
+  moveIn: string | null,
+  constructionStageIndex: number | null = null
+): SnowflakeQmiRow {
   return {
     eciKey: eci(i),
     jobNumber: `PG${i}`,
@@ -62,7 +68,7 @@ function sfRow(i: number, stage: string, moveIn: string | null): SnowflakeQmiRow
     materialType: null,
     isModelHome: 0,
     startType: null,
-    constructionStageIndex: null,
+    constructionStageIndex,
     moveInDate: moveIn,
     estimatedSettlementDate: null,
     lotNumber: null,
@@ -159,10 +165,20 @@ describe('publish horizon helpers', () => {
     expect(isPublishReady('Build Pad', null, TODAY)).toBe(false);
   });
 
-  it('a finished home publishes regardless of a stale far-future date', () => {
-    // 'Buyer Sign Off' is the final in-inventory stage; its estimated date is moot.
-    expect(isPublishReady('Buyer Sign Off', '2027-12-01', TODAY)).toBe(true);
-    expect(isPublishReady('buyer sign off', null, TODAY)).toBe(true);
+  it('requires the construction floor even when an early-stage date is already inside the rolling horizon', () => {
+    expect(isPublishReady('Build Pad', '2026-08-15', TODAY, undefined, 3)).toBe(false);
+    expect(isPublishReady('Preliminary Plan Review', '2026-08-15', TODAY, undefined, 7)).toBe(false);
+  });
+
+  it('allows Pour Foundation and later only when timing is also ready', () => {
+    expect(isPublishReady('Pour Foundation', '2026-08-15', TODAY, undefined, 8)).toBe(true);
+    expect(isPublishReady('Pour Foundation', '2027-12-01', TODAY, undefined, 8)).toBe(false);
+  });
+
+  it('a finished home publishes with a null stage index and stale far-future date', () => {
+    // Stage name is authoritative because live Snowflake rows have Buyer Sign Off + NULL index.
+    expect(isPublishReady('Buyer Sign Off', '2027-12-01', TODAY, undefined, null)).toBe(true);
+    expect(isPublishReady('buyer sign off', null, TODAY, undefined, null)).toBe(true);
   });
 });
 

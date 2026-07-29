@@ -83,9 +83,9 @@ export interface QmiPublishMessage extends RunStamped {
   snowflakeKey: string;
   qmiId: string;
   /**
-   * The EFFECTIVE stage / move-in date this publish decision was made on (override
-   * first, then this run's incoming Snowflake value, then D1 — see the publish leg).
-   * The consumer compare-and-sets on exactly these values, so the flip lands only
+   * The EFFECTIVE stage / stage index / move-in date this publish decision was made on
+   * (override first, then this run's incoming Snowflake value, then D1 — see the publish
+   * leg). The consumer compare-and-sets on exactly these values, so the flip lands only
    * while the row still says what the producer judged:
    *
    *   * the row has NOT yet received this run's upsert  → values differ → no publish
@@ -96,7 +96,7 @@ export interface QmiPublishMessage extends RunStamped {
    * Trimmed, and null for absent/blank — the same normalisation firstFilled applies,
    * so the SQL comparison and the TypeScript predicate cannot disagree.
    */
-  expect?: { stage: string | null; moveIn: string | null };
+  expect?: { stage: string | null; stageIndex?: number | null; moveIn: string | null };
 }
 
 export interface CommunityUpsertMessage {
@@ -624,9 +624,10 @@ export function diff(
   // alone published "Build Pad" and "Preliminary Plan Review" rows with move-in dates out
   // to 2027-02-26 (published QMIs went 112 → 262, reported by the marketing team as homes
   // going live that nobody published). A home is only auto-publishable when it is
-  // finished, or due inside PUBLISH_HORIZON_DAYS. See availability.ts for how the horizon
-  // was derived from the legacy listing. A human can still publish anything by hand —
-  // this gate governs the UNATTENDED path only.
+  // finished, or physically under construction and due inside PUBLISH_HORIZON_DAYS.
+  // See availability.ts for how the stage floor and horizon were derived from the legacy
+  // listing. A human can still publish anything by hand — this gate governs the
+  // UNATTENDED path only.
   const publishCandidates: QmiPublishMessage[] = [];
   for (const e of existingQmis) {
     const k = snowflakeKey(e.eci_key);
@@ -653,7 +654,13 @@ export function diff(
       e.synced_construction_stage
     );
     const moveIn = firstFilled(e.override_move_in_date, incoming?.moveInDate, e.synced_move_in_date);
-    if (!isPublishReady(stage, moveIn, todayIso)) {
+    // There is no stage-index override. When an admin overrides the stage name, judge the
+    // floor from that authoritative name alone; borrowing the raw feed's index could make
+    // an explicit early-stage hold pass. Otherwise use this run's index, then D1.
+    const stageIndex = firstFilled(e.override_construction_stage) === null
+      ? incoming?.constructionStageIndex ?? e.synced_construction_stage_index
+      : undefined;
+    if (!isPublishReady(stage, moveIn, todayIso, undefined, stageIndex)) {
       stats.qmisPublishNotReady++;
       continue;
     }
@@ -664,7 +671,7 @@ export function diff(
       snowflakeKey: k,
       qmiId: e.id,
       runSeq,
-      expect: { stage, moveIn },
+      expect: { stage, stageIndex, moveIn },
     });
   }
   const snowflakeShrunk =
@@ -699,13 +706,12 @@ export function diff(
   // published" requires knowing WHO owns a live home's publication at the moment the
   // retraction lands, and that ownership signal does not exist:
   //
-  //   * `audit_log` cannot supply it. The real QMI admin control is gate="status" →
-  //     setStatus, which changes `published` but audits `field='status'`, so any
-  //     provenance query over `field='published'` is blind to the actual human path
-  //     (round 5). And `togglePublished`/`setStatus` both insert their audit row AFTER
-  //     the flip commits (postWrite, actions.ts), leaving a window in which a home is
-  //     live with no row yet naming its owner — a duplicate delivery inside that window
-  //     retracts a human's publication (round 5).
+  //   * `audit_log` now records both `field='status'` and real `field='published'`
+  //     flips for setStatus (#194), so future human publication events are visible.
+  //     But `togglePublished`/`setStatus` still insert their audit row AFTER the flip
+  //     commits (postWrite, actions.ts), leaving a window in which a home is live with
+  //     no row yet naming its owner — a duplicate delivery inside that window retracts
+  //     a human's publication (round 5). Historical ownership gaps also remain.
   //   * No existing column can stand in. `updated_at` is the only one every writer sets
   //     atomically with `published`, but ingest churns it with its own upserts in the
   //     same run, so compare-and-setting on it would refuse every retraction.
@@ -732,7 +738,10 @@ export function diff(
       e.synced_construction_stage
     );
     const moveIn = firstFilled(e.override_move_in_date, incoming?.moveInDate, e.synced_move_in_date);
-    if (isPublishReady(stage, moveIn, todayIso)) continue;
+    const stageIndex = firstFilled(e.override_construction_stage) === null
+      ? incoming?.constructionStageIndex ?? e.synced_construction_stage_index
+      : undefined;
+    if (isPublishReady(stage, moveIn, todayIso, undefined, stageIndex)) continue;
     drifted.push(e.id);
   }
 

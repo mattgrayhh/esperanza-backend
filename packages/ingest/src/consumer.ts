@@ -599,16 +599,19 @@ function changedRows(res: unknown): number {
  * either side may legitimately be NULL (a home ready on its stage alone has no date), and
  * `NULL = NULL` is NULL in SQL, which would silently never match.
  */
-function publishCas(expect: { stage: string | null; moveIn: string | null }): {
+function publishCas(expect: { stage: string | null; stageIndex?: number | null; moveIn: string | null }): {
   sql: string;
   binds: unknown[];
 } {
+  const stageIndexCas = expect.stageIndex === undefined ? '' : ` AND synced_construction_stage_index IS ?`;
+  const stageIndexBinds = expect.stageIndex === undefined ? [] : [expect.stageIndex];
   return {
     sql:
       ` AND COALESCE(NULLIF(TRIM(override_construction_stage), ''), NULLIF(TRIM(synced_construction_stage), '')) IS ?` +
+      stageIndexCas +
       ` AND COALESCE(NULLIF(TRIM(override_move_in_date), ''), NULLIF(TRIM(synced_move_in_date), '')) IS ?` +
       ` AND TRIM(COALESCE(image_url, '')) <> ''`,
-    binds: [expect.stage, expect.moveIn],
+    binds: [expect.stage, ...stageIndexBinds, expect.moveIn],
   };
 }
 
@@ -672,7 +675,7 @@ async function applyQmiPublish(env: ConsumerEnv, msg: QmiPublishMessage): Promis
   // is the case that does NOT self-heal, which is why the diff reports it for a human.
   const row = await env.DB.prepare(
     `SELECT published, image_url, override_construction_stage, synced_construction_stage,
-            override_move_in_date, synced_move_in_date
+            synced_construction_stage_index, override_move_in_date, synced_move_in_date
        FROM qmi WHERE id = ?`
   )
     .bind(msg.qmiId)
@@ -681,6 +684,7 @@ async function applyQmiPublish(env: ConsumerEnv, msg: QmiPublishMessage): Promis
       image_url: string | null;
       override_construction_stage: string | null;
       synced_construction_stage: string | null;
+      synced_construction_stage_index: number | null;
       override_move_in_date: string | null;
       synced_move_in_date: string | null;
     }>();
@@ -690,12 +694,15 @@ async function applyQmiPublish(env: ConsumerEnv, msg: QmiPublishMessage): Promis
   if (!row || Number(row.published) === 1) return result;
 
   const stage = firstFilled(row.override_construction_stage, row.synced_construction_stage);
+  const stageIndex = firstFilled(row.override_construction_stage) === null
+    ? row.synced_construction_stage_index
+    : undefined;
   const moveIn = firstFilled(row.override_move_in_date, row.synced_move_in_date);
   const imaged = (row.image_url ?? '').trim() !== '';
-  if (!imaged || !isPublishReady(stage, moveIn)) {
+  if (!imaged || !isPublishReady(stage, moveIn, undefined, undefined, stageIndex)) {
     console.warn(
       `[ingest:publish] SKIPPED ${msg.qmiId} (${msg.snowflakeKey}): no longer publishable — ` +
-        `stage=${stage ?? 'none'} moveIn=${moveIn ?? 'none'} imaged=${imaged}`
+        `stage=${stage ?? 'none'} stageIndex=${stageIndex ?? 'none'} moveIn=${moveIn ?? 'none'} imaged=${imaged}`
     );
     return result;
   }
@@ -711,8 +718,12 @@ async function applyQmiPublish(env: ConsumerEnv, msg: QmiPublishMessage): Promis
   // arrived before its own run's upsert is routine and self-correcting, while a row
   // changing between the read and the write is a genuine race worth noticing. Do not
   // delete the CAS on the strength of this check.
-  const expect = msg.expect ?? { stage, moveIn };
-  if (expect.stage !== stage || expect.moveIn !== moveIn) {
+  const expect = msg.expect ?? { stage, stageIndex, moveIn };
+  if (
+    expect.stage !== stage ||
+    (expect.stageIndex !== undefined && expect.stageIndex !== stageIndex) ||
+    expect.moveIn !== moveIn
+  ) {
     console.warn(
       `[ingest:publish] SKIPPED ${msg.qmiId} (${msg.snowflakeKey}): the row moved since the ` +
         `decision — decided on stage=${expect.stage ?? 'none'} moveIn=${expect.moveIn ?? 'none'}, ` +
