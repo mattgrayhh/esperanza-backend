@@ -34,7 +34,7 @@ export interface PublicCachePurgeEnv {
   /** Public origin of the esperanza-frontend worker (also caches /api/public/*). */
   FRONTEND_PUBLIC_URL?: string;
   /** Cloudflare service binding to esperanza-api (preferred over the public URL). */
-  API?: { fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> };
+  API?: { fetch(input: Request | URL, init?: RequestInit): Promise<Response> };
 }
 
 /** Best-effort: a purge failure must never fail the save (the TTL is the backstop). */

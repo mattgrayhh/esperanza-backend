@@ -43,7 +43,15 @@ export function CommunityDetail({ view }: { view: CommunityDetailView }) {
   function onSubmit(formData: FormData) {
     startTransition(async () => {
       const res = await saveEntity('communities', view.id, formData);
-      reportResult(res.ok ? 'Saved' : `Error: ${res.error}`);
+      reportResult(
+        res.ok
+          ? res.siteRebuild?.status === 'scheduled'
+            ? 'Saved — site update scheduled; usually about 2 minutes (allow up to 7).'
+            : res.siteRebuild
+              ? `Saved, but site update was not scheduled: ${res.siteRebuild.detail}`
+              : 'Saved'
+          : `Error: ${res.error}`
+      );
     });
   }
 

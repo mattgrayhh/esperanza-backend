@@ -217,7 +217,7 @@ describe('custom-field VALUE round-trip through custom_fields JSON', () => {
       'c1',
       form({ marketing_note: 'Push hard in Q2', lending_tier: 'preferred' })
     );
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
 
     // custom_fields holds BOTH values as a JSON object; real columns untouched.
     const blob = customBlob('c1');
@@ -283,7 +283,7 @@ describe('custom-field VALUE round-trip through custom_fields JSON', () => {
       'c1',
       form({ slug: 'spring-2026', marketing_note: 'Note A' })
     );
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
     const row = H.sqlite.prepare('SELECT slug, custom_fields FROM collections WHERE id = ?').get('c1') as {
       slug: string;
       custom_fields: string;
@@ -308,7 +308,7 @@ describe('custom-field VALUE round-trip through custom_fields JSON', () => {
     await saveEntity('collections', 'c1', form({ marketing_note: 'X' }));
     const before = auditRows('collections', 'c1').length;
     const res = await saveEntity('collections', 'c1', form({ marketing_note: 'X' }));
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
     expect(auditRows('collections', 'c1').length).toBe(before); // no new audit
   });
 });
@@ -355,7 +355,7 @@ describe('real-column field absent from static config round-trips through the co
 
   it('saveEntity writes the REAL column and buildEditView reads it back (not the empty blob)', async () => {
     const res = await saveEntity('communities', 'cm1', form({ community_map_embed: URL }));
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
 
     const row = H.sqlite
       .prepare('SELECT community_map_embed, custom_fields FROM communities WHERE id = ?')

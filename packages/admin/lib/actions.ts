@@ -65,7 +65,12 @@ import {
 } from './field-builder';
 import { chunk, AUDIT_ROWS_PER_INSERT } from './audit-chunk';
 import { purgePublicCache } from '@esperanza/db/public-cache-purge';
-import { runPostWriteSideEffects, type RebuildMode } from './post-write-side-effects';
+import {
+  runPostWriteSideEffects,
+  scheduleFrontendRebuild,
+  type RebuildMode,
+} from './post-write-side-effects';
+import type { FrontendRebuildResult } from '@esperanza/db/site-rebuild';
 
 // =============================================================================
 // Shared post-write step: audit_log rows + public-cache purge + PDF refresh.
@@ -103,7 +108,7 @@ async function postWrite(
   id: string,
   audits: AuditInput[],
   opts?: PostWriteOpts
-): Promise<void> {
+): Promise<FrontendRebuildResult | null> {
   if (audits.length > 0) {
     const rows: NewAuditLogRow[] = audits.map((a) => ({
       entity: a.entity,
@@ -119,7 +124,7 @@ async function postWrite(
     }
   }
 
-  if (opts?.sync === false) return;
+  if (opts?.sync === false) return null;
 
   // Every public-facing admin write must promptly update baked pages. A static
   // site cannot treat a successful D1 write as a completed edit while its public
@@ -139,6 +144,24 @@ async function postWrite(
     /* TTL backstop (≤5 min on esperanza-api) */
   }
 
+  // Dispatch is deliberately awaited: accepting a D1 write while hiding a rejected
+  // rebuild request is a false-success state. The later bake remains asynchronous.
+  const siteRebuild = await scheduleFrontendRebuild(
+    env as Parameters<typeof scheduleFrontendRebuild>[0],
+    rebuild
+  );
+  if (siteRebuild && siteRebuild.status !== 'scheduled') {
+    await db.insert(auditLog).values({
+      entity: collection,
+      entityId: id,
+      field: null,
+      action: 'rebuild_dispatch_failed',
+      oldValue: null,
+      newValue: `${siteRebuild.transport}: ${siteRebuild.detail}`,
+      actor: audits[0]?.actor ?? null,
+    });
+  }
+
   const sideEffects = runPostWriteSideEffects(
     env as Parameters<typeof runPostWriteSideEffects>[0],
     collection,
@@ -150,6 +173,7 @@ async function postWrite(
   } catch {
     void sideEffects;
   }
+  return siteRebuild;
 }
 
 const toStr = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
@@ -250,7 +274,7 @@ export async function saveEntity(
   entity: string,
   id: string,
   formData: FormData
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; siteRebuild?: FrontendRebuildResult | null } | { ok: false; error: string }> {
   const def = getEntity(entity);
   if (!def) return { ok: false, error: `Unknown entity: ${entity}` };
   if (!id) return { ok: false, error: 'Missing record id' };
@@ -466,11 +490,11 @@ export async function saveEntity(
     .set(toDrizzlePatch(def.key, patch) as never)
     .where(eq(idColumn(def.table), id));
 
-  await postWrite(db, def.key, id, audits);
+  const siteRebuild = await postWrite(db, def.key, id, audits);
 
   revalidatePath(`/${def.segment}/${id}`);
   revalidatePath(`/${def.segment}`);
-  return { ok: true };
+  return { ok: true, siteRebuild };
 }
 
 // =============================================================================

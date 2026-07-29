@@ -28,6 +28,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { schema, qmi, promotions } from '@esperanza/db';
+import type { FrontendRebuildResult } from '@esperanza/db/site-rebuild';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // packages/admin/test → packages/db/migrations. Apply the FULL additive migration
@@ -80,11 +81,18 @@ vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 const purgePublicCache = vi.hoisted(() => vi.fn(async () => {}));
 const runPostWriteSideEffects = vi.hoisted(() => vi.fn(async () => {}));
 
+const scheduleFrontendRebuild = vi.hoisted(() =>
+  vi.fn<() => Promise<FrontendRebuildResult | null>>(async () => ({
+    status: 'scheduled', transport: 'github', refs: ['main'],
+  }))
+);
+
 vi.mock('@esperanza/db/public-cache-purge', () => ({
   purgePublicCache,
 }));
 vi.mock('../lib/post-write-side-effects', () => ({
   runPostWriteSideEffects,
+  scheduleFrontendRebuild,
 }));
 
 vi.mock('@opennextjs/cloudflare', () => ({
@@ -108,6 +116,8 @@ beforeEach(() => {
   H = freshHarness();
   purgePublicCache.mockClear();
   runPostWriteSideEffects.mockClear();
+  scheduleFrontendRebuild.mockReset();
+  scheduleFrontendRebuild.mockResolvedValue({ status: 'scheduled', transport: 'github', refs: ['main'] });
 });
 afterEach(() => {
   H.sqlite.close();
@@ -145,7 +155,7 @@ describe('saveEntity — QMI override routing (via @esperanza/db/override)', () 
 
   it('pins an override on a synced field (writes override_* + stamps, audits override_set)', async () => {
     const res = await saveEntity('qmi', 'q1', form({ price: '299000' }));
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
 
     const row = H.sqlite
       .prepare('SELECT synced_price, override_price FROM qmi WHERE id = ?')
@@ -178,7 +188,7 @@ describe('saveEntity — QMI override routing (via @esperanza/db/override)', () 
     expect(effectivePrice('q1')).toBe(299000);
     // now submit a BLANK price → revert
     const res = await saveEntity('qmi', 'q1', form({ price: '' }));
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
 
     const row = H.sqlite
       .prepare('SELECT synced_price, override_price FROM qmi WHERE id = ?')
@@ -199,7 +209,7 @@ describe('saveEntity — QMI override routing (via @esperanza/db/override)', () 
 
   it('a plain admin column on QMI writes the column directly (no override pair)', async () => {
     const res = await saveEntity('qmi', 'q1', form({ mls_number: 'MLS-12345' }));
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
     const row = H.sqlite.prepare('SELECT mls_number FROM qmi WHERE id = ?').get('q1') as {
       mls_number: string;
     };
@@ -217,6 +227,23 @@ describe('saveEntity — QMI override routing (via @esperanza/db/override)', () 
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/Airtable attachment URL/);
   });
+
+  it('returns and audits a failed rebuild dispatch without rolling back the saved edit', async () => {
+    scheduleFrontendRebuild.mockResolvedValue({
+      status: 'failed', transport: 'github', refs: ['main'], detail: 'main: HTTP 401 Bad credentials',
+    });
+    const res = await saveEntity('qmi', 'q1', form({ mls_number: 'MLS-FAIL' }));
+    expect(res).toEqual({
+      ok: true,
+      siteRebuild: {
+        status: 'failed', transport: 'github', refs: ['main'], detail: 'main: HTTP 401 Bad credentials',
+      },
+    });
+    expect(H.sqlite.prepare('SELECT mls_number FROM qmi WHERE id = ?').get('q1')).toEqual({ mls_number: 'MLS-FAIL' });
+    expect(auditRows('qmi', 'q1')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: 'rebuild_dispatch_failed', new_value: 'github: main: HTTP 401 Bad credentials' }),
+    ]));
+  });
 });
 
 // =============================================================================
@@ -229,7 +256,7 @@ describe('togglePublished — the only path that sets published=1', () => {
 
   it('togglePublished(true) sets published=1 and audits action=publish', async () => {
     const res = await togglePublished('qmi', 'q1', true);
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
 
     const row = H.sqlite.prepare('SELECT published FROM qmi WHERE id = ?').get('q1') as {
       published: number;
@@ -247,7 +274,7 @@ describe('togglePublished — the only path that sets published=1', () => {
   it('togglePublished(false) sets published=0 and audits action=unpublish', async () => {
     await togglePublished('qmi', 'q1', true);
     const res = await togglePublished('qmi', 'q1', false);
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
     const row = H.sqlite.prepare('SELECT published FROM qmi WHERE id = ?').get('q1') as {
       published: number;
     };
@@ -334,7 +361,7 @@ describe('savePromotionTargets — replace-all promotion_targets honoring the CH
 
   it('global scope writes a single {global, NULL} row', async () => {
     const res = await savePromotionTargets('p1', { type: 'global' });
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
     expect(targetsFor('p1')).toEqual([{ target_type: 'global', target_id: null }]);
   });
 
@@ -343,7 +370,7 @@ describe('savePromotionTargets — replace-all promotion_targets honoring the CH
       type: 'scoped',
       communities: ['recCommA', 'recCommB'],
     });
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
     expect(targetsFor('p1')).toEqual([
       { target_type: 'community', target_id: 'recCommA' },
       { target_type: 'community', target_id: 'recCommB' },
@@ -356,7 +383,7 @@ describe('savePromotionTargets — replace-all promotion_targets honoring the CH
       communities: ['recCommA'],
       floorPlans: ['recFPa', 'recFPb'],
     });
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
     expect(targetsFor('p1')).toEqual([
       { target_type: 'community', target_id: 'recCommA' },
       { target_type: 'floor_plan', target_id: 'recFPa' },
@@ -413,7 +440,7 @@ describe('savePromotionTargets — replace-all promotion_targets honoring the CH
       'p1',
       form({ __promo_targets: JSON.stringify({ type: 'scoped', communities: ['recCommA'] }) })
     );
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
     expect(targetsFor('p1')).toEqual([{ target_type: 'community', target_id: 'recCommA' }]);
   });
 
@@ -423,7 +450,7 @@ describe('savePromotionTargets — replace-all promotion_targets honoring the CH
       'p1',
       form({ __promo_targets: JSON.stringify({ type: 'scoped', qmis: ['recQmiA', 'recQmiB'] }) })
     );
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
     expect(targetsFor('p1')).toEqual([
       { target_type: 'qmi', target_id: 'recQmiA' },
       { target_type: 'qmi', target_id: 'recQmiB' },
@@ -436,7 +463,7 @@ describe('savePromotionTargets — replace-all promotion_targets honoring the CH
       'p1',
       form({ __promo_targets: JSON.stringify({ type: 'scoped', communities: [] }) })
     );
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
     expect(targetsFor('p1')).toHaveLength(0);
   });
 });
@@ -456,7 +483,7 @@ describe('saveEntity community side widgets', () => {
   it('persists HOA links from __hoa_links', async () => {
     const links = [{ title: 'HOA site', link: 'https://hoa.example' }];
     const res = await saveEntity('communities', 'c1', form({ __hoa_links: JSON.stringify(links) }));
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
     const row = H.sqlite.prepare('SELECT hoa_links_json FROM communities WHERE id = ?').get('c1') as {
       hoa_links_json: string;
     };
@@ -465,7 +492,7 @@ describe('saveEntity community side widgets', () => {
 
   it('persists floor-plan membership from __community_floor_plans', async () => {
     const res = await saveEntity('communities', 'c1', form({ __community_floor_plans: JSON.stringify(['fp1']) }));
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
     const fp = H.sqlite
       .prepare('SELECT communities, community_ids FROM floor_plans WHERE id = ?')
       .get('fp1') as { communities: string; community_ids: string };
@@ -484,7 +511,7 @@ describe('saveEntity — community image columns', () => {
 
   it('clears description_image_url when the form submits a blank value', async () => {
     const res = await saveEntity('communities', 'sapphire', form({ description_image_url: '' }));
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
     const row = H.sqlite
       .prepare('SELECT description_image_url FROM communities WHERE id = ?')
       .get('sapphire') as { description_image_url: string | null };
@@ -510,7 +537,7 @@ describe('deleteEntity', () => {
 
   it('removes the row, clears its targets, and audits the delete', async () => {
     const res = await deleteEntity('promotions', 'p1');
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
     expect(H.sqlite.prepare('SELECT id FROM promotions WHERE id = ?').get('p1')).toBeUndefined();
     expect(
       H.sqlite.prepare('SELECT * FROM promotion_targets WHERE promotion_id = ?').all('p1')
