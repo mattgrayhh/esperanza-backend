@@ -1351,7 +1351,7 @@ const apiHandler = {
       }
     }
 
-    const match = url.pathname.match(/^\/api\/public\/([a-z.]+)\/?$/);
+    const match = url.pathname.match(/^\/api\/public\/([a-z.-]+)\/?$/);
     if (request.method !== 'GET' || !match || !ENTITIES.includes(match[1]!)) {
       return new Response('Not found', { status: 404, headers: cors });
     }
