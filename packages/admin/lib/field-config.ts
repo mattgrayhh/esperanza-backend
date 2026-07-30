@@ -554,6 +554,7 @@ const promotions: EntityFieldConfig = {
     { field: 'start_date', label: 'Start Date', widget: 'date', bucket: 'admin', halfWidth: true },
     { field: 'end_date', label: 'End Date', widget: 'date', bucket: 'admin', halfWidth: true },
     { field: 'title', label: 'Title', widget: 'text', bucket: 'admin', help: 'Internal name (not shown on the site).' },
+    { field: 'hub_rollup_title', label: 'Roll up on Incentives page as', widget: 'text', bucket: 'admin', help: 'Give several promotions the SAME text here and the Incentives page shows them as one card with this title (e.g. "Receive up to $25,000 off with Esperanza Flex Cash!"). Its image and buttons come from the first promotion (lowest Sort); the community count combines all of them. Leave blank for a normal per-promotion card.' },
     { field: 'banner_text', label: 'Headline', widget: 'text', bucket: 'admin', help: 'Card incentive line when Show Card Badge is on.' },
     { field: 'copy', label: 'Description', widget: 'textarea', bucket: 'admin' },
     { field: 'badge_text', label: 'Banner Overlay Promo', widget: 'text', bucket: 'admin', help: 'Site banner center text + card corner badge.' },

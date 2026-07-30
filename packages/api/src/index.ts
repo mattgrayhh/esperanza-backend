@@ -212,6 +212,7 @@ type Row = Record<string, unknown>;
 interface PromoRow {
   id: string;
   title: unknown;
+  hub_rollup_title: unknown;
   banner_text: unknown;
   badge_text: unknown;
   copy: unknown;
@@ -554,6 +555,8 @@ export function serializeCommunityRow(row: Row, resolved: ResolvedPromo | null):
 export interface PromotionPublic {
   id: string;
   title: string;
+  /** Non-empty → the hub renders promos sharing this text as ONE rolled-up card. */
+  hubRollupTitle: string;
   bannerText: string;
   cardBadgeText: string;
   /**
@@ -652,6 +655,7 @@ export function serializePromotionRow(
   return {
     id: String(promo.id),
     title: asStr(promo.title),
+    hubRollupTitle: asStr(promo.hub_rollup_title),
     bannerText: asStr(promo.banner_text),
     cardBadgeText: asStr(promo.badge_text),
     // Builder "Description" (promotions.copy) — dense, exposed for detail rendering.

@@ -420,7 +420,7 @@ const ADDED_SINCE_GOLDEN = {
   /** Ungated identity of the winning promotion (durability plan Phase 1.2). */
   communities: ['promotionId'],
   /** Builder "Description" (promotions.copy), plan gap #2. */
-  promotions: ['description'],
+  promotions: ['description', 'hubRollupTitle'],
 } as const;
 
 function assertGoldenPlus(

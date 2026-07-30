@@ -455,6 +455,7 @@ export const promotions = sqliteTable(
   {
     id: text('id').primaryKey(),
     title: text('title'),
+    hubRollupTitle: text('hub_rollup_title'), // 0034: shared → one rolled-up hub card
     bannerText: text('banner_text'),
     badgeText: text('badge_text'),
     copy: text('copy'),
