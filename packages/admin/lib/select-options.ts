@@ -7,6 +7,7 @@
 // =============================================================================
 
 // NOTE: server-only module — imported solely by RSC pages / server actions.
+import { eq } from 'drizzle-orm';
 import { getReadDb } from './db';
 import { floorPlans, communities, cities, qmi, promotions } from '@esperanza/db';
 import type { SelectSource } from './field-config';
@@ -117,6 +118,9 @@ export async function loadPromoScopeOptions(): Promise<{
         community: qmi.syncedCommunityName,
       })
       .from(qmi)
+      // Only LIVE homes are promotable — a draft in the picker lets marketing target a
+      // home the public site can never show (QA punch list 2026-07-30, item 7).
+      .where(eq(qmi.published, true))
       .limit(LIMIT) as Promise<
       Array<{ id: string; addr: string | null; synced: string | null; community: string | null }>
     >,
