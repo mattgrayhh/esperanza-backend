@@ -421,7 +421,7 @@ const ADDED_SINCE_GOLDEN = {
    *  MINE portal link + blurb (QA punch list 2026-07-30, item 24). */
   communities: ['promotionId', 'mineLink', 'mineDescription'],
   /** Builder "Description" (promotions.copy), plan gap #2. */
-  promotions: ['description'],
+  promotions: ['description', 'hubRollupTitle'],
 } as const;
 
 function assertGoldenPlus(
