@@ -476,6 +476,21 @@ export async function saveEntity(
     }
   }
 
+  // A row with a NULL/empty slug is invisible on every public surface (URLs, catalogs,
+  // the collection pages) even when published — that is how the "Masseto" floor plan
+  // vanished after its create (QA punch list 2026-07-30, item 13). If the entity has a
+  // slug column and it would still be empty after this save, derive it from the name.
+  if ('slug' in colMap && !toStr(patch['slug'] ?? row['slug'])) {
+    const nameVal = toStr(patch['name'] ?? row['name']);
+    if (nameVal) {
+      const derived = nameVal.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      if (derived) {
+        patch['slug'] = derived;
+        audits.push({ entity: def.key, entityId: id, field: 'slug', action: 'update', oldValue: null, newValue: `${derived} (auto-derived from name — empty slug hides the record from the public site)`, actor });
+      }
+    }
+  }
+
   if (Object.keys(patch).length === 0) {
     return { ok: true }; // nothing changed
   }
