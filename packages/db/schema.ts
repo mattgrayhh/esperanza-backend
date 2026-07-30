@@ -290,6 +290,8 @@ export const communities = sqliteTable(
     scheduleVisit: text('schedule_visit'),
     lending: text('lending'),
     mineLink: text('mine_link'),
+    mineDescription: text('mine_description'), // 0033: rich-text blurb under the MINE link
+
     nterNow: text('nter_now'), // admin-owned "Enter Now" NterNow self-tour link (0009)
     communityMapEmbed: text('community_map_embed'),
     incentive: text('incentive'),

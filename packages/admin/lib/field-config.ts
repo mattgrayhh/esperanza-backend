@@ -361,6 +361,7 @@ const communities: EntityFieldConfig = {
     // [T7] security_details removed (dead — no fill).
     { field: 'nter_now', label: 'Enter Now', widget: 'text', bucket: 'admin', help: 'NterNow self-tour link (the "Enter Now" CTA). Distinct from Featured Video, which holds the Vimeo embed.' },
     { field: 'mine_link', label: 'Mine Link', widget: 'text', bucket: 'admin' },
+    { field: 'mine_description', label: 'MINE Description', widget: 'richtext', bucket: 'admin', help: 'Shown with the MINE link on the community page.' },
     // 0030 operator tie-break for overlapping promotions (see @esperanza/db/promo).
     { field: 'preferred_promotion_id', label: 'Preferred Incentive', widget: 'select', bucket: 'admin', selectSource: 'promotions', help: 'When more than one promotion applies, this one shows. Leave blank for the default (most specific target, then promotion order). Ignored if the chosen promotion no longer applies.' },
     { field: 'features_download_url', label: 'Features Download (PDF)', widget: 'image', bucket: 'admin' },

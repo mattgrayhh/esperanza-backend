@@ -477,6 +477,9 @@ export interface CommunityPublic {
   officePhone: string;
   officeHours: string;
   scheduleVisit: string;
+  /** MINE amenity portal — link + admin-authored rich-text blurb (may be ''). */
+  mineLink: string;
+  mineDescription: string;
   /** Exact id of the resolved winning promotion; '' when none. NOT surface-gated. */
   promotionId: string;
   promoBannerText: string;
@@ -538,6 +541,8 @@ export function serializeCommunityRow(row: Row, resolved: ResolvedPromo | null):
     comingSoon: asBool(row['coming_soon']),
     officePhone: asStr(row['office_phone']),
     officeHours: asStr(row['office_hours']),
+    mineLink: asStr(row['mine_link']),
+    mineDescription: asStr(row['mine_description']),
     scheduleVisit: asStr(row['schedule_visit']),
     promotionId: resolved?.promotionId ?? '',
     promoBannerText: resolved?.promoBannerText ?? '',
