@@ -85,6 +85,16 @@ export function PromoScopeTagPicker({
     });
   }
 
+  /** Select-all / clear for one section, over the ids the picker currently shows
+   *  (i.e. the filtered list — QA punch list 2026-07-30, item 6). */
+  function setMany(kind: keyof Selected, ids: string[], on: boolean) {
+    setSel((prev) => {
+      const cur = new Set(prev[kind]);
+      for (const id of ids) (on ? cur.add(id) : cur.delete(id));
+      return { ...prev, [kind]: [...cur] };
+    });
+  }
+
   const totalScoped =
     sel.cities.length + sel.communities.length + sel.floorPlans.length + sel.qmis.length;
 
@@ -135,10 +145,10 @@ export function PromoScopeTagPicker({
 
       {mode === 'scoped' ? (
         <div className="flex flex-col divide-y divide-border rounded-md border">
-          <AccordionPicker title="Cities" opts={options.cities} sel={sel.cities} onToggle={(o) => toggle('cities', o)} />
-          <AccordionPicker title="Communities" opts={options.communities} sel={sel.communities} onToggle={(o) => toggle('communities', o)} />
-          <AccordionPicker title="Floor Plans" opts={options.floorPlans} sel={sel.floorPlans} onToggle={(o) => toggle('floorPlans', o)} />
-          <AccordionPicker title="QMIs" opts={options.qmis} sel={sel.qmis} onToggle={(o) => toggle('qmis', o)} grouped />
+          <AccordionPicker title="Cities" opts={options.cities} sel={sel.cities} onToggle={(o) => toggle('cities', o)} onSetMany={(ids, on) => setMany('cities', ids, on)} />
+          <AccordionPicker title="Communities" opts={options.communities} sel={sel.communities} onToggle={(o) => toggle('communities', o)} onSetMany={(ids, on) => setMany('communities', ids, on)} />
+          <AccordionPicker title="Floor Plans" opts={options.floorPlans} sel={sel.floorPlans} onToggle={(o) => toggle('floorPlans', o)} onSetMany={(ids, on) => setMany('floorPlans', ids, on)} />
+          <AccordionPicker title="QMIs" opts={options.qmis} sel={sel.qmis} onToggle={(o) => toggle('qmis', o)} onSetMany={(ids, on) => setMany('qmis', ids, on)} grouped />
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">This promotion applies to every page.</p>
@@ -162,12 +172,15 @@ function AccordionPicker({
   opts,
   sel,
   onToggle,
+  onSetMany,
   grouped = false,
 }: {
   title: string;
   opts: SelectOption[];
   sel: string[];
   onToggle: (id: string) => void;
+  /** Bulk-set the given ids on/off — powers Select all / Clear. */
+  onSetMany: (ids: string[], on: boolean) => void;
   grouped?: boolean;
 }) {
   const [q, setQ] = useState('');
@@ -216,6 +229,26 @@ function AccordionPicker({
       <CollapsibleContent>
         <div className="flex flex-col gap-2 border-t border-border px-3 py-2.5">
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="filter…" className="h-7 text-xs" />
+          {/* Bulk actions apply to the FILTERED list: type a community name, then
+              "Select all" to grab just that community's homes. */}
+          <div className="flex items-center gap-3 text-[11px]">
+            <button
+              type="button"
+              className="text-primary underline-offset-2 hover:underline disabled:opacity-40"
+              disabled={filtered.length === 0}
+              onClick={() => onSetMany(filtered.map((o) => o.id), true)}
+            >
+              Select all{q.trim() ? ' (filtered)' : ''} ({filtered.length})
+            </button>
+            <button
+              type="button"
+              className="text-muted-foreground underline-offset-2 hover:underline disabled:opacity-40"
+              disabled={filtered.every((o) => !sel.includes(o.id))}
+              onClick={() => onSetMany(filtered.map((o) => o.id), false)}
+            >
+              Clear{q.trim() ? ' (filtered)' : ''}
+            </button>
+          </div>
           <div className="grid max-h-52 gap-1.5 overflow-auto text-xs">
             {groups
               ? groups.map(([g, groupOpts]) => (
