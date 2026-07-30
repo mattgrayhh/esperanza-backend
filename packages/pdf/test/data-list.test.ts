@@ -135,9 +135,9 @@ describe('loadFilteredListData', () => {
   it('plans: applies collection + minBeds filters', async () => {
     const raw = freshDb();
     raw.exec(`INSERT INTO floor_plans (id,name,slug,published,collection,synced_bedroom_max,synced_starting_price) VALUES
-      ('fp1','Hickory','hickory',1,'Haven Collection',4,300000),
-      ('fp2','Oak','oak',1,'Haven Collection',3,250000),
-      ('fp3','Birch','birch',1,'Villas Collection',4,400000)`);
+      ('fp1','Hickory','hickory',1,'Haven',4,300000),
+      ('fp2','Oak','oak',1,'Haven',3,250000),
+      ('fp3','Birch','birch',1,'Villas',4,400000)`);
     const db = d1FromSqlite(raw);
     const data = await loadFilteredListData(db, 'plans', { collection: 'Haven Collection', minBeds: 4 });
     const names = data.cards.map(c => c.name);

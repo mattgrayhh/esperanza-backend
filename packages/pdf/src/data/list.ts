@@ -102,9 +102,13 @@ const COURTYARD_PLANS = new Set(['Capistrano', 'Cimarron']);
 const VILLA_COLLECTION_AS_SINGLE_FAMILY = new Set(['Allegrini']);
 
 export function productTypeOf(name: string, collection: string): string {
-  if (collection === 'Retama Collection') return 'RV Living';
+  // D1 stores the BARE tier name ('Retama', 'Villas' — see the filter normalization in
+  // loadFilteredListData); accept the suffixed display form too so a caller passing
+  // 'Retama Collection' keeps working.
+  const tier = String(collection || '').replace(/\s*Collection\s*$/i, '').trim();
+  if (tier === 'Retama') return 'RV Living';
   if (COURTYARD_PLANS.has(name)) return 'Courtyard Home';
-  if (collection === 'Villas Collection' && !VILLA_COLLECTION_AS_SINGLE_FAMILY.has(name)) return 'Villa';
+  if (tier === 'Villas' && !VILLA_COLLECTION_AS_SINGLE_FAMILY.has(name)) return 'Villa';
   return 'Single Family';
 }
 
