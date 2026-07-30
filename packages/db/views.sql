@@ -268,7 +268,7 @@ SELECT
   c.features_download_url, c.resources_download_url, c.featured_video,
   c.brochure_pdf_url,
   c.office_phone, c.office_hours, c.schedule_visit, c.lending,
-  c.mine_link, c.nter_now, c.community_map_embed, c.incentive,
+  c.mine_link, c.mine_description, c.nter_now, c.community_map_embed, c.incentive,
   c.preferred_promotion_id,
   -- [P2] floor_plan_plaintext dropped from the public view (legacy Airtable aiText;
   -- the floor_plans.communities relationship is the real source). Column retained.

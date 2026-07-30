@@ -417,8 +417,9 @@ const NOW = '2026-05-30';
 // Adding a public field therefore requires editing this list deliberately.
 // -----------------------------------------------------------------------------
 const ADDED_SINCE_GOLDEN = {
-  /** Ungated identity of the winning promotion (durability plan Phase 1.2). */
-  communities: ['promotionId'],
+  /** Ungated identity of the winning promotion (durability plan Phase 1.2);
+   *  MINE portal link + blurb (QA punch list 2026-07-30, item 24). */
+  communities: ['promotionId', 'mineLink', 'mineDescription'],
   /** Builder "Description" (promotions.copy), plan gap #2. */
   promotions: ['description'],
 } as const;
