@@ -74,30 +74,57 @@ function isActive(p: PromoLike): boolean {
 
 /**
  * The calendar date portion of a stored bound, or `undefined` if the value is not
- * a real date we can compare.
+ * a date/timestamp we fully understand.
  *
- * Operators and importers store bounds inconsistently: plain `YYYY-MM-DD`, full
- * ISO timestamps (`2026-06-15T00:00:00Z`), and `''` for "cleared". A bound MUST be
- * reduced to its date portion BEFORE any comparison, because comparing a date-only
- * `now` lexically against a raw timestamp is asymmetric and silently wrong:
- * `'2026-06-15' < '2026-06-15T00:00:00Z'` is true, so a promotion starting today at
- * midnight read as "future" and went dark on its own launch day, while the END side
- * happened to work by prefix ordering. Normalizing both bounds identically is what
- * removes that asymmetry — the two sides must not disagree by accident.
+ * ACCEPTED GRAMMAR (everything else is rejected):
+ *   YYYY-MM-DD
+ *   YYYY-MM-DD T HH:MM [ :SS [ .fff… ] ] [ Z | ±HH:MM | ±HHMM ]
+ * The `T` separator may be upper or lower case (SQLite emits a space in some
+ * contexts, so a single space is accepted there too).
  *
- * Validation happens on the RAW stored value and is expressed as exact equality
- * against a round-trip, so `2026-02-30` (which Date rolls forward to March 2) is
- * rejected rather than quietly becoming a different day.
+ * Every component is validated, not just the date: an accepted suffix must be a
+ * real time. A previous revision of this function matched `(?:T.*)?` and threw the
+ * suffix away, which meant `2026-06-15Tgarbage`, `2026-06-15T`,
+ * `2026-06-15T99:99:99Z` and `2026-06-15T00:00:00Zjunk` were all silently treated
+ * as a valid 2026-06-15 (Sol's gate finding on ebd7ea9). That is the fail-open
+ * direction: a bound we cannot actually parse must never be read as a date we
+ * merely guessed at. Validation therefore covers the WHOLE raw string.
+ *
+ * Calendar validity is expressed as an exact-equality round trip, so `2026-02-30`
+ * is rejected rather than quietly becoming March 2.
+ *
+ * Why the date portion (and not the instant) is what we return: the operator-facing
+ * widget stores plain `YYYY-MM-DD` (packages/admin/components/fields/DatePicker.tsx)
+ * and promotions are day-granular commercial offers, so time-of-day must never
+ * partially gate a day. Once the whole value is known-valid, its date prefix is the
+ * comparison key.
  */
 function boundDate(raw: string): string | undefined {
-  // Take the date portion only if the value is date-only or a `T`-delimited
-  // timestamp. Anything else ('next spring', '06/15/2026') is not a date.
-  const m = /^(\d{4}-\d{2}-\d{2})(?:T.*)?$/.exec(raw);
+  const m =
+    /^(\d{4})-(\d{2})-(\d{2})(?:[Tt ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|z|[+-]\d{2}:?\d{2})?)?$/.exec(
+      raw
+    );
   if (!m) return undefined;
-  const ymd = m[1]!;
+
+  const [, y, mo, d, hh, mi, ss, offset] = m;
+
+  // Time components must be real. Absent time is fine (date-only form); a PRESENT
+  // but out-of-range time is a rejection, not something to round off.
+  if (hh !== undefined) {
+    const hour = Number(hh);
+    const minute = Number(mi);
+    // Second 60 is permitted (RFC 3339 leap second); 61+ is not.
+    const second = ss === undefined ? 0 : Number(ss);
+    if (hour > 23 || minute > 59 || second > 60) return undefined;
+    if (offset !== undefined && offset !== 'Z' && offset !== 'z') {
+      // ±HH:MM or ±HHMM — the offset must itself be a real offset.
+      const digits = offset.slice(1).replace(':', '');
+      if (Number(digits.slice(0, 2)) > 23 || Number(digits.slice(2)) > 59) return undefined;
+    }
+  }
+
+  const ymd = `${y}-${mo}-${d}`;
   const parsed = new Date(`${ymd}T00:00:00Z`);
-  // Exact-equality round trip: rejects impossible calendar dates that Date would
-  // otherwise normalize into a neighbouring month.
   if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== ymd) {
     return undefined;
   }

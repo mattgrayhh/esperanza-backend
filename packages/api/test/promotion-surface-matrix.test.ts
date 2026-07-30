@@ -881,6 +881,23 @@ describe('lifecycle — publish gate and date window', () => {
       '2026-02-30', // impossible calendar date Date would roll to March 2
       '2026-13-01', // impossible month
       '20260615', // no separators
+
+      // MALFORMED TIMESTAMP SUFFIXES (Sol's gate finding on ebd7ea9). The prior
+      // `(?:T.*)?` grammar discarded the suffix, so every one of these was read as a
+      // valid 2026-06-15 — a date we had merely guessed at.
+      `${NOW}Tgarbage`, // arbitrary text after T
+      `${NOW}T`, // empty time
+      `${NOW}T99:99:99Z`, // impossible hour/minute/second
+      `${NOW}T00:00:00Zjunk`, // trailing junk after a valid instant
+      `${NOW}T24:00:00Z`, // hour out of range
+      `${NOW}T12:60:00Z`, // minute out of range
+      `${NOW}T12:00:61Z`, // second out of range (60 allowed as leap second, 61 not)
+      `${NOW}T12`, // truncated — hour only
+      `${NOW}T12:`, // truncated — dangling colon
+      `${NOW}T12:00:00+99:00`, // impossible offset hour
+      `${NOW}T12:00:00+05:99`, // impossible offset minute
+      `${NOW}T12:00:00QQ`, // bogus zone designator
+      `${NOW} extra`, // trailing text after a space
     ];
     for (const bad of garbage) {
       expect(isPromoLive({ id: 'x', published: 1, start_date: bad }, NOW)).toBe(false);
@@ -893,6 +910,39 @@ describe('lifecycle — publish gate and date window', () => {
     // A valid leap day is NOT malformed — the guard must not over-reject.
     expect(isPromoLive({ id: 'x', published: 1, end_date: '2028-02-29' }, NOW)).toBe(true);
     expect(isPromoLive({ id: 'x', published: 1, start_date: '2024-02-29' }, NOW)).toBe(true);
+  });
+
+  it('the ACCEPTED timestamp grammar keeps working — rejection must not swallow real values', () => {
+    // The counter-direction to the fail-closed test above: tightening the parser must
+    // not start rejecting forms a datastore legitimately produces, or every promo with
+    // a timestamp bound would silently go dark. Each of these is a real value whose
+    // date part is today, so each must be LIVE on both bounds.
+    const valid = [
+      NOW, // plain date (what the admin DatePicker writes)
+      `${NOW}T00:00`, // minute precision
+      `${NOW}T00:00:00`, // no zone
+      `${NOW}T00:00:00Z`, // UTC
+      `${NOW}t00:00:00z`, // lowercase separator + zone
+      `${NOW} 00:00:00`, // SQLite-style space separator
+      `${NOW}T12:34:56.789Z`, // fractional seconds
+      `${NOW}T12:34:56.1Z`, // single-digit fraction
+      `${NOW}T23:59:59Z`, // end of day
+      `${NOW}T12:00:00+05:30`, // offset with colon
+      `${NOW}T12:00:00-0800`, // offset without colon
+      `${NOW}T12:00:60Z`, // leap second
+    ];
+    for (const good of valid) {
+      expect(isPromoLive({ id: 'x', published: 1, start_date: good }, NOW)).toBe(true);
+      expect(isPromoLive({ id: 'x', published: 1, end_date: good }, NOW)).toBe(true);
+      // End-to-end: the offer actually reaches the home.
+      const db = lifeDb({ start_date: good, end_date: '' });
+      expect(promotionsOut(db).find((p) => p.id === P_FLEX15)!.active).toBe(true);
+      expect(qmiOut(db, QMI).fields['promotion_id']).toBe(P_FLEX15);
+    }
+    // Accepted grammar still respects the DAY: a valid timestamp on another day
+    // must gate normally rather than being waved through.
+    expect(isPromoLive({ id: 'x', published: 1, start_date: '2026-06-16T00:00:00Z' }, NOW)).toBe(false);
+    expect(isPromoLive({ id: 'x', published: 1, end_date: '2026-06-14T23:59:59Z' }, NOW)).toBe(false);
   });
 
   it('UNPUBLISHING removes the promotion from the payload entirely (view gate)', () => {
