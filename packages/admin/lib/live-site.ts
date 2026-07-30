@@ -169,6 +169,7 @@ const PAGE_LABELS: Record<EntityKey, string> = {
   collections: 'Collection (internal group)',
   images: 'Image library (CDN asset)',
   blogs: 'Blog post',
+  event_highlights: 'Events page',
   testimonials: 'Testimonial (embedded on site)',
 };
 

@@ -23,6 +23,7 @@ import {
   images,
   blogs,
   testimonials,
+  eventHighlights,
 } from '@esperanza/db';
 import {
   QMI_OVERRIDABLE_FIELDS,
@@ -44,7 +45,8 @@ export type EntityKey =
   | 'collections'
   | 'images'
   | 'blogs'
-  | 'testimonials';
+  | 'testimonials'
+  | 'event_highlights';
 
 export interface EntityDef {
   key: EntityKey;
@@ -99,6 +101,13 @@ export const ENTITIES: Record<EntityKey, EntityDef> = {
     table: testimonials,
     publishable: false,
   },
+  event_highlights: {
+    key: 'event_highlights',
+    label: 'Event Highlights',
+    segment: 'event-highlights',
+    table: eventHighlights,
+    publishable: true,
+  },
 };
 
 /** Ordered list for the nav. */
@@ -112,6 +121,7 @@ export const ENTITY_LIST: EntityDef[] = [
   ENTITIES.images,
   ENTITIES.blogs,
   ENTITIES.testimonials,
+  ENTITIES.event_highlights,
 ];
 
 export function getEntity(key: string): EntityDef | undefined {

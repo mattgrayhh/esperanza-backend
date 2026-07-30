@@ -107,6 +107,8 @@ function tableName(key: EntityKey): string {
       return 'blogs';
     case 'testimonials':
       return 'testimonials';
+    case 'event_highlights':
+      return 'event_highlights';
   }
 }
 

@@ -587,6 +587,23 @@ export const blogs = sqliteTable('blogs', {
   updatedAt: text('updated_at').notNull().default(nowIso),
 });
 
+
+// 0035: admin-managed Events page highlights (top section of /events/). The
+// HubSpot-driven event list below it is untouched — this is marketing-authored copy.
+export const eventHighlights = sqliteTable('event_highlights', {
+  id: text('id').primaryKey(),
+  title: text('title'),
+  copy: text('copy'),
+  imageUrl: text('image_url'),
+  linkUrl: text('link_url'),
+  ctaLabel: text('cta_label'),
+  eventDate: text('event_date'),
+  sort: integer('sort').default(0),
+  published: integer('published', { mode: 'boolean' }).notNull().default(false),
+  createdAt: text('created_at'),
+  updatedAt: text('updated_at'),
+});
+
 export const testimonials = sqliteTable('testimonials', {
   id: text('id').primaryKey(),
   personName: text('person_name'),

@@ -693,6 +693,29 @@ const testimonials: EntityFieldConfig = {
   ],
 };
 
+
+// =============================================================================
+// 10. Event Highlights (0035) — the admin-authored top section of /events/.
+// =============================================================================
+const event_highlights: EntityFieldConfig = {
+  listColumns: [
+    { field: 'title', label: 'Title' },
+    { field: 'event_date', label: 'Date' },
+    { field: 'sort', label: 'Sort', kind: 'number' },
+    { field: 'published', label: 'Published', kind: 'publish' },
+  ],
+  fields: [
+    { field: 'published', label: 'Published', widget: 'boolean', bucket: 'publish' },
+    { field: 'title', label: 'Title', widget: 'text', bucket: 'admin' },
+    { field: 'event_date', label: 'Event Date', widget: 'date', bucket: 'admin', halfWidth: true, help: 'Optional — shown on the card.' },
+    { field: 'sort', label: 'Sort', widget: 'number', bucket: 'admin', step: '1', halfWidth: true, help: 'Lower numbers show first.' },
+    { field: 'copy', label: 'Description', widget: 'richtext', bucket: 'admin' },
+    { field: 'image_url', label: 'Image', widget: 'image', bucket: 'admin' },
+    { field: 'cta_label', label: 'Button Label', widget: 'text', bucket: 'admin', halfWidth: true, help: 'Blank = "Learn More" (only shown when a link is set).' },
+    { field: 'link_url', label: 'Button Link', widget: 'text', bucket: 'admin', halfWidth: true },
+  ],
+};
+
 // =============================================================================
 // Registry
 // =============================================================================
@@ -706,6 +729,7 @@ export const FIELD_CONFIG: Record<EntityKey, EntityFieldConfig> = {
   images,
   blogs,
   testimonials,
+  event_highlights,
 };
 
 export function fieldConfigFor(key: EntityKey): EntityFieldConfig {

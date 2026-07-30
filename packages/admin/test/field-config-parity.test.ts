@@ -210,9 +210,9 @@ describe('resolveFieldConfig — parity with static field-config (seeded field_d
     });
   }
 
-  it('exercises all 9 engine entities (incl. qmi/images/blogs engine output)', () => {
+  it('exercises all 10 engine entities (incl. qmi/images/blogs engine output)', () => {
     expect(ENTITY_LIST.map((e) => e.key).sort()).toEqual(
-      ['blogs', 'cities', 'collections', 'communities', 'floor_plans', 'images', 'promotions', 'qmi', 'testimonials'].sort()
+      ['blogs', 'cities', 'collections', 'communities', 'event_highlights', 'floor_plans', 'images', 'promotions', 'qmi', 'testimonials'].sort()
     );
   });
 

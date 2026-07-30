@@ -40,6 +40,7 @@ import {
   ListChecksIcon,
   CircleCheckIcon,
   TriangleAlertIcon,
+  CalendarIcon,
   type LucideIcon,
 } from 'lucide-react';
 import { getReadDb } from '@/lib/db';
@@ -90,6 +91,7 @@ const ENTITY_ICON: Record<EntityKey, LucideIcon> = {
   images: ImageIcon,
   blogs: FileTextIcon,
   testimonials: QuoteIcon,
+  event_highlights: CalendarIcon,
 };
 
 interface QmiBreakdown {
