@@ -271,6 +271,14 @@ function seedCommunityDraft(db: Database.Database) {
   ).run();
 }
 
+/**
+ * The Builder's "Description" (promotions.copy). Deliberately contains markdown-ish
+ * punctuation, a newline, and an ampersand so the contract test proves the public
+ * `description` field is a VERBATIM passthrough (no escaping/truncation/reformatting).
+ */
+const PROMO_COPY_TEXT =
+  'Save up to $15,000 on select move-in-ready homes.\nTerms & conditions apply — see agent for details.';
+
 function seedPromotions(db: Database.Database) {
   db.prepare(`INSERT INTO site_settings (key, value) VALUES ('incentive_rate', '4.99')`).run();
 
@@ -282,14 +290,15 @@ function seedPromotions(db: Database.Database) {
      VALUES (@id,@title,@banner,@badge,@cl,@cu,@img,@so,@sd,@ed,@active,@at)`
   );
   db.prepare(
-    `INSERT INTO promotions (id, title, banner_text, badge_text, cta_label, cta_url,
+    `INSERT INTO promotions (id, title, banner_text, badge_text, copy, cta_label, cta_url,
        image_url, pdf_url, sort_order, start_date, end_date, published, applies_to)
-     VALUES (@id,@title,@banner,@badge,@cl,@cu,@img,@pdf,@so,@sd,@ed,@active,@at)`
+     VALUES (@id,@title,@banner,@badge,@copy,@cl,@cu,@img,@pdf,@so,@sd,@ed,@active,@at)`
   ).run({
     id: 'recPROMOcomm1',
     title: 'Rogers Coves Special',
     banner: 'Rogers Coves Banner WINNER',
     badge: 'Limited',
+    copy: PROMO_COPY_TEXT,
     cl: 'View Details',
     cu: 'https://www.esperanzahomes.com/x',
     img: 'https://media.esperanzahomes.com/promo/p1.jpg',
@@ -395,6 +404,45 @@ function communitiesByPromoForTest(db: Database.Database, ctx: ReturnType<typeof
 }
 
 const NOW = '2026-05-30';
+
+// -----------------------------------------------------------------------------
+// ADDITIVE-CONTRACT GUARD
+//
+// The golden captures predate the promotion-durability contract, so exact key
+// equality would fail for any new field. Instead of loosening to "golden ⊆ ours"
+// (which would let an unnoticed key slip in), each dense entity declares the
+// EXACT set of keys added since its golden. assertGoldenPlus() then requires:
+//   • every golden key still present  (no removals — the compat guarantee), and
+//   • no key outside golden ∪ declared (an undeclared addition fails the test).
+// Adding a public field therefore requires editing this list deliberately.
+// -----------------------------------------------------------------------------
+const ADDED_SINCE_GOLDEN = {
+  /** Ungated identity of the winning promotion (durability plan Phase 1.2). */
+  communities: ['promotionId'],
+  /** Builder "Description" (promotions.copy), plan gap #2. */
+  promotions: ['description'],
+} as const;
+
+function assertGoldenPlus(
+  actual: Record<string, unknown>,
+  golden: Record<string, unknown>,
+  added: readonly string[]
+) {
+  const goldenKeys = Object.keys(golden);
+  const allowed = new Set([...goldenKeys, ...added]);
+  const actualKeys = Object.keys(actual);
+  // no removals
+  for (const k of goldenKeys) {
+    expect(actualKeys, `golden key ${k} must still be served`).toContain(k);
+  }
+  // no undeclared additions
+  const undeclared = actualKeys.filter((k) => !allowed.has(k));
+  expect(undeclared, 'undeclared new public keys').toEqual([]);
+  // and every declared addition is actually there (dense)
+  for (const k of added) {
+    expect(actualKeys, `declared addition ${k} must be present`).toContain(k);
+  }
+}
 
 function resolvedFor(
   ctx: ReturnType<typeof buildPromoCtx>,
@@ -634,7 +682,7 @@ describe('/qmi — raw passthrough contract', () => {
 
 // =============================================================================
 describe('/communities — mapped dense contract', () => {
-  it('has exactly the 25 contract keys, all present', () => {
+  it('has exactly the 25 golden contract keys plus declared additions', () => {
     // v_public_communities now bakes the published gate (draft column dropped in 0005).
     const rows = db.prepare('SELECT * FROM v_public_communities').all() as Row[];
     const ctx = buildPromoCtx(db);
@@ -646,8 +694,8 @@ describe('/communities — mapped dense contract', () => {
     const g = (goldenCommunities.communities as Array<Record<string, unknown>>)[0]!;
     const goldenKeys = Object.keys(g).sort();
     const cRec = c as unknown as Record<string, unknown>;
-    expect(Object.keys(cRec).sort()).toEqual(goldenKeys);
-    // types match the golden community for every key
+    assertGoldenPlus(cRec, g, ADDED_SINCE_GOLDEN.communities);
+    // types match the golden community for every golden key
     for (const k of goldenKeys) {
       // priceFrom can be number|null in golden — accept either
       if (k === 'priceFrom') {
@@ -656,6 +704,8 @@ describe('/communities — mapped dense contract', () => {
         expect(typeOf(cRec[k]), `type of ${k}`).toBe(typeOf(g[k]));
       }
     }
+    // the addition is a dense string
+    expect(typeof cRec['promotionId']).toBe('string');
   });
 
   it('unpublished communities are filtered out by the view gate', () => {
@@ -738,17 +788,21 @@ describe('/communities — mapped dense contract', () => {
     }
   });
 
-  it('serializeFloorPlanRow carries the resolved promo (card badge + CTA) and blanks when none', () => {
+  it('serializeFloorPlanRow carries the resolved promo (identity + card badge + CTA) and blanks when none', () => {
     const row = { id: 'recFPx', name: 'Magnolia', slug: 'magnolia' } as unknown as Row;
     const withPromo = serializeFloorPlanRow(row, {
+      promotionId: 'recPROMOplan',
       promoBannerText: 'Plan Banner',
       promoBadgeText: 'Plan Badge',
       promoCtaLabel: 'See Plan',
       promoCtaLink: '/x',
     });
+    expect(withPromo.promotionId).toBe('recPROMOplan');
     expect(withPromo.promoBadgeText).toBe('Plan Badge');
     expect(withPromo.promoCtaLabel).toBe('See Plan');
     const noPromo = serializeFloorPlanRow(row);
+    // dense-empty, never omitted: one key to bind, no conditional logic downstream.
+    expect(noPromo.promotionId).toBe('');
     expect(noPromo.promoBadgeText).toBe('');
     expect(noPromo.promoCtaLabel).toBe('');
   });
@@ -756,7 +810,7 @@ describe('/communities — mapped dense contract', () => {
 
 // =============================================================================
 describe('/promotions — mapped dense + derived names + image fallback', () => {
-  it('top-level wrapper { promotions: [], ts } and dense keys match golden', () => {
+  it('top-level wrapper { promotions: [], ts } and dense keys match golden plus declared additions', () => {
     const ctx = buildPromoCtx(db);
     const byPromoComm = communitiesByPromoForTest(db, ctx);
     const byPromo = new Map<string, TargetRow[]>();
@@ -780,12 +834,32 @@ describe('/promotions — mapped dense + derived names + image fallback', () => 
     const payload = { promotions, ts: 0 };
     expect(Object.keys(payload).sort()).toEqual(['promotions', 'ts']);
 
-    const goldenKeys = Object.keys(
-      (goldenPromotions.promotions as Array<Record<string, unknown>>)[0]!
-    ).sort();
+    const golden = (goldenPromotions.promotions as Array<Record<string, unknown>>)[0]!;
     for (const p of promotions) {
-      expect(Object.keys(p).sort()).toEqual(goldenKeys);
+      assertGoldenPlus(
+        p as unknown as Record<string, unknown>,
+        golden,
+        ADDED_SINCE_GOLDEN.promotions
+      );
+      // the addition is a dense string on EVERY record (never omitted).
+      expect(typeof p.description).toBe('string');
     }
+  });
+
+  it('description carries promotions.copy verbatim and is dense when unset', () => {
+    // Plan gap #2: admin edits promotions.copy as "Description" but no public
+    // surface could read it. Assert the raw column flows through untransformed
+    // (no truncation/markdown/escaping) and that an unset copy is '' not absent —
+    // the detail renderer must be able to bind one dense key.
+    const ctx = buildPromoCtx(db);
+    const withCopy = ctx.promos.find((p) => (p as Row)['id'] === 'recPROMOcomm1')!;
+    const out = serializePromotionRow(withCopy as never, [], ctx.maps, []);
+    expect(out.description).toBe(PROMO_COPY_TEXT);
+
+    const noCopy = ctx.promos.find((p) => (p as Row)['id'] === 'recPROMOglobal')!;
+    const bare = serializePromotionRow(noCopy as never, [], ctx.maps, []);
+    expect(bare.description).toBe('');
+    expect('description' in (bare as unknown as Record<string, unknown>)).toBe(true);
   });
 
   it('inactive promotions are excluded', () => {

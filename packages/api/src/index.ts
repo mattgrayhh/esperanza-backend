@@ -44,6 +44,7 @@
 
 import {
   communitiesByPromoFromPublishedQmi,
+  isPromoLive,
   resolveEffectivePromo,
   type PromoTargetType,
 } from '@esperanza/db/promo';
@@ -91,6 +92,14 @@ export interface RawAirtableRecord {
 
 /** Resolved promotion object flattened onto qmi + community rows. */
 export interface ResolvedPromo {
+  /**
+   * IDENTITY of the winning promotion (resolveEffectivePromo). NOT gated by any
+   * surface toggle: an offer whose card badge and CTA are both off still OWNS the
+   * record, and consumers must be able to say WHICH offer that is without reading
+   * copy. Non-empty whenever a winner exists (the resolver only returns published,
+   * in-window promotions), '' only when there is no winner.
+   */
+  promotionId: string;
   promoBannerText: string;
   promoBadgeText: string;
   promoCtaLabel: string;
@@ -386,15 +395,35 @@ export function serializeQmiRow(row: Row, resolved: ResolvedPromo | null): RawAi
   // promoBannerText is already gated by the promo's show_card_badge toggle in
   // toResolved(), so a global-surface-only promo no longer stamps its banner
   // headline onto badge-less homes.
+  //
+  // IDENTITY vs COPY (Phase 1 of the promotion-durability plan): `promotion_id` is
+  // the resolved winner's exact id and is NOT gated by any surface toggle — a
+  // consumer must be able to ask "which offer owns this home" without pattern-
+  // matching copy (the heuristic that let similarly-worded offers collide). The
+  // gated copy fields below say only what this home is entitled to RENDER.
   if (resolved) {
+    if (resolved.promotionId) fields['promotion_id'] = resolved.promotionId;
     if (resolved.promoBannerText) fields['promo_text'] = resolved.promoBannerText;
+    // Card corner badge from the promotion's own badge_text (gated by
+    // show_card_badge in toResolved). Previously QMI records emitted ONLY the
+    // headline, so the Builder's separate corner-badge region had nothing to bind
+    // to on homes; community/floor-plan records already carried both strings.
+    if (resolved.promoBadgeText) fields['card_badge_text'] = resolved.promoBadgeText;
+    // Card CTA (gated by show_card_cta). QMI records exposed neither before, so
+    // the Builder's card CTA treatment was not end-to-end reachable on homes.
+    if (resolved.promoCtaLabel) fields['promo_cta_label'] = resolved.promoCtaLabel;
+    if (resolved.promoCtaLink) fields['promo_cta_link'] = resolved.promoCtaLink;
   }
 
-  // Per-home incentive is the live source of truth and OVERRIDES the resolved promotion
-  // for BOTH the detail-page banner (promo_text) and the card badge (card_badge_text).
+  // Per-home incentive is a COPY OVERRIDE ONLY and the live source of truth for
+  // BOTH the detail-page banner (promo_text) and the card badge (card_badge_text).
   // Operators set it in the admin's "Incentive Banner Text" field (qmi.incentive); a
   // blank value falls through to the promotion above. This is why setting a home's
   // incentive in the admin now shows on the home's page — not just its list card.
+  //
+  // It MUST NOT touch `promotion_id` or the CTA entitlement: overriding the visible
+  // words does not move the home to a different offer, invent an offer where the
+  // resolver found none, or grant/revoke the CTA. (Plan Phase 1.5.)
   const homeIncentive = asStr(row['incentive']);
   if (homeIncentive !== '') {
     fields['promo_text'] = homeIncentive;
@@ -448,6 +477,8 @@ export interface CommunityPublic {
   officePhone: string;
   officeHours: string;
   scheduleVisit: string;
+  /** Exact id of the resolved winning promotion; '' when none. NOT surface-gated. */
+  promotionId: string;
   promoBannerText: string;
   promoBadgeText: string;
   promoCtaLabel: string;
@@ -508,6 +539,7 @@ export function serializeCommunityRow(row: Row, resolved: ResolvedPromo | null):
     officePhone: asStr(row['office_phone']),
     officeHours: asStr(row['office_hours']),
     scheduleVisit: asStr(row['schedule_visit']),
+    promotionId: resolved?.promotionId ?? '',
     promoBannerText: resolved?.promoBannerText ?? '',
     promoBadgeText: resolved?.promoBadgeText ?? '',
     promoCtaLabel: resolved?.promoCtaLabel ?? '',
@@ -524,6 +556,12 @@ export interface PromotionPublic {
   title: string;
   bannerText: string;
   cardBadgeText: string;
+  /**
+   * The Builder's "Description" (promotions.copy) — the long offer copy the detail
+   * page renders. Dense ('' when unset). Was edited in the admin but never exposed
+   * publicly, so no detail surface could render it (plan gap #2).
+   */
+  description: string;
   ctaLabel: string;
   ctaLink: string;
   active: boolean;
@@ -557,7 +595,13 @@ export function serializePromotionRow(
   targets: TargetRow[],
   maps: PromoResolveMaps,
   /** Communities with ≥1 published QMI where this promo wins (from communitiesByPromoFromPublishedQmi). */
-  availableCommunityIds: string[] = []
+  availableCommunityIds: string[] = [],
+  /**
+   * Resolution date (YYYY-MM-DD) for the `active` window check. Defaults to UTC
+   * today; the Worker passes the same `now` it resolves winners with so the list
+   * and the location records can never disagree about what is live.
+   */
+  now: string = new Date().toISOString().slice(0, 10)
 ): PromotionPublic {
   const floorPlanIds: string[] = [];
   const collectionIds: string[] = [];
@@ -610,10 +654,26 @@ export function serializePromotionRow(
     title: asStr(promo.title),
     bannerText: asStr(promo.banner_text),
     cardBadgeText: asStr(promo.badge_text),
+    // Builder "Description" (promotions.copy) — dense, exposed for detail rendering.
+    description: asStr(promo.copy),
     ctaLabel: asStr(promo.cta_label),
     ctaLink: asStr(promo.cta_url),
-    // PUBLIC contract output key stays `active`; read it from the renamed gate column.
-    active: asBool(promo.published),
+    // PUBLIC contract output key stays `active`; it means LIVE — published AND
+    // inside [start_date, end_date] — via the SAME isPromoLive() the resolver uses.
+    // Reading only the publish gate here made an EXPIRED (or not-yet-started)
+    // promotion serve active:true forever while winning no home, so every frontend
+    // surface gated on `p.active` (hub card, site banner, detail selection) kept
+    // advertising a dead offer. 0000_init documents end_date as
+    // "ENFORCED (expired => not served)".
+    //
+    // The row is still SERVED (see buildPromotionsList): flipping the flag is what
+    // retires the offer, so "dead" stays distinguishable from "no payload at all".
+    // `now` is date-only (YYYY-MM-DD) and compared lexically against the date-only
+    // bounds, matching the resolver exactly — there is no time-of-day or
+    // timezone-offset component to disagree about. The Worker derives it once per
+    // request from UTC and threads that single value through the resolver, the
+    // location serializers, and this list.
+    active: isPromoLive(promo, now),
     sortOrder: asIntOrNull(promo.sort_order) ?? 0,
     image,
     pdf: asStr(promo.pdf_url),
@@ -678,7 +738,8 @@ export function serializeFloorPlanRow(
     brochurePdfUrl: asStr(row['brochure_pdf_url']),
     // Resolved effective promo (floor-plan / global scope) — same shape QMI &
     // community cards already carry. Badge/banner gated by show_card_badge; CTA by
-    // show_card_cta (both in toResolved).
+    // show_card_cta (both in toResolved). promotionId is the UNGATED identity.
+    promotionId: resolved?.promotionId ?? '',
     promoBannerText: resolved?.promoBannerText ?? '',
     promoBadgeText: resolved?.promoBadgeText ?? '',
     promoCtaLabel: resolved?.promoCtaLabel ?? '',
@@ -777,6 +838,9 @@ interface PromoContext {
   maps: PromoResolveMaps;
 }
 
+/** Same shape loadPromoContext() produces; exported so tests share the Worker's path. */
+export type PublicPromoContext = PromoContext;
+
 export function toResolved(p: PromoRow | null): ResolvedPromo | null {
   if (!p) return null;
   // Card surfaces are EXPLICIT toggles (migration 0021 + 0024):
@@ -788,6 +852,9 @@ export function toResolved(p: PromoRow | null): ResolvedPromo | null {
   const showCardBadge = asBool(p.show_card_badge);
   const showCardCta = asBool(p.show_card_cta);
   return {
+    // IDENTITY is ungated: it says WHICH promotion owns this record, not what to
+    // paint. Surface toggles below decide only what copy is entitled to render.
+    promotionId: String(p.id ?? ''),
     promoBannerText: showCardBadge ? asStr(p.banner_text) : '',
     promoBadgeText: showCardBadge ? asStr(p.badge_text) : '',
     promoCtaLabel: showCardCta ? asStr(p.cta_label) : '',
@@ -795,17 +862,131 @@ export function toResolved(p: PromoRow | null): ResolvedPromo | null {
   };
 }
 
-function resolveFor(
+/**
+ * The id set a single entity resolves its promotion against. Which ids are
+ * PRESENT is the scope decision (a community page deliberately omits qmiId and
+ * floorPlanId so a home/plan promo cannot leak onto it), so the per-entity
+ * builders below are exported: tests must exercise the SAME lineage the Worker
+ * passes, not a re-derivation that could silently disagree with it.
+ */
+export interface EntityPromoIds {
+  qmiId?: string | null;
+  communityId?: string | null;
+  floorPlanId?: string | null;
+  cityId?: string | null;
+  /** 0030 operator tie-break (qmi.preferred_promotion_id / communities.…). */
+  preferredPromoId?: string | null;
+}
+
+/**
+ * QMI lineage: its own id, community, city, and the floor plan it is built on
+ * (so a plan-targeted promo CASCADES onto the home unless something more
+ * specific wins), plus the operator's preferred pick.
+ */
+export function qmiPromoIds(row: Row): EntityPromoIds {
+  return {
+    qmiId: String(row['id']),
+    communityId: asStrOrNull(row['community_id']),
+    // v_public_qmi exposes floor_plan_id as COALESCE(override, synced).
+    floorPlanId: asStrOrNull(row['floor_plan_id']),
+    cityId: asStrOrNull(row['city_id']),
+    preferredPromoId: asStrOrNull(row['preferred_promotion_id']),
+  };
+}
+
+/**
+ * Community lineage: itself + its city ONLY. No qmiId/floorPlanId — a community
+ * offers many homes and plans, so neither may claim the community record.
+ */
+export function communityPromoIds(row: Row): EntityPromoIds {
+  return {
+    communityId: String(row['id']),
+    cityId: asStrOrNull(row['city_id']),
+    preferredPromoId: asStrOrNull(row['preferred_promotion_id']),
+  };
+}
+
+/**
+ * Floor-plan lineage: the plan id ONLY. A plan is offered across many
+ * communities/cities, so only floor_plan- and global-targeted promos may match.
+ */
+export function floorPlanPromoIds(row: Row): EntityPromoIds {
+  return { floorPlanId: String(row['id']) };
+}
+
+/**
+ * The /promotions list body: every PUBLISHED promotion (the hub/site-banner
+ * surfaces are selected by each promotion's OWN toggles, never by whether it wins
+ * a location record), each carrying the communities where it actually wins a
+ * published QMI. Extracted from buildPayload so the contract tests assert the
+ * SAME assembly the Worker serves — a promotion shadowed everywhere on cards must
+ * still be provably present here.
+ *
+ * LIFECYCLE / DISTINGUISHABILITY (deliberate decision, see the `active` note in
+ * serializePromotionRow): an out-of-window promotion is RETAINED here and marked
+ * `active: false`; it is NOT dropped. Every current consumer gates on `active`
+ * (`promotions-live.js` hub cards + site banner + detail selection;
+ * `promo-utils.mjs` livePromoTexts / homePromoEntitlements), so removing the row
+ * buys no additional safety — while KEEPING it preserves the distinction between
+ * "the API says this offer is dead" and "the API returned nothing", which a
+ * transient fetch failure also produces (`data.mjs` maps a failed /promotions
+ * fetch to `[]`). Collapsing those two states would make an outage look exactly
+ * like a fully-retired promotion set.
+ *
+ * NOTE the asymmetry this inherits and does NOT change: `v_public_promotions`
+ * filters `published = 1`, so UNPUBLISHING removes a promotion from the payload
+ * outright, whereas EXPIRY leaves it present with `active: false`. Unifying those
+ * would need a view migration and is out of this phase's scope.
+ *
+ * @param qmiRows rows carrying id + community_id + floor_plan_id + city_id
+ *                (v_public_qmi), used for the winner-derived community lists.
+ */
+export function buildPromotionsList(
+  ctx: PromoContext,
+  qmiRows: Row[],
+  now: string
+): PromotionPublic[] {
+  const qmiCtx = qmiRows.map((row) => ({
+    id: String(row['id']),
+    communityId: asStrOrNull(row['community_id']),
+    floorPlanId: asStrOrNull(row['floor_plan_id']),
+    cityId: asStrOrNull(row['city_id']),
+  }));
+  const communitiesByPromo = communitiesByPromoFromPublishedQmi(
+    ctx.promos,
+    ctx.targets,
+    qmiCtx,
+    now
+  );
+  // group targets by promotion
+  const byPromo = new Map<string, TargetRow[]>();
+  for (const t of ctx.targets) {
+    const arr = byPromo.get(t.promotion_id);
+    if (arr) arr.push(t);
+    else byPromo.set(t.promotion_id, [t]);
+  }
+  return ctx.promos
+    .map((p) =>
+      serializePromotionRow(
+        p,
+        byPromo.get(p.id) ?? [],
+        ctx.maps,
+        communitiesByPromo.get(p.id) ?? [],
+        now
+      )
+    )
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+/**
+ * Resolve + gate in one step: the winner from resolveEffectivePromo(), flattened
+ * through toResolved() (identity ungated, copy gated by the surface toggles).
+ * Exported so contract fixtures run the Worker's exact resolve→gate path.
+ */
+export function resolveFor(
   ctx: PromoContext,
   entity: 'qmi' | 'community' | 'city',
-  ids: {
-    qmiId?: string | null;
-    communityId?: string | null;
-    floorPlanId?: string | null;
-    cityId?: string | null;
-    /** 0030 operator tie-break (qmi.preferred_promotion_id / communities.…). */
-    preferredPromoId?: string | null;
-  },
+  ids: EntityPromoIds,
   now: string
 ): ResolvedPromo | null {
   const winner = resolveEffectivePromo(entity, ids, ctx.promos, ctx.targets, now);
@@ -815,6 +996,39 @@ function resolveFor(
 // =============================================================================
 // D1 query helpers — all reads go through a `first-unconstrained` session.
 // =============================================================================
+/**
+ * Build the promo context from already-fetched rows. Split out of
+ * loadPromoContext() so tests construct the context with the SHIPPED map-building
+ * logic (community/floor-plan name+image fallbacks included) instead of a
+ * re-implementation that could drift from what the edge actually serves.
+ */
+export function promoContextFromRows(
+  promoRows: Row[],
+  targetRows: Row[],
+  communityRows: Row[],
+  floorPlanRows: Row[]
+): PromoContext {
+  const communities = new Map<string, { name: string; image: string }>();
+  for (const c of communityRows) {
+    communities.set(String(c['id']), {
+      name: asStr(c['name']),
+      image: asStr(c['featured_image_url']),
+    });
+  }
+  const floorPlans = new Map<string, { name: string; image: string }>();
+  for (const f of floorPlanRows) {
+    floorPlans.set(String(f['id']), {
+      name: asStr(f['name']),
+      image: asStr(f['image_url']) || asStr(f['synced_image_url']),
+    });
+  }
+  return {
+    promos: promoRows as unknown as PromoRow[],
+    targets: targetRows as unknown as TargetRow[],
+    maps: { communities, floorPlans },
+  };
+}
+
 async function loadPromoContext(session: D1DatabaseSession): Promise<PromoContext> {
   const batch = await session.batch<Row>([
     session.prepare('SELECT * FROM v_public_promotions ORDER BY sort_order ASC, id ASC'),
@@ -823,26 +1037,12 @@ async function loadPromoContext(session: D1DatabaseSession): Promise<PromoContex
     session.prepare('SELECT id, name, image_url, synced_image_url FROM floor_plans'),
   ]);
   const [promosRes, targetsRes, commRes, fpRes] = batch;
-
-  const promos = (promosRes?.results ?? []) as unknown as PromoRow[];
-  const targets = (targetsRes?.results ?? []) as unknown as TargetRow[];
-
-  const communities = new Map<string, { name: string; image: string }>();
-  for (const c of (commRes?.results ?? []) as unknown as Row[]) {
-    communities.set(String(c['id']), {
-      name: asStr(c['name']),
-      image: asStr(c['featured_image_url']),
-    });
-  }
-  const floorPlans = new Map<string, { name: string; image: string }>();
-  for (const f of (fpRes?.results ?? []) as unknown as Row[]) {
-    floorPlans.set(String(f['id']), {
-      name: asStr(f['name']),
-      image: asStr(f['image_url']) || asStr(f['synced_image_url']),
-    });
-  }
-
-  return { promos, targets, maps: { communities, floorPlans } };
+  return promoContextFromRows(
+    (promosRes?.results ?? []) as unknown as Row[],
+    (targetsRes?.results ?? []) as unknown as Row[],
+    (commRes?.results ?? []) as unknown as Row[],
+    (fpRes?.results ?? []) as unknown as Row[]
+  );
 }
 
 // =============================================================================
@@ -878,21 +1078,9 @@ async function buildPayload(
         .all();
       const rows = (res.results ?? []) as unknown as Row[];
       const homes = rows.map((row) => {
-        const resolved = resolveFor(
-          ctx,
-          'qmi',
-          {
-            qmiId: String(row['id']),
-            communityId: asStrOrNull(row['community_id']),
-            // Cascade: a plan-targeted promo applies to every QMI built on it
-            // (unless a more specific community/qmi promo wins). v_public_qmi
-            // exposes floor_plan_id as COALESCE(override, synced).
-            floorPlanId: asStrOrNull(row['floor_plan_id']),
-            cityId: asStrOrNull(row['city_id']),
-            preferredPromoId: asStrOrNull(row['preferred_promotion_id']),
-          },
-          now
-        );
+        // Lineage from the shared builder (also used by the contract tests) so the
+        // scope a home resolves against can't drift between Worker and fixtures.
+        const resolved = resolveFor(ctx, 'qmi', qmiPromoIds(row), now);
         return serializeQmiRow(row, resolved);
       });
       return { homes, ts };
@@ -905,16 +1093,7 @@ async function buildPayload(
       // The view already gates published (draft column dropped in 0005) — map directly.
       const communities = rows
         .map((row) => {
-          const resolved = resolveFor(
-            ctx,
-            'community',
-            {
-              communityId: String(row['id']),
-              cityId: asStrOrNull(row['city_id']),
-              preferredPromoId: asStrOrNull(row['preferred_promotion_id']),
-            },
-            now
-          );
+          const resolved = resolveFor(ctx, 'community', communityPromoIds(row), now);
           return serializeCommunityRow(row, resolved);
         });
       return { communities, ts };
@@ -926,37 +1105,7 @@ async function buildPayload(
         .prepare('SELECT id, community_id, floor_plan_id, city_id FROM v_public_qmi')
         .all();
       const qmiRows = (qmiRes.results ?? []) as unknown as Row[];
-      const qmiCtx = qmiRows.map((row) => ({
-        id: String(row['id']),
-        communityId: asStrOrNull(row['community_id']),
-        floorPlanId: asStrOrNull(row['floor_plan_id']),
-        cityId: asStrOrNull(row['city_id']),
-      }));
-      const communitiesByPromo = communitiesByPromoFromPublishedQmi(
-        ctx.promos,
-        ctx.targets,
-        qmiCtx,
-        now
-      );
-      // group targets by promotion
-      const byPromo = new Map<string, TargetRow[]>();
-      for (const t of ctx.targets) {
-        const arr = byPromo.get(t.promotion_id);
-        if (arr) arr.push(t);
-        else byPromo.set(t.promotion_id, [t]);
-      }
-      const promotions = ctx.promos
-        .filter((p) => asBool(p.published))
-        .map((p) =>
-          serializePromotionRow(
-            p,
-            byPromo.get(p.id) ?? [],
-            ctx.maps,
-            communitiesByPromo.get(p.id) ?? []
-          )
-        )
-        .sort((a, b) => a.sortOrder - b.sortOrder);
-      return { promotions, ts };
+      return { promotions: buildPromotionsList(ctx, qmiRows, now), ts };
     }
 
     case 'floorplans': {
@@ -980,7 +1129,7 @@ async function buildPayload(
       }
       const floorplans = rows.map((row) => {
         // floor-plan page context: only floor_plan-targeted (or global) promos match.
-        const resolved = resolveFor(ctx, 'city', { floorPlanId: String(row['id']) }, now);
+        const resolved = resolveFor(ctx, 'city', floorPlanPromoIds(row), now);
         return serializeFloorPlanRow(row, resolved, cepByPlan.get(String(row['id'])));
       });
       return { floorplans, ts };

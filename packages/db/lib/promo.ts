@@ -86,6 +86,19 @@ function inDateWindow(p: PromoLike, now: string): boolean {
 }
 
 /**
+ * Is this promotion LIVE right now — i.e. published AND inside its date window?
+ *
+ * This is the single predicate behind "no dead offer may be served". The resolver
+ * below applies it when picking a winner, and the public /promotions serializer
+ * applies the SAME function to its `active` flag, so an expired promotion cannot
+ * be simultaneously "not winning any home" and "still advertised as active".
+ * Exported so no consumer hand-rolls a second copy of the window rule.
+ */
+export function isPromoLive(p: PromoLike, now: string = new Date().toISOString().slice(0, 10)): boolean {
+  return isActive(p) && inDateWindow(p, now);
+}
+
+/**
  * The most-specific target_type by which a promo matches the given context.
  * Returns undefined if none of the promo's targets match the context.
  */
@@ -172,8 +185,7 @@ export function applicablePromos<P extends PromoLike>(
   }
   const candidates: Array<{ promo: P; specificity: number }> = [];
   for (const p of promos) {
-    if (!isActive(p)) continue;
-    if (!inDateWindow(p, now)) continue;
+    if (!isPromoLive(p, now)) continue;
     const tgts = byPromo.get(p.id);
     if (!tgts || tgts.length === 0) continue;
     const matchType = bestMatchType(tgts, ctx);
