@@ -119,6 +119,7 @@ const TTL: Record<string, number> = {
   images: 300,
   blogs: 300,
   testimonials: 300,
+  'event-highlights': 300,
   sitesearch: 300,
   'sitesearch.json': 300,
   settings: 300,
@@ -1172,6 +1173,28 @@ async function buildPayload(
       const res = await session.prepare('SELECT * FROM v_public_testimonials').all();
       const rows = (res.results ?? []) as unknown as Row[];
       return { testimonials: rows.map(serializeTestimonialRow), ts };
+    }
+
+    case 'event-highlights': {
+      // 0035: admin-authored Events page highlights. No view needed — the table is
+      // fully admin-owned; gate + order here.
+      const res = await session
+        .prepare("SELECT id, title, copy, image_url, link_url, cta_label, event_date, sort FROM event_highlights WHERE published = 1 ORDER BY sort, event_date")
+        .all();
+      const rows = (res.results ?? []) as unknown as Row[];
+      return {
+        highlights: rows.map((r) => ({
+          id: String(r['id']),
+          title: asStr(r['title']),
+          copy: asStr(r['copy']),
+          image: asStr(r['image_url']),
+          link: asStr(r['link_url']),
+          ctaLabel: asStr(r['cta_label']),
+          eventDate: asStr(r['event_date']),
+          sort: asNumOrNull(r['sort']) ?? 0,
+        })),
+        ts,
+      };
     }
 
     case 'sitesearch': {

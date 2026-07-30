@@ -16,6 +16,7 @@ import {
 	FileTextIcon,
 	QuoteIcon,
 	BookOpenIcon,
+	CalendarIcon,
 	type LucideIcon,
 } from "lucide-react";
 
@@ -72,6 +73,7 @@ const ENTITY_PRESENTATION: Record<
 	images: { group: "Marketing", Icon: ImageIcon },
 	blogs: { group: "Marketing", Icon: FileTextIcon },
 	testimonials: { group: "Marketing", Icon: QuoteIcon },
+	event_highlights: { group: "Marketing", Icon: CalendarIcon },
 };
 
 function entityItem(key: EntityKey): SidebarNavItem {
