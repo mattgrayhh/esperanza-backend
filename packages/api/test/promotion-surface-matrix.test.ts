@@ -821,16 +821,78 @@ describe('lifecycle — publish gate and date window', () => {
     expect(qmiOut(db, QMI).fields['promotion_id']).toBe(P_FLEX15);
   });
 
-  it('`active` is DATE-ONLY: a stored timestamp still resolves by its date part', () => {
-    // Bounds are compared lexically against a YYYY-MM-DD `now`, so a value with a
-    // time component compares by prefix. 2026-06-15T23:59 > '2026-06-15' lexically,
-    // which correctly keeps a same-day end_date live rather than expiring it at
-    // midnight — and there is no timezone offset anywhere in the comparison.
-    const sameDayTs = lifeDb({ end_date: `${NOW}T23:59:59Z` });
-    expect(promotionsOut(sameDayTs).find((p) => p.id === P_FLEX15)!.active).toBe(true);
+  it('`active` is DATE-ONLY and SYMMETRIC: a timestamp bound resolves by its date part on BOTH sides', () => {
+    // REGRESSION (Sol/Terra gate on 38abfe3): bounds were compared lexically against
+    // a date-only `now`, which is asymmetric. '2026-06-15' < '2026-06-15T00:00:00Z'
+    // is TRUE, so a promo starting today at midnight read as FUTURE and went dark on
+    // its own launch day — while the END side happened to work by prefix ordering.
+    // My earlier test only covered the end bound, i.e. only the direction that
+    // already passed. Both sides are asserted here.
+
+    // START side: same-day timestamp must be LIVE (this is the bug that shipped).
+    const sameDayStartTs = lifeDb({ start_date: `${NOW}T00:00:00Z`, end_date: '' });
+    expect(promotionsOut(sameDayStartTs).find((p) => p.id === P_FLEX15)!.active).toBe(true);
+    expect(qmiOut(sameDayStartTs, QMI).fields['promotion_id']).toBe(P_FLEX15);
+
+    // A late-in-the-day start timestamp is STILL live: bounds are date-granular, so
+    // time-of-day must never partially gate a day.
+    const lateStartTs = lifeDb({ start_date: `${NOW}T23:59:59Z`, end_date: '' });
+    expect(promotionsOut(lateStartTs).find((p) => p.id === P_FLEX15)!.active).toBe(true);
+
+    // END side: same-day timestamp must be LIVE.
+    const sameDayEndTs = lifeDb({ end_date: `${NOW}T23:59:59Z` });
+    expect(promotionsOut(sameDayEndTs).find((p) => p.id === P_FLEX15)!.active).toBe(true);
+    // ...and a midnight end timestamp on today must ALSO be live, not expired. Under
+    // the old raw comparison '2026-06-15' > '2026-06-15T00:00:00Z' was false so this
+    // passed by luck; it must now hold by rule.
+    const midnightEndTs = lifeDb({ end_date: `${NOW}T00:00:00Z` });
+    expect(promotionsOut(midnightEndTs).find((p) => p.id === P_FLEX15)!.active).toBe(true);
+
+    // Both bounds as timestamps, window = exactly today.
+    const bothTs = lifeDb({ start_date: `${NOW}T08:00:00Z`, end_date: `${NOW}T09:00:00Z` });
+    expect(promotionsOut(bothTs).find((p) => p.id === P_FLEX15)!.active).toBe(true);
+
+    // Timestamp boundaries still EXCLUDE neighbouring days — normalization must not
+    // become "ignore the bound".
+    const tomorrowStartTs = lifeDb({ start_date: '2026-06-16T00:00:00Z', end_date: '' });
+    expect(promotionsOut(tomorrowStartTs).find((p) => p.id === P_FLEX15)!.active).toBe(false);
+    const yesterdayEndTs = lifeDb({ end_date: '2026-06-14T23:59:59Z' });
+    expect(promotionsOut(yesterdayEndTs).find((p) => p.id === P_FLEX15)!.active).toBe(false);
+
+    // Direct predicate checks: date-only and timestamp forms of the SAME day must be
+    // indistinguishable, on both bounds.
+    for (const form of [NOW, `${NOW}T00:00:00Z`, `${NOW}T23:59:59Z`, `${NOW}T12:34:56.789Z`]) {
+      expect(isPromoLive({ id: 'x', published: 1, start_date: form }, NOW)).toBe(true);
+      expect(isPromoLive({ id: 'x', published: 1, end_date: form }, NOW)).toBe(true);
+    }
     // Injected `now` is the ONLY clock: nothing here reads the real date.
     expect(isPromoLive({ id: 'x', published: 1, end_date: '2026-06-14' }, NOW)).toBe(false);
     expect(isPromoLive({ id: 'x', published: 1, end_date: '2026-06-15' }, NOW)).toBe(true);
+  });
+
+  it('a MALFORMED bound FAILS CLOSED — never serve an offer whose window is unknown', () => {
+    // Policy (Sol's gate): a present-but-unparseable bound must not be ignored.
+    // Ignoring it is the fail-open direction — it would advertise a commercial offer
+    // whose window we could not establish. Refusing is recoverable by fixing data.
+    const garbage = [
+      'next spring',
+      '06/15/2026', // US format, not ISO
+      '2026-6-15', // not zero-padded — lexical comparison would misorder this
+      '2026-02-30', // impossible calendar date Date would roll to March 2
+      '2026-13-01', // impossible month
+      '20260615', // no separators
+    ];
+    for (const bad of garbage) {
+      expect(isPromoLive({ id: 'x', published: 1, start_date: bad }, NOW)).toBe(false);
+      expect(isPromoLive({ id: 'x', published: 1, end_date: bad }, NOW)).toBe(false);
+      // And it must be inert end-to-end, not merely at the predicate.
+      const db = lifeDb({ start_date: bad, end_date: '' });
+      expect(promotionsOut(db).find((p) => p.id === P_FLEX15)!.active).toBe(false);
+      expect(qmiOut(db, QMI).fields['promotion_id']).toBeUndefined();
+    }
+    // A valid leap day is NOT malformed — the guard must not over-reject.
+    expect(isPromoLive({ id: 'x', published: 1, end_date: '2028-02-29' }, NOW)).toBe(true);
+    expect(isPromoLive({ id: 'x', published: 1, start_date: '2024-02-29' }, NOW)).toBe(true);
   });
 
   it('UNPUBLISHING removes the promotion from the payload entirely (view gate)', () => {

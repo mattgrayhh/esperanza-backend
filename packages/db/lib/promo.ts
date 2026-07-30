@@ -73,15 +73,63 @@ function isActive(p: PromoLike): boolean {
 }
 
 /**
+ * The calendar date portion of a stored bound, or `undefined` if the value is not
+ * a real date we can compare.
+ *
+ * Operators and importers store bounds inconsistently: plain `YYYY-MM-DD`, full
+ * ISO timestamps (`2026-06-15T00:00:00Z`), and `''` for "cleared". A bound MUST be
+ * reduced to its date portion BEFORE any comparison, because comparing a date-only
+ * `now` lexically against a raw timestamp is asymmetric and silently wrong:
+ * `'2026-06-15' < '2026-06-15T00:00:00Z'` is true, so a promotion starting today at
+ * midnight read as "future" and went dark on its own launch day, while the END side
+ * happened to work by prefix ordering. Normalizing both bounds identically is what
+ * removes that asymmetry — the two sides must not disagree by accident.
+ *
+ * Validation happens on the RAW stored value and is expressed as exact equality
+ * against a round-trip, so `2026-02-30` (which Date rolls forward to March 2) is
+ * rejected rather than quietly becoming a different day.
+ */
+function boundDate(raw: string): string | undefined {
+  // Take the date portion only if the value is date-only or a `T`-delimited
+  // timestamp. Anything else ('next spring', '06/15/2026') is not a date.
+  const m = /^(\d{4}-\d{2}-\d{2})(?:T.*)?$/.exec(raw);
+  if (!m) return undefined;
+  const ymd = m[1]!;
+  const parsed = new Date(`${ymd}T00:00:00Z`);
+  // Exact-equality round trip: rejects impossible calendar dates that Date would
+  // otherwise normalize into a neighbouring month.
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== ymd) {
+    return undefined;
+  }
+  return ymd;
+}
+
+/**
  * Date-window check. `now` is a YYYY-MM-DD string (caller-supplied so the result
- * is deterministic and timezone decisions live at the edge). Empty/null bounds
- * are open-ended. Comparison is lexical, which is correct for zero-padded ISO dates.
+ * is deterministic and timezone decisions live at the edge). Empty/null bounds are
+ * open-ended. Both non-empty bounds are normalized to their validated date portion
+ * first, then compared by exact date — so a bound with a time component behaves
+ * identically on the start and end side.
+ *
+ * A present-but-UNPARSEABLE bound FAILS CLOSED (the promo is not live). Ignoring a
+ * bound we cannot understand is the fail-open direction: it would serve a
+ * commercial offer whose window we were unable to establish. Refusing to serve is
+ * recoverable by fixing the data; wrongly advertising an expired discount is not.
  */
 function inDateWindow(p: PromoLike, now: string): boolean {
-  const start = p.start_date ?? '';
-  const end = p.end_date ?? '';
-  if (start && now < start) return false;
-  if (end && now > end) return false;
+  const rawStart = p.start_date ?? '';
+  const rawEnd = p.end_date ?? '';
+
+  if (rawStart !== '') {
+    const start = boundDate(rawStart);
+    if (start === undefined) return false;
+    if (now < start) return false;
+  }
+  if (rawEnd !== '') {
+    const end = boundDate(rawEnd);
+    if (end === undefined) return false;
+    if (now > end) return false;
+  }
   return true;
 }
 
